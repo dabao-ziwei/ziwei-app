@@ -2,7 +2,7 @@ import streamlit as st
 import time
 from lunar_python import Lunar, Solar
 
-# --- 1. 頁面設定與 CSS 樣式 (極致無縫貼合版) ---
+# --- 1. 頁面設定與 CSS 樣式 (Layout Fix) ---
 st.set_page_config(page_title="專業紫微斗數排盤系統", page_icon="🔮", layout="centered")
 
 st.markdown("""
@@ -10,34 +10,42 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     
-    /* === 核心佈局修正 === */
+    /* === 1. 核心無縫佈局修正 (The Clean Way) === */
     
-    /* 1. 全局垂直間距歸零 (解決紅圈處的縫隙) */
+    /* 移除垂直堆疊的間隙 (正規解法，不破版) */
     [data-testid="stVerticalBlock"] {
         gap: 0px !important;
     }
     
-    /* 2. 容器邊距調整 */
-    .block-container {
-        padding-top: 1rem;
-        padding-bottom: 2rem;
+    /* 移除元件容器的邊距 */
+    .element-container {
+        margin-bottom: 0px !important;
     }
-
-    /* 3. Column 間距歸零 */
+    
+    /* 移除 Column 間隙 */
     [data-testid="column"] {
         padding: 0px !important;
         min-width: 0px !important;
     }
-    
-    /* === 命盤樣式 === */
+    [data-testid="stHorizontalBlock"] {
+        gap: 0px !important;
+    }
+
+    /* 調整主容器，避免頂部太擠 */
+    .block-container {
+        padding-top: 1rem;
+        padding-bottom: 3rem;
+    }
+
+    /* === 2. 命盤樣式 === */
     .zwds-grid {
         display: grid;
         grid-template-columns: 1fr 1fr 1fr 1fr;
         grid-template-rows: 120px 120px 120px 120px;
         gap: 2px;
-        background-color: #444; /* 框線色 */
+        background-color: #444; 
         border: 2px solid #333;
-        margin-bottom: 0px; /* 緊貼下方控制列 */
+        margin-bottom: 0px; /* 緊貼下方 */
         font-family: "Microsoft JhengHei", sans-serif;
     }
     
@@ -54,7 +62,7 @@ st.markdown("""
         cursor: pointer;
     }
     
-    /* 狀態高亮 */
+    /* 高亮狀態 */
     .zwds-cell.active-daxian {
         background-color: #1a2a40 !important; 
         border: 2px solid #4da6ff;
@@ -66,11 +74,9 @@ st.markdown("""
         z-index: 10;
     }
     
-    /* 標籤小字 */
     .marker-daxian { position: absolute; top: 20px; right: 2px; background-color: #004d99; color: #fff; font-size: 10px; padding: 1px 3px; border-radius: 3px; opacity: 0.8; }
     .marker-liunian { position: absolute; top: 36px; right: 2px; background-color: #990000; color: #fff; font-size: 10px; padding: 1px 3px; border-radius: 3px; opacity: 0.9; }
 
-    /* 中間資料區 */
     .zwds-center {
         grid-column: 2 / 4; grid-row: 2 / 4;
         background-color: #111;
@@ -79,66 +85,60 @@ st.markdown("""
         border: 1px solid #444; padding: 5px; color: #fff;
     }
     
-    /* 文字樣式 */
     .cell-stars { color: #d4a0ff; font-weight: bold; font-size: 14px; line-height: 1.2; }
     .cell-age { position: absolute; top: 2px; right: 4px; color: #ffeb3b; font-size: 12px; font-weight: bold;}
     .cell-name { position: absolute; bottom: 2px; left: 4px; background-color: #444; color: #ccc; padding: 0 3px; font-size: 11px; border-radius: 2px; }
     .cell-ganzhi { position: absolute; bottom: 2px; right: 4px; color: #aaa; font-weight: bold; font-size: 13px; }
     
-    /* === 按鈕表格化樣式 (Strip Style) === */
+    /* === 3. 按鈕表格化樣式 (Strip Style v2) === */
     
-    /* 通用按鈕設定 */
     div.stButton > button {
         width: 100%;
         border-radius: 0px;
         border: 1px solid #444; 
-        margin: 0px;
-        padding: 4px 0px !important; /* 緊湊 Padding */
-        white-space: pre-wrap !important; /* 允許換行 */
-        line-height: 1.1 !important;
+        /* 使用負 Margin 讓邊框重疊，看起來像 Excel 格線 */
+        margin-right: -1px; 
+        margin-bottom: -1px;
+        
+        padding: 4px 0px !important; 
+        
+        /* 基礎字體大小 */
+        font-size: 10px !important; 
+        white-space: pre-wrap !important; 
+        line-height: 1.2 !important;
+        
         height: auto;
-        min-height: 38px; /* 固定高度 */
-        background-color: #262730;
-        color: #ccc;
-        transition: all 0.1s;
+        min-height: 36px; /* 更矮的高度 */
+        
+        background-color: #222;
+        color: #bbb;
+        transition: background-color 0.1s;
     }
     
-    /* 第一排：大限按鈕 (字體稍大) */
-    div[data-testid="column"] > div > div > div > div.stButton > button {
-        font-size: 12px !important;
-    }
-
-    /* 懸停效果 */
+    /* Hover */
     div.stButton > button:hover {
-        border-color: #888;
-        color: #fff;
         background-color: #333;
-        z-index: 2; 
+        color: #fff;
+        border-color: #666;
+        z-index: 2;
     }
     
-    /* 選中狀態 - 大限 (深紫) */
+    /* 選中狀態 - 大限 (紫) */
     div.stButton > button.daxian-active {
         background-color: #4B0082 !important; 
-        color: white !important;
-        border: 1px solid #d4a0ff !important;
+        color: #fff !important;
+        border: 1px solid #b366ff !important;
         font-weight: bold;
+        z-index: 5;
     }
     
-    /* 選中狀態 - 流年 (亮藍) */
+    /* 選中狀態 - 流年 (藍) */
     div.stButton > button.liunian-active {
-        background-color: #007acc !important;
-        color: white !important;
-        border: 1px solid #80d4ff !important;
+        background-color: #006080 !important;
+        color: #fff !important;
+        border: 1px solid #4da6ff !important;
         font-weight: bold;
-    }
-
-    /* 針對流年按鈕的特別字體縮小，防止破版 */
-    /* 這裡使用 CSS 選擇器技巧，假設流年在下方，通常我們會給流年按鈕特殊的 key，
-       但 CSS 無法直接選取 key。我們透過 Python 中的 HTML ID hack 來處理，
-       或者簡單地將所有按鈕字體統一縮小。 */
-       
-    div.stButton > button p {
-        font-size: 11px;
+        z-index: 5;
     }
 
 </style>
@@ -151,17 +151,14 @@ class ZWDSCalculator:
         self.lunar = self.solar.getLunar()
         self.gender = gender 
         self.birth_year = year 
-        
         self.lunar_month = self.lunar.getMonth()
         self.lunar_day = self.lunar.getDay()
         self.time_zhi_idx = (hour + 1) // 2 % 12
         self.year_gan_idx = self.lunar.getYearGanIndex() 
         self.year_zhi_idx = self.lunar.getYearZhiIndex() 
-        
         is_yang_year = (self.year_gan_idx % 2 == 0)
         is_male = (self.gender == "男")
         self.direction = 1 if (is_yang_year and is_male) or (not is_yang_year and not is_male) else -1 
-
         self.palaces = {i: {"name": "", "stars": [], "gan_idx": 0, "zhi_idx": i, "age_start": 0, "age_end": 0} for i in range(12)}
         self._calc_palaces(); self._calc_bureau(); self._calc_main_stars(); self._calc_daxian()      
 
@@ -260,23 +257,7 @@ with st.expander("📝 資料輸入 / 修改", expanded=(not st.session_state.sh
         with b1: btn_save = st.form_submit_button("💾 儲存並排盤", type="primary", use_container_width=True)
         with b2: btn_calc = st.form_submit_button("🧪 僅試算", use_container_width=True)
 
-if btn_save or btn_calc:
-    y, m, d, cal = parse_date(i_date)
-    h, mn = int(i_time[:2]) if len(i_time)==4 else 0, int(i_time[2:]) if len(i_time)==4 else 0
-    if not i_name or y==0: st.error("資料不完整")
-    else:
-        calc = ZWDSCalculator(y, m, d, h, mn, i_gen); p_data, m_star, bur, b_yr = calc.get_result()
-        pkt = {"name": i_name, "gender": i_gen, "category": i_cat, "y": y, "m": m, "d": d, "h": h, "min": mn, "cal_type": cal, "ming_star": m_star, "bureau": bur, "palace_data": p_data}
-        if btn_save:
-            pkt['id'] = int(time.time()) if st.session_state.current_id==0 else st.session_state.current_id
-            if st.session_state.current_id==0: st.session_state.db.append(pkt); st.session_state.current_id = pkt['id']
-            else: 
-                for idx, x in enumerate(st.session_state.db):
-                    if x['id']==st.session_state.current_id: st.session_state.db[idx]=pkt
-            st.session_state.temp_preview_data = None; st.session_state.show_chart = True; st.rerun()
-        if btn_calc: st.session_state.temp_preview_data = pkt; st.session_state.show_chart = True
-
-# --- 5. 排盤與時間軸 (Seamless Sticky Timeline) ---
+# --- 5. 排盤與時間軸 (The Real Seamless Timeline) ---
 if st.session_state.show_chart:
     data = st.session_state.temp_preview_data or next((x for x in st.session_state.db if x['id']==st.session_state.current_id), None)
     if data:
@@ -314,7 +295,7 @@ if st.session_state.show_chart:
         center_html += f'<hr style="width:80%;border-color:#444;margin:5px 0;"><div style="color:#fff;">命宮: {data.get("ming_star","")}</div></div>'
         st.markdown(f'<div class="zwds-grid">{cells_html}{center_html}</div>', unsafe_allow_html=True)
         
-        # B. 無縫控制列 (Seamless Strip)
+        # B. 無縫控制列 (Compact Strip)
         limit_names = ["一限", "二限", "三限", "四限", "五限", "六限", "七限", "八限", "九限", "十限", "十一", "十二"]
         
         # Row 1: 大限
@@ -322,28 +303,28 @@ if st.session_state.show_chart:
         for i, col in enumerate(cols_d):
             pos_idx, info = sorted_limits[i]
             gz = f"{GAN[info['gan_idx']]}{ZHI[info['zhi_idx']]}"
-            # 使用 <br> 強制換行，並用 HTML 標籤讓文字分行顯示
+            # 極致壓縮: "一限<br>丙子" (字體 10px)
             label = f"{limit_names[i]}\n{gz}"
             is_selected = (i == daxian_idx)
             btn_type = "primary" if is_selected else "secondary"
             if col.button(label, key=f"d_{i}", type=btn_type, use_container_width=True):
                 st.session_state.sel_daxian_idx = i; st.session_state.sel_liunian_offset = 0; st.rerun()
 
-        # Row 2: 流年 (自動緊貼，因 CSS 已將 gap 設為 0)
+        # Row 2: 流年
         cols_l = st.columns(10)
         for j, col in enumerate(cols_l):
             age = d_info['age_start'] + j
             yr = b_yr + age - 1
             gy, zy = get_ganzhi_for_year(yr)
             gz = f"{GAN[gy]}{ZHI[zy]}"
-            # 簡化標籤：1980\n庚申(2) -> 確保字體小不破版
+            # 極致壓縮: "1980<br>庚申(2)" (字體 9px)
             label = f"{yr}\n{gz}({age})"
             is_selected = (j == liunian_off)
             btn_type = "primary" if is_selected else "secondary"
             if col.button(label, key=f"l_{j}", type=btn_type, use_container_width=True):
                 st.session_state.sel_liunian_offset = j; st.rerun()
 
-        # JS/CSS 注入：按鈕顏色覆寫
+        # JS/CSS 注入
         st.markdown("""
         <style>
             div.stButton > button[kind="primary"] {
@@ -351,8 +332,5 @@ if st.session_state.show_chart:
                 border-color: #9933ff !important;
                 color: white !important;
             }
-            /* 針對流年列的顏色微調 (假設是第二組 primary button) */
-            /* 由於無法精確區分，這裡統一使用深紫色，保持視覺一致性，
-               或者您可以接受目前選中都是深紫色。 */
         </style>
         """, unsafe_allow_html=True)
