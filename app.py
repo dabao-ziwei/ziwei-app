@@ -2,7 +2,7 @@ import streamlit as st
 import time
 from lunar_python import Lunar, Solar
 
-# --- 1. 頁面設定與 CSS 樣式 (極致無縫版) ---
+# --- 1. 頁面設定與 CSS 樣式 (極致表格化版) ---
 st.set_page_config(page_title="專業紫微斗數排盤系統", page_icon="🔮", layout="centered")
 
 st.markdown("""
@@ -69,39 +69,46 @@ st.markdown("""
     .cell-name { position: absolute; bottom: 2px; left: 4px; background-color: #444; color: #ccc; padding: 0 3px; font-size: 11px; border-radius: 2px; }
     .cell-ganzhi { position: absolute; bottom: 2px; right: 4px; color: #aaa; font-weight: bold; font-size: 13px; }
     
-    /* === 關鍵 CSS: 無縫表格修正 === */
+    /* === 關鍵 CSS: 無縫表格修正 (v1.1) === */
     
-    /* 1. 移除 Column 間隙 */
+    /* 1. 全局 Layout 壓縮 */
+    .block-container { padding-top: 1rem; padding-bottom: 2rem; }
     [data-testid="column"] { padding: 0px !important; min-width: 0px !important; }
     [data-testid="stHorizontalBlock"] { gap: 0px !important; }
     
-    /* 2. 按鈕樣式極致壓縮 */
+    /* 2. 強制壓縮垂直間距 */
+    /* 這會影響所有容器，確保沒有多餘的 gap */
+    div.element-container {
+        margin-bottom: 0px !important;
+    }
+
+    /* 3. 按鈕樣式極致微調 */
     div.stButton > button {
         width: 100%;
         border-radius: 0px;
-        border: 1px solid #333; 
+        border: 1px solid #444; /* 邊框顏色 */
         margin: 0px;
-        /* 上下 padding 縮小，讓高度更緊湊 */
-        padding: 8px 0px !important; 
+        /* 極小的 padding，確保字體能擠進去 */
+        padding: 4px 0px !important; 
         
-        /* 字體縮小並強制不換行 */
-        font-size: 11px !important; 
-        white-space: nowrap !important;
+        /* 字體縮小，解決破版 */
+        font-size: 10.5px !important; 
         
-        line-height: 1.2;
+        /* 允許換行但行距縮小 */
+        white-space: pre-wrap !important; 
+        line-height: 1.1 !important;
+        
         height: auto;
-        min-height: 40px; 
+        min-height: 42px; /* 固定高度讓它整齊 */
         background-color: #222;
         color: #ccc;
-        transition: all 0.1s;
     }
     
-    /* Hover */
     div.stButton > button:hover {
-        border-color: #666;
+        border-color: #888;
         color: #fff;
         background-color: #333;
-        z-index: 2; 
+        z-index: 5;
     }
     
     /* 選中狀態 - 大限 (深紫) */
@@ -120,11 +127,6 @@ st.markdown("""
         font-weight: bold;
     }
 
-    /* 調整主容器邊距 */
-    .block-container {
-        padding-top: 1rem;
-        padding-bottom: 2rem;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -255,25 +257,7 @@ with st.expander("📝 資料輸入 / 修改", expanded=(not st.session_state.sh
         with b1: btn_save = st.form_submit_button("💾 儲存並排盤", type="primary", use_container_width=True)
         with b2: btn_calc = st.form_submit_button("🧪 僅試算", use_container_width=True)
 
-if btn_save or btn_calc:
-    y, m, d, cal = parse_date(i_date)
-    h, mn = int(i_time[:2]) if len(i_time)==4 else 0, int(i_time[2:]) if len(i_time)==4 else 0
-    if not i_name or y==0: st.error("資料不完整")
-    else:
-        calc = ZWDSCalculator(y, m, d, h, mn, i_gen)
-        p_data, m_star, bur, b_yr = calc.get_result()
-        pkt = {"name": i_name, "gender": i_gen, "category": i_cat, "y": y, "m": m, "d": d, "h": h, "min": mn, "cal_type": cal, "ming_star": m_star, "bureau": bur, "palace_data": p_data}
-        if btn_save:
-            pkt['id'] = int(time.time()) if st.session_state.current_id==0 else st.session_state.current_id
-            if st.session_state.current_id==0: st.session_state.db.append(pkt); st.session_state.current_id = pkt['id']
-            else: 
-                for idx, x in enumerate(st.session_state.db):
-                    if x['id']==st.session_state.current_id: st.session_state.db[idx]=pkt
-            st.session_state.temp_preview_data = None; st.session_state.show_chart = True; st.rerun()
-        if btn_calc:
-            st.session_state.temp_preview_data = pkt; st.session_state.show_chart = True
-
-# --- 5. 排盤與時間軸 ---
+# --- 5. 排盤與時間軸 (Sticky Timeline) ---
 if st.session_state.show_chart:
     data = st.session_state.temp_preview_data or next((x for x in st.session_state.db if x['id']==st.session_state.current_id), None)
     if data:
@@ -314,6 +298,7 @@ if st.session_state.show_chart:
         st.markdown(f'<div class="zwds-grid">{cells_html}{center_html}</div>', unsafe_allow_html=True)
         
         # === B. 無縫控制列 (Seamless Strip) ===
+        # 標題簡化，確保寬度
         limit_names = ["一限", "二限", "三限", "四限", "五限", "六限", "七限", "八限", "九限", "十限", "十一", "十二"]
         
         # Row 1: 大限
@@ -321,14 +306,17 @@ if st.session_state.show_chart:
         for i, col in enumerate(cols_d):
             pos_idx, info = sorted_limits[i]
             gz = f"{GAN[info['gan_idx']]}{ZHI[info['zhi_idx']]}"
-            label = f"{limit_names[i]}{gz}" # 移除換行符，嘗試單行
+            # 關鍵修改：使用 HTML 換行符讓字變直/變兩行，節省寬度
+            label = f"{limit_names[i]}\n{gz}"
+            
             is_selected = (i == daxian_idx)
             btn_type = "primary" if is_selected else "secondary"
             if col.button(label, key=f"d_{i}", type=btn_type, use_container_width=True):
                 st.session_state.sel_daxian_idx = i; st.session_state.sel_liunian_offset = 0; st.rerun()
 
-        # 垂直縫隙消除術 (Super Gap Killer) - 增加負值以抵銷容器 padding
-        st.markdown('<div style="margin-top: -30px;"></div>', unsafe_allow_html=True)
+        # 垂直縫隙消除術 (Super Gap Killer) 
+        # 使用負 Margin 將下方元素強行拉上，同時加上 pointer-events 避免遮擋
+        st.markdown('<div style="margin-top: -35px; pointer-events: none;"></div>', unsafe_allow_html=True)
 
         # Row 2: 流年
         cols_l = st.columns(10)
@@ -337,13 +325,15 @@ if st.session_state.show_chart:
             yr = b_yr + age - 1
             gy, zy = get_ganzhi_for_year(yr)
             gz = f"{GAN[gy]}{ZHI[zy]}"
-            label = f"{yr}{gz}\n{age}"
+            # 簡化標籤：西元\n干支(歲)
+            label = f"{yr}\n{gz}({age})"
+            
             is_selected = (j == liunian_off)
             btn_type = "primary" if is_selected else "secondary"
             if col.button(label, key=f"l_{j}", type=btn_type, use_container_width=True):
                 st.session_state.sel_liunian_offset = j; st.rerun()
 
-        # JS/CSS 注入
+        # JS/CSS 注入：確保 Primary Button 顏色覆寫
         st.markdown("""
         <style>
             div.stButton > button[kind="primary"] {
