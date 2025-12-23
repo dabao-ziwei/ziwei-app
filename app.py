@@ -17,8 +17,10 @@ if 'temp_preview_data' not in st.session_state: st.session_state.temp_preview_da
 if 'sel_daxian_idx' not in st.session_state: st.session_state.sel_daxian_idx = 0 
 if 'sel_liunian_offset' not in st.session_state: st.session_state.sel_liunian_offset = 0 
 
-# 3. 側邊欄與標題
+# 3. 標題區
 st.title("🔮 專業紫微斗數排盤")
+
+# 4. 資料操作區 (Container)
 with st.container(border=True):
     c1, c2 = st.columns([1, 1.5])
     with c1: search = st.text_input("🔍 檢索", placeholder="姓名/年份")
@@ -30,7 +32,7 @@ with st.container(border=True):
         if sel != st.session_state.current_id:
             st.session_state.current_id = sel; st.session_state.show_chart = False; st.session_state.temp_preview_data = None; st.rerun()
 
-# 4. 資料填寫區
+# 5. 資料輸入表單
 if st.session_state.current_id != 0:
     rec = next((x for x in st.session_state.db if x['id']==st.session_state.current_id), None)
     v_name, v_gen, v_cat = rec['name'], rec['gender'], rec['category']
@@ -51,10 +53,11 @@ with st.expander("📝 資料輸入 / 修改", expanded=(not st.session_state.sh
         with b1: btn_save = st.form_submit_button("💾 儲存並排盤", type="primary", use_container_width=True)
         with b2: btn_calc = st.form_submit_button("🧪 僅試算", use_container_width=True)
 
+# 邏輯處理
 if btn_save or btn_calc:
     y, m, d, cal = parse_date(i_date)
     h, mn = int(i_time[:2]) if len(i_time)==4 else 0, int(i_time[2:]) if len(i_time)==4 else 0
-    if not i_name or y==0: st.error("資料不完整")
+    if not i_name or y==0: st.error("資料不完整 (請輸入正確日期如 20250926)")
     else:
         calc = ZWDSCalculator(y, m, d, h, mn, i_gen); p_data, m_star, bur, b_yr, ming_pos = calc.get_result()
         pkt = {"name": i_name, "gender": i_gen, "category": i_cat, "y": y, "m": m, "d": d, "h": h, "min": mn, "cal_type": cal, "ming_star": m_star, "bureau": bur, "palace_data": p_data, "ming_pos": ming_pos}
@@ -67,14 +70,12 @@ if btn_save or btn_calc:
             st.session_state.temp_preview_data = None; st.session_state.show_chart = True; st.rerun()
         if btn_calc: st.session_state.temp_preview_data = pkt; st.session_state.show_chart = True
 
-# 5. 排盤顯示區
+# 6. 顯示命盤
 if st.session_state.show_chart:
     data = st.session_state.temp_preview_data or next((x for x in st.session_state.db if x['id']==st.session_state.current_id), None)
     if data:
-        # 重建運算物件
         calc_obj = ZWDSCalculator(data['y'], data['m'], data['d'], data['h'], data['min'], data['gender'])
         
-        # 準備大限與流年資料
         sorted_limits = sorted(calc_obj.palaces.items(), key=lambda x: x[1]['age_start'])
         daxian_idx = st.session_state.sel_daxian_idx
         liunian_off = st.session_state.sel_liunian_offset
@@ -85,15 +86,12 @@ if st.session_state.show_chart:
         daxian_gan = d_info['gan_idx']
         ln_gan, ln_zhi = get_ganzhi_for_year(curr_year)
         
-        # 執行四化飛星
         calc_obj.calculate_sihua(daxian_gan, ln_gan)
         
-        # 找流年命宮位置
         liunian_pos = -1
         for pid, info in calc_obj.palaces.items():
             if info['zhi_idx'] == ln_zhi: liunian_pos = int(pid); break
 
-        # 佈局設定
         layout = [(5,"巳",1,1),(6,"午",1,2),(7,"未",1,3),(8,"申",1,4),
                   (4,"辰",2,1),                    (9,"酉",2,4),
                   (3,"卯",3,1),                    (10,"戌",3,4),
@@ -104,14 +102,12 @@ if st.session_state.show_chart:
             info = calc_obj.palaces[idx]
             is_daxian = (idx == daxian_pos)
             is_liunian = (idx == liunian_pos)
-            # 呼叫 renderer 生成 HTML
             cells_html += get_palace_html(idx, branch, r, c, info, is_daxian, is_liunian)
             
         center_html = get_center_html(data, calc_obj)
         
         st.markdown(f'<div class="zwds-grid">{cells_html}{center_html}</div>', unsafe_allow_html=True)
         
-        # 運限控制列
         st.markdown("---")
         limit_names = ["一限", "二限", "三限", "四限", "五限", "六限", "七限", "八限", "九限", "十限", "十一", "十二"]
         cols_d = st.columns(12)
