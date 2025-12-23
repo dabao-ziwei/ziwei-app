@@ -3,7 +3,7 @@ import time
 from lunar_python import Lunar, Solar
 
 # ==========================================
-# 1. 頁面設定與 CSS 樣式 (UI 大改版)
+# 1. 頁面設定與 CSS 樣式 (修正版 v2.1)
 # ==========================================
 st.set_page_config(page_title="專業紫微斗數排盤系統", page_icon="🔮", layout="wide")
 
@@ -19,11 +19,11 @@ st.markdown("""
     .block-container { padding-top: 1rem; padding-bottom: 3rem; }
     [data-testid="stVerticalBlock"] { gap: 0px !important; }
     
-    /* === 命盤網格系統 (維持你的12宮格邏輯) === */
+    /* === 命盤網格系統 === */
     .zwds-grid {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
-        grid-template-rows: repeat(4, 160px); /* 固定高度，確保排版一致 */
+        grid-template-rows: repeat(4, 160px);
         gap: 6px;
         background-color: #222; 
         padding: 5px;
@@ -48,11 +48,11 @@ st.markdown("""
         position: relative;
         display: flex;
         flex-direction: column;
-        justify-content: space-between; /* 上下撐開 */
+        justify-content: space-between;
         overflow: hidden;
     }
 
-    /* 狀態高亮 (流運) */
+    /* 狀態高亮 */
     .active-daxian { border: 1px solid #4da6ff !important; box-shadow: inset 0 0 10px rgba(77, 166, 255, 0.2); }
     .active-liunian { border: 2px solid #ff4d4d !important; z-index: 10; }
 
@@ -60,8 +60,8 @@ st.markdown("""
     .stars-box {
         display: flex;
         flex-direction: row;
-        flex: 1; /* 佔滿上方空間 */
-        min-height: 0; /* 防止溢出 */
+        flex: 1;
+        min-height: 0;
     }
 
     /* 左側：主星欄 */
@@ -79,14 +79,14 @@ st.markdown("""
         font-size: 1.3rem;
         font-weight: bold;
         line-height: 1.1;
-        color: #b197fc; /* 紫色主星 */
+        color: #b197fc;
         margin-bottom: 6px;
-        writing-mode: vertical-rl; /* 直書 */
+        writing-mode: vertical-rl;
         text-shadow: 0 0 2px rgba(177, 151, 252, 0.3);
         position: relative;
     }
 
-    /* 右側：副星與雜曜欄 (自動換行) */
+    /* 右側：副星與雜曜欄 */
     .sub-stars-col {
         display: flex;
         flex-wrap: wrap;
@@ -103,12 +103,11 @@ st.markdown("""
         line-height: 1.2;
     }
     
-    /* 顏色定義 */
-    .color-bad { color: #ff6b6b; font-weight: bold; } /* 煞星:紅 */
-    .color-good { color: #51cf66; font-weight: bold; } /* 吉星:綠 */
-    .color-normal { color: #aaaaaa; font-size: 0.75rem; } /* 雜曜:灰 */
+    .color-bad { color: #ff6b6b; font-weight: bold; }
+    .color-good { color: #51cf66; font-weight: bold; }
+    .color-normal { color: #aaaaaa; font-size: 0.75rem; }
     
-    /* 四化標籤 (貼在主星旁) */
+    /* 四化標籤 */
     .hua-badge {
         font-size: 0.6rem;
         color: #fff;
@@ -126,7 +125,7 @@ st.markdown("""
     .sh-ke { background-color: #e67700; }
     .sh-ji { background-color: #c92a2a; }
 
-    /* === 底部資訊區 (地支、宮名、狀態) === */
+    /* === 底部資訊區 === */
     .cell-footer {
         margin-top: 4px;
         border-top: 1px solid #333;
@@ -143,16 +142,8 @@ st.markdown("""
         line-height: 1;
     }
     
-    .ganzhi-label {
-        color: #888;
-        font-size: 0.8rem;
-    }
-    
-    .zhi-label {
-        color: #ddd;
-        font-size: 1.1rem;
-        font-weight: bold;
-    }
+    .ganzhi-label { color: #888; font-size: 0.8rem; }
+    .zhi-label { color: #ddd; font-size: 1.1rem; font-weight: bold; }
 
     .footer-right {
         text-align: right;
@@ -161,31 +152,13 @@ st.markdown("""
         align-items: flex-end;
     }
 
-    .palace-name {
-        font-size: 0.95rem;
-        font-weight: bold;
-        color: #fff;
-    }
+    .palace-name { font-size: 0.95rem; font-weight: bold; color: #fff; }
+    .limit-info { font-size: 0.7rem; color: #666; }
 
-    .limit-info {
-        font-size: 0.7rem;
-        color: #666;
-    }
-
-    .status-tags {
-        display: flex;
-        gap: 2px;
-        margin-top: 2px;
-    }
-
-    .tag-flow {
-        font-size: 0.7rem;
-        padding: 0 3px;
-        border-radius: 2px;
-        color: white;
-    }
-    .tag-liu { background-color: #c92a2a; } /* 流命紅底 */
-    .tag-da { background-color: #1971c2; } /* 大限藍底 */
+    .status-tags { display: flex; gap: 2px; margin-top: 2px; }
+    .tag-flow { font-size: 0.7rem; padding: 0 3px; border-radius: 2px; color: white; }
+    .tag-liu { background-color: #c92a2a; }
+    .tag-da { background-color: #1971c2; }
 
     /* 中宮資訊 */
     .center-info-box {
@@ -210,7 +183,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. 紫微斗數運算核心 (保留原邏輯)
+# 2. 紫微斗數運算核心
 # ==========================================
 class ZWDSCalculator:
     def __init__(self, year, month, day, hour, minute, gender):
@@ -229,11 +202,10 @@ class ZWDSCalculator:
         is_male = (self.gender == "男")
         self.direction = 1 if (is_yang_year and is_male) or (not is_yang_year and not is_male) else -1 
 
-        # 初始化資料結構
         self.palaces = {i: {
             "name": "", 
-            "major_stars": [], # [{'name':'紫微', 'bright':'廟', 'sihua':['祿']}]
-            "minor_stars": [], # [('天魁', True/False)] True為煞星
+            "major_stars": [],
+            "minor_stars": [],
             "gan_idx": 0, 
             "zhi_idx": i, 
             "age_start": 0, 
@@ -250,7 +222,7 @@ class ZWDSCalculator:
         start_idx = 2 
         self.ming_pos = (start_idx + (self.lunar_month - 1) - self.time_zhi_idx) % 12
         self.shen_pos = (start_idx + (self.lunar_month - 1) + self.time_zhi_idx) % 12
-        names = ["命宮", "兄弟", "夫妻", "子女", "財帛", "疾厄", "遷移", "交友", "官祿", "田宅", "福德", "父母"]
+        names = ["命宮", "兄弟", "夫妻", "子女", "財帛", "疾厄", "遷移", "僕役", "官祿", "田宅", "福德", "父母"]
         for i in range(12):
             pos = (self.ming_pos - i) % 12
             self.palaces[pos]["name"] = names[i]
@@ -279,7 +251,7 @@ class ZWDSCalculator:
         else: rem = d % b; add = b - rem; q = (d + add) // b; zp = (2 + q - 1 - add) % 12 if add % 2 == 1 else (2 + q - 1 + add) % 12
         
         def add_star(idx, name):
-            bright = "廟" # 簡化邏輯
+            bright = "廟" 
             self.palaces[idx]["major_stars"].append({'name': name, 'bright': bright, 'sihua': []})
 
         zw_map = {0:"紫微", -1:"天機", -3:"太陽", -4:"武曲", -5:"天同", -8:"廉貞"}
@@ -292,15 +264,13 @@ class ZWDSCalculator:
         self.ming_star = self.palaces[self.ming_pos]["major_stars"][0]['name'] if self.palaces[self.ming_pos]["major_stars"] else ""
 
     def _calc_minor_stars(self):
-        # 簡單模擬煞星與吉星邏輯 (保留原結構)
-        lu_pos = [2, 3, 5, 6, 5, 6, 8, 9, 11, 0] # 甲~癸 祿存
+        lu_pos = [2, 3, 5, 6, 5, 6, 8, 9, 11, 0] 
         lu_idx = lu_pos[self.year_gan_idx]
         
-        self.palaces[lu_idx]["minor_stars"].append(("祿存", False)) # 吉星
-        self.palaces[(lu_idx+1)%12]["minor_stars"].append(("擎羊", True)) # 煞星
-        self.palaces[(lu_idx-1)%12]["minor_stars"].append(("陀羅", True)) # 煞星
+        self.palaces[lu_idx]["minor_stars"].append(("祿存", False)) 
+        self.palaces[(lu_idx+1)%12]["minor_stars"].append(("擎羊", True)) 
+        self.palaces[(lu_idx-1)%12]["minor_stars"].append(("陀羅", True)) 
         
-        # 隨機塞一些雜曜展示排版效果
         self.palaces[(self.ming_pos + 4)%12]["minor_stars"].append(("火星", True))
         self.palaces[(self.ming_pos + 8)%12]["minor_stars"].append(("鈴星", True))
         self.palaces[(self.ming_pos + 2)%12]["minor_stars"].append(("天魁", False))
@@ -309,16 +279,16 @@ class ZWDSCalculator:
 
     def calculate_sihua(self, daxian_gan_idx, liunian_gan_idx):
         sihua_table = [
-            ["廉貞", "破軍", "武曲", "太陽"], # 甲
-            ["天機", "天梁", "紫微", "太陰"], # 乙
-            ["天同", "天機", "文昌", "廉貞"], # 丙
-            ["太陰", "天同", "天機", "巨門"], # 丁
-            ["貪狼", "太陰", "右弼", "天機"], # 戊
-            ["武曲", "貪狼", "天梁", "文曲"], # 己
-            ["太陽", "武曲", "天同", "天相"], # 庚
-            ["巨門", "太陽", "文曲", "文昌"], # 辛
-            ["天梁", "紫微", "左輔", "武曲"], # 壬
-            ["破軍", "巨門", "太陰", "貪狼"]  # 癸
+            ["廉貞", "破軍", "武曲", "太陽"], 
+            ["天機", "天梁", "紫微", "太陰"], 
+            ["天同", "天機", "文昌", "廉貞"], 
+            ["太陰", "天同", "天機", "巨門"], 
+            ["貪狼", "太陰", "右弼", "天機"], 
+            ["武曲", "貪狼", "天梁", "文曲"], 
+            ["太陽", "武曲", "天同", "天相"], 
+            ["巨門", "太陽", "文曲", "文昌"], 
+            ["天梁", "紫微", "左輔", "武曲"], 
+            ["破軍", "巨門", "太陰", "貪狼"]
         ]
         
         layers = [
@@ -330,7 +300,7 @@ class ZWDSCalculator:
         
         for pid, palace in self.palaces.items():
             for star in palace["major_stars"]:
-                star['sihua'] = [] # 重置
+                star['sihua'] = [] 
                 s_name = star['name']
                 for gan_idx, layer_name in layers:
                     stars_list = sihua_table[gan_idx]
@@ -342,7 +312,7 @@ class ZWDSCalculator:
         return self.palaces, self.ming_star, self.bureau_name, self.birth_year, self.ming_pos
 
 # ==========================================
-# 3. 狀態與輔助 (Streamlit Session)
+# 3. 狀態與輔助
 # ==========================================
 if 'db' not in st.session_state: st.session_state.db = [] 
 if 'current_id' not in st.session_state: st.session_state.current_id = 0
@@ -365,7 +335,7 @@ def parse_date(d):
 def get_ganzhi_for_year(year): return (year - 1984) % 10, (year - 1984) % 12
 
 # ==========================================
-# 4. 介面邏輯 (UI)
+# 4. 介面邏輯
 # ==========================================
 st.title("🔮 專業紫微斗數排盤")
 with st.container(border=True):
@@ -416,7 +386,7 @@ if btn_save or btn_calc:
         if btn_calc: st.session_state.temp_preview_data = pkt; st.session_state.show_chart = True
 
 # ==========================================
-# 5. 排盤顯示核心 (New UI + Logic)
+# 5. 排盤顯示核心 (HTML 組合邏輯修正版)
 # ==========================================
 if st.session_state.show_chart:
     data = st.session_state.temp_preview_data or next((x for x in st.session_state.db if x['id']==st.session_state.current_id), None)
@@ -444,7 +414,6 @@ if st.session_state.show_chart:
             if info['zhi_idx'] == ln_zhi: liunian_pos = int(pid); break
 
         # A. 產生 12 宮位 HTML
-        # 固定佈局順序 (對應 CSS Grid 4x4)
         layout = [(5,"巳",1,1),(6,"午",1,2),(7,"未",1,3),(8,"申",1,4),
                   (4,"辰",2,1),                    (9,"酉",2,4),
                   (3,"卯",3,1),                    (10,"戌",3,4),
@@ -454,38 +423,32 @@ if st.session_state.show_chart:
         for idx, branch, r, c in layout:
             info = calc_obj.palaces[idx]
             
-            # 判斷是否為大限或流年命宮
+            # 判斷 Class
             classes = []
             if idx == daxian_pos: classes.append("active-daxian")
             if idx == liunian_pos: classes.append("active-liunian")
             
-            # --- 1. 左欄：主星 HTML 生成 ---
+            # --- 1. 左欄：主星 HTML (移除縮排，單行串接) ---
             main_stars_html = ""
             for star in info['major_stars']:
-                # 處理四化顯示
                 sihua_html = ""
                 for sh in star['sihua']:
                     bg_cls = {"祿":"sh-lu", "權":"sh-quan", "科":"sh-ke", "忌":"sh-ji"}[sh['type']]
+                    # 注意：這裡使用單行字串
                     sihua_html += f'<span class="hua-badge {bg_cls}">{sh["type"]}</span>'
                 
-                main_stars_html += f'''
-                <div class="star-major">
-                    {star['name']}
-                    {sihua_html}
-                </div>
-                '''
+                # 注意：主星 div 也改為單行，確保不會因為換行被誤判
+                main_stars_html += f'<div class="star-major">{star["name"]}{sihua_html}</div>'
             
-            # --- 2. 右欄：副星/雜曜 HTML 生成 (祿存、煞星、雜曜) ---
+            # --- 2. 右欄：副星/雜曜 HTML ---
             sub_stars_html = ""
             for m_name, is_bad in info['minor_stars']:
-                # 判斷顏色：祿存給綠色，煞星紅色，其他灰色
                 if m_name == "祿存": style_cls = "color-good"
                 elif is_bad: style_cls = "color-bad"
                 else: style_cls = "color-normal"
-                
                 sub_stars_html += f'<span class="star-tag {style_cls}">{m_name}</span>'
             
-            # --- 3. 底部資訊：宮名狀態 ---
+            # --- 3. 底部資訊 ---
             is_liu = (idx == liunian_pos)
             is_da = (idx == daxian_pos)
             
@@ -493,18 +456,14 @@ if st.session_state.show_chart:
             if is_liu: status_tags += '<div class="tag-flow tag-liu">流命</div>'
             if is_da: status_tags += '<div class="tag-flow tag-da">大限</div>'
             
-            # --- 4. 組合最終 HTML ---
-            cell_html = f'''
+            # --- 4. 組合 Cell HTML (極度簡化以避免格式錯誤) ---
+            # 使用單一 f-string，但內部不換行，或者小心換行
+            cell_html = f"""
             <div class="zwds-cell {' '.join(classes)}" style="grid-row: {r}; grid-column: {c};">
                 <div class="stars-box">
-                    <div class="main-stars-col">
-                        {main_stars_html}
-                    </div>
-                    <div class="sub-stars-col">
-                        {sub_stars_html}
-                    </div>
+                    <div class="main-stars-col">{main_stars_html}</div>
+                    <div class="sub-stars-col">{sub_stars_html}</div>
                 </div>
-                
                 <div class="cell-footer">
                     <div class="footer-left">
                         <span class="ganzhi-label">{GAN[info['gan_idx']]}</span>
@@ -517,23 +476,23 @@ if st.session_state.show_chart:
                     </div>
                 </div>
             </div>
-            '''
+            """
             cells_html += cell_html
             
-        # 中宮資訊
-        center_html = f'''
+        # 中宮資訊 (使用 strip 確保乾淨)
+        center_html = f"""
         <div class="center-info-box">
             <h3 style="margin:0;color:#d4a0ff;font-size:1.5rem;">{data["name"]}</h3>
             <div style="color:#aaa;font-size:0.9rem;margin:5px 0;">{data["gender"]} | {calc_obj.bureau_name} | {data.get("ming_star","")}坐命</div>
             <div style="color:#4CAF50;">國曆：{data["y"]}/{data["m"]}/{data["d"]} {data["h"]}:{data["min"]:02d}</div>
             <div style="color:#888;font-size:0.8rem;">農曆：{calc_obj.lunar.getYearInGanZhi()}年 {calc_obj.lunar.getMonthInChinese()}月 {calc_obj.lunar.getDayInChinese()}</div>
         </div>
-        '''
+        """
         
-        # 渲染整個命盤
+        # 渲染
         st.markdown(f'<div class="zwds-grid">{cells_html}{center_html}</div>', unsafe_allow_html=True)
         
-        # B. 運限控制列 (保持不變)
+        # B. 運限控制列
         st.markdown("---")
         limit_names = ["一限", "二限", "三限", "四限", "五限", "六限", "七限", "八限", "九限", "十限", "十一", "十二"]
         cols_d = st.columns(12)
