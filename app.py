@@ -3,7 +3,7 @@ import time
 from lunar_python import Lunar, Solar
 
 # ==========================================
-# 1. 頁面設定與 CSS 樣式 (v6.0 三代四化疊加版)
+# 1. 頁面設定與 CSS 樣式 (v6.1 HTML 格式修正版)
 # ==========================================
 st.set_page_config(page_title="專業紫微斗數排盤系統", page_icon="🔮", layout="wide")
 
@@ -396,7 +396,7 @@ if btn_save or btn_calc:
         if btn_calc: st.session_state.temp_preview_data = pkt; st.session_state.show_chart = True
 
 # ==========================================
-# 5. 排盤顯示核心 (白底直書版)
+# 5. 排盤顯示核心 (白底直書版 - 修正HTML格式)
 # ==========================================
 if st.session_state.show_chart:
     data = st.session_state.temp_preview_data or next((x for x in st.session_state.db if x['id']==st.session_state.current_id), None)
@@ -446,12 +446,10 @@ if st.session_state.show_chart:
                     sihua_html += f'<span class="hua-badge {bg_cls}">{sh["type"]}</span>'
                 
                 # 結構：Container(直書) -> [星名, 四化1, 四化2...]
-                main_stars_html += f'''
-                <div class="star-major-container">
-                    <div class="star-name">{star["name"]}</div>
-                    {sihua_html}
-                </div>
-                '''
+                main_stars_html += f'<div class="star-major-container">'
+                main_stars_html += f'<div class="star-name">{star["name"]}</div>'
+                main_stars_html += sihua_html
+                main_stars_html += '</div>'
             
             # --- 副星/煞星 (直書) ---
             sub_stars_html = ""
