@@ -4,30 +4,63 @@ import streamlit as st
 def apply_style():
     st.markdown("""
     <style>
-        /* === 全局設定：白底黑字 === */
-        .stApp { background-color: #ffffff; color: #000000; }
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        header {visibility: hidden;}
+        /* === 1. 全局強制白底黑字 (覆蓋 Streamlit 深色模式) === */
+        .stApp {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+        }
         
-        .block-container { padding-top: 1rem; padding-bottom: 2rem; }
-        [data-testid="stVerticalBlock"] { gap: 0px !important; }
+        /* === 2. 修正輸入框 (Input) 與選單 (Selectbox) 的黑條問題 === */
+        /* 強制輸入框背景為白，文字為黑，邊框為灰 */
+        div[data-baseweb="input"] {
+            background-color: #ffffff !important;
+            border: 1px solid #ccc !important; 
+            color: #000000 !important;
+        }
+        div[data-baseweb="input"] input {
+            color: #000000 !important;
+        }
         
-        /* === 命盤網格 === */
+        /* 下拉選單修正 */
+        div[data-baseweb="select"] > div {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            border: 1px solid #ccc !important;
+        }
+        
+        /* 選單內的選項文字顏色 */
+        ul[data-baseweb="menu"] li {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+        }
+        
+        /* 標籤文字 (Label) 顏色 */
+        .stTextInput label, .stSelectbox label, .stRadio label {
+            color: #333333 !important;
+            font-size: 14px !important;
+        }
+
+        /* === 3. 調整版面間距 (避免巨大化) === */
+        .block-container {
+            padding-top: 1rem !important;
+            padding-bottom: 2rem !important;
+            max-width: 1200px !important;
+        }
+        [data-testid="stVerticalBlock"] { gap: 0.5rem !important; }
+        
+        /* === 4. 命盤網格系統 (保持你的架構) === */
         .zwds-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             grid-template-rows: repeat(4, 160px); 
             gap: 0;
-            background-color: #000; /* 格線顏色 */
+            background-color: #000; /* 格線黑 */
             border: 2px solid #000;
             margin-bottom: 20px;
             font-family: "Microsoft JhengHei", "Heiti TC", sans-serif;
-            max-width: 1200px;
-            margin-left: auto;
-            margin-right: auto;
         }
         
+        /* 手機適配 */
         @media (max-width: 800px) {
             .zwds-grid {
                 grid-template-columns: repeat(2, 1fr);
@@ -35,11 +68,11 @@ def apply_style():
             }
         }
 
-        /* 單一宮位卡片 */
+        /* 宮位卡片 */
         .zwds-cell {
             background-color: #ffffff;
             border: 1px solid #ccc;
-            padding: 4px;
+            padding: 2px 4px;
             position: relative;
             display: flex;
             flex-direction: column;
@@ -49,75 +82,71 @@ def apply_style():
         }
 
         /* 狀態高亮 */
-        .active-daxian { background-color: #f5f5f5 !important; border: 2px solid #666 !important; }
-        .active-liunian { border: 3px solid #007bff !important; z-index: 5; }
+        .active-daxian { background-color: #f0f0f0 !important; border: 2px solid #666 !important; }
+        .active-liunian { border: 3px solid #0056b3 !important; z-index: 5; }
 
-        /* === 星曜區塊 === */
+        /* === 星曜排版 === */
         .stars-box {
             display: flex;
             flex-direction: row; 
             flex: 1;
-            min-height: 0;
-            align-items: flex-start; /* 靠上對齊 */
+            align-items: flex-start;
         }
 
-        /* 左側：主星欄 */
+        /* 主星欄 */
         .main-stars-col {
             display: flex;
-            flex-direction: row; /* 雙星並排 */
+            flex-direction: row; 
             padding-right: 4px;
             margin-right: 4px;
-            border-right: 1px dashed #ccc;
+            border-right: 1px dashed #ddd;
             height: 100%;
         }
 
-        /* 主星容器 (包含名字和四化) */
         .star-major-container {
             display: flex;
-            flex-direction: column; /* 垂直排列：星名在上，四化在下 */
+            flex-direction: column; 
             align-items: center;
             margin-left: 2px;
             margin-right: 2px;
-            writing-mode: vertical-rl; /* 關鍵：直書模式 */
+            writing-mode: vertical-rl; 
         }
 
-        /* 主星名字 */
         .star-name {
             font-size: 18px; 
             font-weight: 900;
             color: #000;
             letter-spacing: 2px;
-            margin-bottom: 4px; /* 與四化標籤的距離 */
+            margin-bottom: 4px;
         }
 
-        /* 四化標籤 (通用) */
+        /* 四化標籤 */
         .hua-badge {
             font-size: 10px;
             border-radius: 2px;
-            padding: 2px 2px;
+            padding: 2px;
             color: #fff;
             text-align: center;
             font-weight: normal;
-            margin-top: 1px; /* 標籤之間的間距 */
-            writing-mode: horizontal-tb; /* 讓字轉正 */
-            width: 14px; /* 固定寬度，形成正方形感 */
+            margin-top: 1px;
+            writing-mode: horizontal-tb; /* 轉正 */
+            width: 14px;
             height: 14px;
             line-height: 10px;
             display: block;
         }
         
-        /* 四化顏色定義 */
-        .bg-ben { background-color: #d32f2f; } /* 本命：紅 */
-        .bg-da  { background-color: #808080; } /* 大限：灰 */
-        .bg-liu { background-color: #0056b3; } /* 流年：藍 */
+        .bg-ben { background-color: #d32f2f; }
+        .bg-da  { background-color: #808080; }
+        .bg-liu { background-color: #0056b3; }
 
-        /* 輔星/煞星欄 (羊陀祿存等) - 直書 */
+        /* 副星欄 (直書) */
         .sub-stars-col {
             display: flex;
             flex-direction: row-reverse;
             flex-wrap: wrap-reverse;
             align-content: flex-start;
-            gap: 4px;
+            gap: 3px;
         }
 
         .star-medium {
@@ -129,17 +158,16 @@ def apply_style():
         }
         
         .star-small {
-            font-size: 10px;
+            font-size: 11px;
             color: #666;
             writing-mode: vertical-rl;
             line-height: 1;
-            margin-top: 2px;
         }
         
         .color-bad { color: #d32f2f !important; } 
         .color-good { color: #2e7d32 !important; } 
         
-        /* === 底部資訊區 === */
+        /* 底部資訊 */
         .cell-footer {
             margin-top: 2px;
             border-top: 1px solid #eee;
@@ -149,11 +177,8 @@ def apply_style():
             align-items: flex-end;
         }
 
-        .footer-left { display: flex; flex-direction: column; line-height: 1; }
         .ganzhi-label { color: #666; font-size: 12px; font-weight: bold; }
         .zhi-label { color: #000; font-size: 16px; font-weight: 900; }
-
-        .footer-right { text-align: right; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
         .palace-name { font-size: 14px; font-weight: 900; color: #000; }
         .limit-info { font-size: 12px; color: #444; font-weight: bold; }
         
@@ -162,29 +187,29 @@ def apply_style():
         .tag-liu { background-color: #0056b3; } 
         .tag-da { background-color: #666; } 
 
-        /* 中宮資訊 */
+        /* 中宮 */
         .center-info-box {
             grid-column: 2 / 4; grid-row: 2 / 4;
-            background-color: #fff;
+            background-color: #ffffff;
             display: flex; flex-direction: column;
             justify-content: center; align-items: center; text-align: center;
             border: 1px solid #ccc;
             color: #000;
-            height: 100%;
         }
 
-        /* 按鈕樣式 */
+        /* 按鈕優化 */
         div.stButton > button {
-            width: 100%; border-radius: 0; border: 1px solid #ccc; 
-            font-size: 12px; height: auto; min-height: 35px;
-            background-color: #f9f9f9; color: #333;
-            margin: 0; padding: 2px 0;
+            background-color: #f0f0f0;
+            color: #000;
+            border: 1px solid #ccc;
         }
-        div.stButton > button:hover { border-color: #999; background-color: #e9e9e9; color: #000; }
-        div.stButton > button[kind="primary"] { 
-            background-color: #4B0082 !important; 
-            color: white !important; 
-            border: 1px solid #4B0082 !important; 
+        div.stButton > button:hover {
+            background-color: #e0e0e0;
+            border-color: #999;
+        }
+        div.stButton > button[kind="primary"] {
+            background-color: #4B0082 !important;
+            color: #fff !important;
         }
     </style>
     """, unsafe_allow_html=True)
