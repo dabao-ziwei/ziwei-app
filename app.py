@@ -1,11 +1,10 @@
-# app.py
 import streamlit as st
 import time
 from style import apply_style
 from logic import ZWDSCalculator, parse_date, get_ganzhi_for_year, GAN, ZHI
 from renderer import get_palace_html, get_center_html
 
-# 1. 套用樣式 (style.py)
+# 1. 套用樣式
 st.set_page_config(page_title="專業紫微斗數排盤系統", page_icon="🔮", layout="wide")
 apply_style()
 
@@ -17,12 +16,11 @@ if 'temp_preview_data' not in st.session_state: st.session_state.temp_preview_da
 if 'sel_daxian_idx' not in st.session_state: st.session_state.sel_daxian_idx = 0 
 if 'sel_liunian_offset' not in st.session_state: st.session_state.sel_liunian_offset = 0 
 
-# 3. 標題與搜尋區
+# 3. 標題區
 st.title("🔮 專業紫微斗數排盤")
 
 with st.container(border=True):
     c1, c2 = st.columns([1, 1.5])
-    # 文案修改 1: 檢索 -> 搜尋
     with c1: search = st.text_input("🔍 搜尋", placeholder="姓名/年份")
     with c2:
         opts = {0: "➕ 新增命盤"}
@@ -45,20 +43,16 @@ with st.expander("📝 資料輸入 / 修改", expanded=(not st.session_state.sh
         c1, c2, c3 = st.columns([1.5, 1, 1.5])
         with c1: i_name = st.text_input("姓名", value=v_name)
         with c2: i_gen = st.radio("性別", ["男", "女"], index=0 if v_gen=="男" else 1, horizontal=True)
-        # 文案修改 2: 類別 -> 分類
         with c3: i_cat = st.text_input("分類", value=v_cat)
         
         c4, c5 = st.columns(2)
-        # 文案修改 3: 日期 -> 出生年月日
         with c4: i_date = st.text_input("出生年月日", value=v_date, help="如 19790926 或 0680926")
-        # 文案修改 4: 時間 -> 出生時間
         with c5: i_time = st.text_input("出生時間", value=v_time, help="如 1830")
         
         b1, b2 = st.columns(2)
         with b1: btn_save = st.form_submit_button("💾 儲存並排盤", type="primary", use_container_width=True)
         with b2: btn_calc = st.form_submit_button("🧪 僅試算", use_container_width=True)
 
-# 邏輯處理 (保持不變)
 if btn_save or btn_calc:
     y, m, d, cal = parse_date(i_date)
     h, mn = int(i_time[:2]) if len(i_time)==4 else 0, int(i_time[2:]) if len(i_time)==4 else 0
@@ -75,7 +69,7 @@ if btn_save or btn_calc:
             st.session_state.temp_preview_data = None; st.session_state.show_chart = True; st.rerun()
         if btn_calc: st.session_state.temp_preview_data = pkt; st.session_state.show_chart = True
 
-# 5. 顯示命盤 (保持不變)
+# 5. 顯示命盤
 if st.session_state.show_chart:
     data = st.session_state.temp_preview_data or next((x for x in st.session_state.db if x['id']==st.session_state.current_id), None)
     if data:
@@ -93,9 +87,13 @@ if st.session_state.show_chart:
         
         calc_obj.calculate_sihua(daxian_gan, ln_gan)
         
+        # 找流年命宮位置
         liunian_pos = -1
         for pid, info in calc_obj.palaces.items():
             if info['zhi_idx'] == ln_zhi: liunian_pos = int(pid); break
+
+        # 本命命宮位置
+        benming_pos = calc_obj.ming_pos
 
         layout = [(5,"巳",1,1),(6,"午",1,2),(7,"未",1,3),(8,"申",1,4),
                   (4,"辰",2,1),                    (9,"酉",2,4),
@@ -105,9 +103,8 @@ if st.session_state.show_chart:
         cells_html = ""
         for idx, branch, r, c in layout:
             info = calc_obj.palaces[idx]
-            is_daxian = (idx == daxian_pos)
-            is_liunian = (idx == liunian_pos)
-            cells_html += get_palace_html(idx, branch, r, c, info, is_daxian, is_liunian)
+            # 傳遞三個盤的命宮位置，讓 renderer 去計算相對宮名
+            cells_html += get_palace_html(idx, branch, r, c, info, daxian_pos, liunian_pos, benming_pos)
             
         center_html = get_center_html(data, calc_obj)
         
