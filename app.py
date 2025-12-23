@@ -34,25 +34,28 @@ st.markdown("""
         flex-direction: column;
         overflow: hidden;
         border: 1px solid #333;
+        cursor: pointer; /* 暗示可點擊(未來擴充) */
     }
     
-    /* 狀態 A: 被選中的【大限】宮位 (深藍背景) */
+    /* 狀態 A: 被選中的【大限】宮位 (深藍背景 + 綠光) */
     .zwds-cell.active-daxian {
         background-color: #1a2a40 !important; 
         border: 1px solid #4da6ff;
-        box-shadow: inset 0 0 15px rgba(77, 166, 255, 0.3);
+        box-shadow: inset 0 0 15px rgba(77, 166, 255, 0.4);
     }
 
-    /* 狀態 B: 被選中的【流年】宮位 (紅色邊框 + 微紅光) */
+    /* 狀態 B: 被選中的【流年】宮位 (紅框 + 紅光) */
     .zwds-cell.active-liunian {
         border: 2px solid #ff4d4d !important;
-        box-shadow: inset 0 0 10px rgba(255, 77, 77, 0.4);
+        box-shadow: inset 0 0 10px rgba(255, 77, 77, 0.5);
+        z-index: 10; /* 確保浮在最上層 */
     }
     
-    /* 狀態 AB: 大限與流年重疊 (紫光) */
+    /* 狀態 AB: 大限與流年重疊 (紫光特效) */
     .zwds-cell.active-daxian.active-liunian {
         background-color: #2a1a30 !important;
         border: 2px solid #ff4dff !important;
+        box-shadow: inset 0 0 20px rgba(255, 77, 255, 0.5);
     }
 
     /* 標籤顯示 */
@@ -60,11 +63,13 @@ st.markdown("""
         position: absolute; top: 20px; right: 2px;
         background-color: #004d99; color: #fff;
         font-size: 10px; padding: 1px 3px; border-radius: 3px;
+        opacity: 0.8;
     }
     .marker-liunian {
         position: absolute; top: 36px; right: 2px;
         background-color: #990000; color: #fff;
         font-size: 10px; padding: 1px 3px; border-radius: 3px;
+        opacity: 0.9;
     }
 
     /* 中間命主資料區 */
@@ -88,18 +93,26 @@ st.markdown("""
     .cell-name { position: absolute; bottom: 2px; left: 4px; background-color: #444; color: #ccc; padding: 0 3px; font-size: 11px; border-radius: 2px; }
     .cell-ganzhi { position: absolute; bottom: 2px; right: 4px; color: #aaa; font-weight: bold; font-size: 13px; }
     
-    /* 按鈕群組優化 */
-    .stRadio > div { flex-direction: row; overflow-x: auto; }
+    /* 按鈕樣式微調 (讓按鈕看起來像表格) */
+    div.stButton > button {
+        width: 100%;
+        padding: 4px 8px;
+        font-size: 13px;
+        border-radius: 4px;
+        height: auto;
+        white-space: pre-wrap; /* 允許換行 */
+        line-height: 1.2;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. 紫微斗數運算核心 (Engine v3) ---
+# --- 2. 紫微斗數運算核心 (Engine) ---
 class ZWDSCalculator:
     def __init__(self, year, month, day, hour, minute, gender):
         self.solar = Solar.fromYmdHms(year, month, day, hour, minute, 0)
         self.lunar = self.solar.getLunar()
         self.gender = gender 
-        self.birth_year = year # 紀錄出生西元年，算歲數用
+        self.birth_year = year 
         
         self.lunar_month = self.lunar.getMonth()
         self.lunar_day = self.lunar.getDay()
@@ -107,12 +120,10 @@ class ZWDSCalculator:
         self.year_gan_idx = self.lunar.getYearGanIndex() 
         self.year_zhi_idx = self.lunar.getYearZhiIndex() 
         
-        # 陰陽順逆
         is_yang_year = (self.year_gan_idx % 2 == 0)
         is_male = (self.gender == "男")
         self.direction = 1 if (is_yang_year and is_male) or (not is_yang_year and not is_male) else -1 
 
-        # 初始化 12 宮
         self.palaces = {i: {"name": "", "stars": [], "gan_idx": 0, "zhi_idx": i, "age_start": 0, "age_end": 0} for i in range(12)}
         
         self._calc_palaces()    
@@ -121,7 +132,6 @@ class ZWDSCalculator:
         self._calc_daxian()      
 
     def _calc_palaces(self):
-        # 安命身
         start_idx = 2 
         self.ming_pos = (start_idx + (self.lunar_month - 1) - self.time_zhi_idx) % 12
         self.shen_pos = (start_idx + (self.lunar_month - 1) + self.time_zhi_idx) % 12
@@ -132,7 +142,6 @@ class ZWDSCalculator:
             self.palaces[pos]["name"] = names[i]
             if pos == self.shen_pos: self.palaces[pos]["name"] += "(身宮)"
             
-        # 安宮干 (五虎遁)
         start_gan = (self.year_gan_idx % 5) * 2 + 2
         for i in range(12):
             offset = (i - 2) % 12 
@@ -140,7 +149,6 @@ class ZWDSCalculator:
             self.palaces[i]["gan_idx"] = gan
 
     def _calc_bureau(self):
-        # 五行局
         m_gan = self.palaces[self.ming_pos]["gan_idx"]
         m_zhi = self.ming_pos
         table = {0: [4,4,6,6,5,5,4,4,6,6,5,5], 1: [2,2,5,5,6,6,2,2,5,5,6,6], 
@@ -150,7 +158,6 @@ class ZWDSCalculator:
         self.bureau_name = {2:"水二局", 3:"木三局", 4:"金四局", 5:"土五局", 6:"火六局"}[self.bureau_num]
 
     def _calc_daxian(self):
-        # 大限
         start_age = self.bureau_num
         for i in range(12):
             offset = i if self.direction == 1 else -i
@@ -161,7 +168,6 @@ class ZWDSCalculator:
             start_age += 10
 
     def _calc_main_stars(self):
-        # 紫微與諸星
         b = self.bureau_num
         d = self.lunar_day
         if d % b == 0: q = d // b; ziwei_pos = (2 + q - 1) % 12 
@@ -187,11 +193,11 @@ if 'current_id' not in st.session_state: st.session_state.current_id = 0
 if 'show_chart' not in st.session_state: st.session_state.show_chart = False
 if 'temp_preview_data' not in st.session_state: st.session_state.temp_preview_data = None
 
-# 互動狀態：紀錄目前使用者選了哪個「大限」和哪個「流年」
-if 'sel_daxian_idx' not in st.session_state: st.session_state.sel_daxian_idx = 0 # 預設第一限
-if 'sel_liunian_offset' not in st.session_state: st.session_state.sel_liunian_offset = 0 # 預設大限的第1年
+# 【關鍵修正】互動狀態：使用 Index 追蹤按鈕選取
+if 'sel_daxian_idx' not in st.session_state: st.session_state.sel_daxian_idx = 0 
+if 'sel_liunian_offset' not in st.session_state: st.session_state.sel_liunian_offset = 0 # 0~9
 
-# --- 4. 輔助常數與函式 ---
+# --- 4. 輔助函式 ---
 GAN = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸']
 ZHI = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥']
 
@@ -205,10 +211,7 @@ def parse_date(d):
     return 0,0,0,""
 
 def get_ganzhi_for_year(year):
-    # 計算某西元年的干支 (簡單公式)
-    # 4年=甲子? NO. 1984=甲子. 
-    # 干: (year - 4) % 10. 支: (year - 4) % 12
-    # 修正: 1984是甲子
+    # 1984=甲子 (0,0)
     offset = year - 1984
     gan_idx = (0 + offset) % 10
     zhi_idx = (0 + offset) % 12
@@ -277,93 +280,114 @@ if btn_save or btn_calc:
             st.session_state.temp_preview_data = pkt
             st.session_state.show_chart = True
 
-# --- 8. 排盤顯示與運限互動 ---
+# --- 8. 排盤與互動面板 (Dashboard) ---
 if st.session_state.show_chart:
     data = st.session_state.temp_preview_data or next((x for x in st.session_state.db if x['id']==st.session_state.current_id), None)
     if data:
-        # 重建運算物件以取得完整方法
         calc_obj = ZWDSCalculator(data['y'], data['m'], data['d'], data['h'], data['min'], data['gender'])
         p_data, m_star, bur, b_yr = calc_obj.get_result()
+        sorted_limits = sorted(p_data.items(), key=lambda x: x[1]['age_start']) # list of (pos_idx, info)
         
-        # 1. 整理 12 大限資料
-        # p_data 裡面的 key 是 '0'...'11' (宮位索引)，我們需要根據 age_start 排序找出第一限、第二限...
-        # 建立一個 list: [(宮位idx, 宮位資料), ...]
-        sorted_limits = sorted(p_data.items(), key=lambda x: x[1]['age_start'])
-        
-        # --- UI: 運限選擇器 (仿表格) ---
         st.write("---")
-        st.markdown(f"**🌠 {data['name']} 的運限盤**")
         
-        # 【第一層：選擇大限】
-        limit_options = []
-        limit_map = {} # label -> (index_in_sorted, palace_idx, age_start)
+        # === 區域 A: 大限儀表板 (Daxian Dashboard) ===
+        st.markdown(f"**🌠 運限控制盤：{data['name']}**")
+        st.caption("👇 第一步：點選大限 (觀察干支)")
         
-        limit_names = ["第一限", "第二限", "第三限", "第四限", "第五限", "第六限", "第七限", "第八限", "第九限", "第十限", "十一限", "十二限"]
+        # 建立大限按鈕陣列 (使用 columns 模擬表格)
+        # 分兩行顯示，每行6個，符合手機與桌機閱讀
+        # 準備資料
+        limit_names = ["一限", "二限", "三限", "四限", "五限", "六限", "七限", "八限", "九限", "十限", "十一", "十二"]
         
-        for i, (pos_idx, info) in enumerate(sorted_limits):
+        # 繪製第一排 (1-6限)
+        cols_d1 = st.columns(6)
+        for i in range(6):
+            pos_idx, info = sorted_limits[i]
             gz = f"{GAN[info['gan_idx']]}{ZHI[info['zhi_idx']]}"
-            label = f"{limit_names[i]} [{gz}] {info['age_start']}-{info['age_end']}歲"
-            limit_options.append(label)
-            limit_map[label] = (i, int(pos_idx), info['age_start'])
+            btn_label = f"{limit_names[i]}\n{gz}"
+            
+            # 判斷是否被選中 (樣式區分)
+            is_active = (i == st.session_state.sel_daxian_idx)
+            btn_type = "primary" if is_active else "secondary"
+            
+            if cols_d1[i].button(btn_label, key=f"dx_btn_{i}", type=btn_type, use_container_width=True):
+                st.session_state.sel_daxian_idx = i
+                st.session_state.sel_liunian_offset = 0 # 重置流年
+                st.rerun()
 
-        # 使用 selectbox 當作第一層選擇 (較整齊)
-        current_daxian_label = limit_options[st.session_state.sel_daxian_idx]
-        selected_daxian = st.selectbox("1. 選擇大限 (十年大運)", limit_options, index=st.session_state.sel_daxian_idx)
-        
-        # 更新 state
-        new_daxian_idx = limit_options.index(selected_daxian)
-        if new_daxian_idx != st.session_state.sel_daxian_idx:
-            st.session_state.sel_daxian_idx = new_daxian_idx
-            st.session_state.sel_liunian_offset = 0 # 重置流年到第一年
-            st.rerun()
+        # 繪製第二排 (7-12限)
+        cols_d2 = st.columns(6)
+        for i in range(6, 12):
+            pos_idx, info = sorted_limits[i]
+            gz = f"{GAN[info['gan_idx']]}{ZHI[info['zhi_idx']]}"
+            btn_label = f"{limit_names[i]}\n{gz}"
+            
+            is_active = (i == st.session_state.sel_daxian_idx)
+            btn_type = "primary" if is_active else "secondary"
+            
+            if cols_d2[i-6].button(btn_label, key=f"dx_btn_{i}", type=btn_type, use_container_width=True):
+                st.session_state.sel_daxian_idx = i
+                st.session_state.sel_liunian_offset = 0
+                st.rerun()
 
-        # 取得當前大限的資訊
-        daxian_order, daxian_palace_pos, daxian_start_age = limit_map[selected_daxian]
+        # === 區域 B: 流年儀表板 (Liunian Dashboard) ===
+        # 根據目前選中的大限，計算 10 年流年
+        curr_daxian_pos_idx, curr_daxian_info = sorted_limits[st.session_state.sel_daxian_idx]
+        start_age = curr_daxian_info['age_start']
         
-        # 【第二層：選擇流年】
-        # 根據大限起始歲數，算出這 10 年的：歲數、西元年、干支
-        liunian_options = [] # 顯示文字
-        liunian_data = []    # (year, age, gan_idx, zhi_idx)
+        st.caption(f"👇 第二步：點選流年 (目前大限：{limit_names[st.session_state.sel_daxian_idx]} {start_age}-{curr_daxian_info['age_end']}歲)")
         
+        # 準備流年資料
+        liunian_list = []
         for offset in range(10):
-            age = daxian_start_age + offset
-            # 算出這歲數對應的西元年
-            # 出生年(b_yr) = 1歲 (虛歲算法) -> current_year = b_yr + age - 1
+            age = start_age + offset
             curr_year = b_yr + age - 1
             g_idx, z_idx = get_ganzhi_for_year(curr_year)
+            gz = f"{GAN[g_idx]}{ZHI[z_idx]}"
+            liunian_list.append({
+                "year": curr_year, "gz": gz, "age": age, "zhi_idx": z_idx, "gan_idx": g_idx
+            })
             
-            gz_str = f"{GAN[g_idx]}{ZHI[z_idx]}"
-            label = f"{curr_year} ({gz_str}) {age}歲"
+        # 繪製流年按鈕 (5個一排，共兩排)
+        row1 = st.columns(5)
+        for j in range(5):
+            ln = liunian_list[j]
+            label = f"{ln['year']} {ln['gz']}\n({ln['age']}歲)"
+            is_active = (j == st.session_state.sel_liunian_offset)
+            btn_type = "primary" if is_active else "secondary"
             
-            liunian_options.append(label)
-            liunian_data.append((curr_year, age, g_idx, z_idx))
+            if row1[j].button(label, key=f"ln_btn_{j}", type=btn_type, use_container_width=True):
+                st.session_state.sel_liunian_offset = j
+                st.rerun()
+                
+        row2 = st.columns(5)
+        for j in range(5, 10):
+            ln = liunian_list[j]
+            label = f"{ln['year']} {ln['gz']}\n({ln['age']}歲)"
+            is_active = (j == st.session_state.sel_liunian_offset)
+            btn_type = "primary" if is_active else "secondary"
             
-        # 使用 Radio Button (水平排列) 讓使用者點選流年
-        # 為了美觀，用 columns 模擬排版，或者直接用 horizontal radio
-        st.write("2. 選擇流年 (每年運勢)")
-        selected_liunian_label = st.radio("流年選擇", liunian_options, index=st.session_state.sel_liunian_offset, horizontal=True, label_visibility="collapsed")
+            if row2[j-5].button(label, key=f"ln_btn_{j}", type=btn_type, use_container_width=True):
+                st.session_state.sel_liunian_offset = j
+                st.rerun()
+
+        # === 區域 C: 命盤繪製 ===
+        # 計算高亮位置
+        # 1. 大限位置
+        daxian_pos = int(curr_daxian_pos_idx)
         
-        # 更新流年 State
-        new_liunian_offset = liunian_options.index(selected_liunian_label)
-        if new_liunian_offset != st.session_state.sel_liunian_offset:
-            st.session_state.sel_liunian_offset = new_liunian_offset
-            st.rerun()
-            
-        # 取得當前流年資訊
-        ln_year, ln_age, ln_gan, ln_zhi = liunian_data[new_liunian_offset]
+        # 2. 流年位置
+        # 根據選中的流年地支，去找對應的宮位
+        curr_liunian = liunian_list[st.session_state.sel_liunian_offset]
+        ln_zhi_idx = curr_liunian['zhi_idx']
         
-        # --- 計算亮燈位置 ---
-        # 1. 大限宮位: daxian_palace_pos (已取得)
-        # 2. 流年宮位: 流年地支(ln_zhi) 在哪一宮
-        #    我們的 p_data key 是宮位索引(0-11)，對應的 zhi_idx 也是 0-11
-        #    例如流年是辰(4)，我們就找 zhi_idx == 4 的那個宮位
-        liunian_palace_pos = -1
+        liunian_pos = -1
         for pid, info in p_data.items():
-            if info['zhi_idx'] == ln_zhi:
-                liunian_palace_pos = int(pid)
+            if info['zhi_idx'] == ln_zhi_idx:
+                liunian_pos = int(pid)
                 break
-        
-        # --- 繪製命盤 (Grid) ---
+
+        # 繪圖 HTML
         layout = [
             (5, "巳", 1, 1), (6, "午", 1, 2), (7, "未", 1, 3), (8, "申", 1, 4),
             (4, "辰", 2, 1),                                 (9, "酉", 2, 4),
@@ -375,21 +399,18 @@ if st.session_state.show_chart:
         for idx, branch, r, c in layout:
             info = p_data[str(idx)] if str(idx) in p_data else p_data[idx]
             
-            # 判斷 Class
             classes = []
             markers = ""
             
-            if idx == daxian_palace_pos:
+            if idx == daxian_pos:
                 classes.append("active-daxian")
                 markers += '<div class="marker-daxian">大限</div>'
                 
-            if idx == liunian_palace_pos:
+            if idx == liunian_pos:
                 classes.append("active-liunian")
                 markers += '<div class="marker-liunian">流年</div>'
             
             cls_str = " ".join(classes)
-            
-            # 內容
             stars = " ".join(info['stars'])
             ganzhi = f"{GAN[info['gan_idx']]}{branch}"
             age_range = f"{info['age_start']}-{info['age_end']}"
@@ -411,10 +432,9 @@ if st.session_state.show_chart:
         center_html += f'<div style="color:#4CAF50;">{data["h"]:02d} 時 {data["min"]:02d} 分</div>'
         center_html += '<hr style="width:80%; border-color:#444; margin:8px 0;">'
         center_html += f'<div style="color:#fff;">命宮主星: {data.get("ming_star","")}</div>'
-        # 顯示目前選到的時空
-        center_html += f'<div style="margin-top:5px; background:#1a2a40; padding:4px; border-radius:4px; font-size:13px;">'
-        center_html += f'<span style="color:#4da6ff;">大限: {limit_names[daxian_order]}</span><br>'
-        center_html += f'<span style="color:#ff4d4d;">流年: {ln_year} {GAN[ln_gan]}{ZHI[ln_zhi]}</span>'
+        center_html += f'<div style="margin-top:5px; background:#222; padding:5px; border-radius:4px; font-size:13px; border:1px solid #555;">'
+        center_html += f'<span style="color:#4da6ff;">大限: {limit_names[st.session_state.sel_daxian_idx]}</span><br>'
+        center_html += f'<span style="color:#ff4d4d;">流年: {curr_liunian["year"]} {curr_liunian["gz"]}</span>'
         center_html += '</div>'
         center_html += '</div>'
         
