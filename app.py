@@ -1,42 +1,45 @@
 import streamlit as st
 import time
 
-# --- 1. 頁面設定與 CSS 樣式 ---
+# --- 1. 頁面設定與 CSS 樣式 (修復排盤顯示與亂碼問題) ---
 st.set_page_config(page_title="專業紫微斗數排盤系統", page_icon="🔮", layout="centered")
 
+# 使用更嚴謹的 CSS 來確保格子不會跑版
 st.markdown("""
 <style>
-    /* 隱藏 Streamlit 預設選單以獲得更像 App 的體驗 */
+    /* 隱藏預設選單 */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     
-    /* 命盤網格容器 (4x4) */
+    /* 命盤外框 (4x4 網格) */
     .zwds-grid {
         display: grid;
         grid-template-columns: 1fr 1fr 1fr 1fr;
         grid-template-rows: 120px 120px 120px 120px;
         gap: 2px;
-        background-color: #555;
-        border: 2px solid #777;
-        margin-top: 20px;
+        background-color: #444;
+        border: 2px solid #666;
         border-radius: 8px;
-        overflow: hidden;
+        margin-top: 20px;
+        font-family: "Microsoft JhengHei", sans-serif;
     }
-    /* 12宮位格子 */
+    
+    /* 12宮位格子樣式 */
     .zwds-cell {
-        background-color: #1a1a1a;
+        background-color: #222; /* 深色背景 */
+        color: #fff;            /* 白色文字 */
         padding: 5px;
         position: relative;
-        font-size: 13px;
-        color: #eee;
         display: flex;
         flex-direction: column;
+        font-size: 13px;
     }
+
     /* 中間命主資料區 (跨越中間 2x2 區域) */
     .zwds-center {
         grid-column: 2 / 4;
         grid-row: 2 / 4;
-        background-color: #0E1117;
+        background-color: #111;
         display: flex;
         flex-direction: column;
         justify_content: center;
@@ -44,25 +47,33 @@ st.markdown("""
         text-align: center;
         border: 1px solid #333;
         padding: 10px;
+        color: #fff;
     }
+    
     /* 地支標籤 (右下角) */
     .cell-label {
         position: absolute;
         bottom: 2px;
         right: 5px;
-        color: #666;
-        font-size: 14px;
+        color: #888;
         font-weight: bold;
+        font-size: 14px;
     }
-    /* 星曜文字 */
+    
+    /* 星曜顯示 (左上角) */
     .cell-stars {
-        color: #d4a0ff;
+        color: #d4a0ff; /* 紫色字 */
         font-weight: bold;
-        font-size: 14px;
-        margin-bottom: 2px;
+        font-size: 15px;
+        margin-bottom: 4px;
     }
-    /* 錯誤訊息樣式 */
-    .stAlert { margin-top: 10px; }
+    
+    /* 宮位名稱 (左下角 - 模擬用) */
+    .cell-name {
+        font-size: 12px;
+        color: #aaa;
+        margin-top: auto; /* 推到底部 */
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -73,23 +84,21 @@ if 'current_id' not in st.session_state:
     st.session_state.current_id = 0
 if 'show_chart' not in st.session_state:
     st.session_state.show_chart = False
-# 用來暫存「僅試算」的資料，避免 NameError
 if 'temp_preview_data' not in st.session_state:
     st.session_state.temp_preview_data = None
 
-# --- 3. 核心邏輯：日期解析 (修正 7 碼問題) ---
+# --- 3. 核心邏輯：日期解析 ---
 def parse_date_input(d_str):
-    """解析使用者輸入的日期字串"""
     if not d_str: return False, 0, 0, 0, ""
     d = d_str.strip()
     try:
-        # 情況 A: 西元 8 碼 (19790926)
+        # 西元 8 碼
         if len(d) == 8:
             return True, int(d[:4]), int(d[4:6]), int(d[6:]), "西元"
-        # 情況 B: 民國 7 碼 (1140926 -> 民國114年)
+        # 民國 7 碼 (1140926)
         elif len(d) == 7:
             return True, int(d[:3]) + 1911, int(d[3:5]), int(d[5:]), "民國"
-        # 情況 C: 民國 6 碼 (680926 -> 民國68年)
+        # 民國 6 碼 (680926)
         elif len(d) == 6:
             return True, int(d[:2]) + 1911, int(d[2:4]), int(d[4:]), "民國"
         else:
@@ -98,7 +107,7 @@ def parse_date_input(d_str):
         return False, 0, 0, 0, ""
 
 def get_demo_stars(year):
-    """模擬星曜 (僅供顯示測試)"""
+    """模擬星曜"""
     stars = ["紫微", "天機", "太陽", "武曲", "天同", "廉貞", "天府", "太陰", "貪狼", "巨門", "天相", "天梁", "七殺", "破軍"]
     return stars[year % 14]
 
@@ -112,15 +121,14 @@ with st.container(border=True):
         search_keyword = st.text_input("🔍 全文檢索", placeholder="輸入姓名、年份...")
     
     with col_select:
-        # 建立選單
         options = {0: "➕ 新增空白命盤"}
         for p in st.session_state.db:
-            search_text = f"{p['name']}{p['y']}{p['category']}"
+            search_text = f"{p['name']}{p['y']}{p['category']}{p.get('ming_star','')}"
             if not search_keyword or (search_keyword in search_text):
-                display_text = f"[{p['category']}] {p['name']} ({p['y']-1911 if p['cal_type']=='民國' else p['y']})"
+                d_y_str = str(p['y']-1911) if p['cal_type']=='民國' else str(p['y'])
+                display_text = f"[{p['category']}] {p['name']} ({d_y_str}年)"
                 options[p['id']] = display_text
         
-        # 保持選單狀態
         current_idx = 0
         all_keys = list(options.keys())
         if st.session_state.current_id in all_keys:
@@ -130,36 +138,30 @@ with st.container(border=True):
         
         if selected_id != st.session_state.current_id:
             st.session_state.current_id = selected_id
-            st.session_state.show_chart = False # 切換人時先隱藏舊盤
-            st.session_state.temp_preview_data = None # 清除試算暫存
+            st.session_state.show_chart = False 
+            st.session_state.temp_preview_data = None
             st.rerun()
 
 # --- 5. 資料輸入表單 ---
 st.subheader("📝 資料輸入")
 
-# 準備表單預設值
-if st.session_state.current_id == 0:
-    val_name, val_gender, val_cat, val_date, val_time = "", "女", "", "", ""
-    is_edit_mode = False
-else:
-    # 從 DB 抓取
+# 準備預設值 (防止變數未定義)
+val_name, val_gender, val_cat, val_date, val_time = "", "女", "", "", ""
+is_edit_mode = False
+
+if st.session_state.current_id != 0:
     record = next((x for x in st.session_state.db if x['id'] == st.session_state.current_id), None)
     if record:
         is_edit_mode = True
         val_name = record['name']
         val_gender = record['gender']
         val_cat = record['category']
-        # 還原日期顯示
         if record['cal_type'] == "西元":
             val_date = f"{record['y']:04d}{record['m']:02d}{record['d']:02d}"
         else:
-            # 判斷是 3 位數還是 2 位數民國年
             roc_year = record['y'] - 1911
             val_date = f"{roc_year}{record['m']:02d}{record['d']:02d}"
         val_time = f"{record['h']:02d}{record['min']:02d}"
-    else:
-        val_name, val_gender, val_cat, val_date, val_time = "", "女", "", "", ""
-        is_edit_mode = False
 
 with st.form("main_form"):
     c1, c2, c3 = st.columns([1.5, 1, 1.5])
@@ -172,7 +174,7 @@ with st.form("main_form"):
 
     c4, c5 = st.columns(2)
     with c4:
-        inp_date = st.text_input("出生日期", value=val_date, placeholder="如: 1140926 或 680926", help="輸入民國或西元皆可")
+        inp_date = st.text_input("出生日期", value=val_date, placeholder="如: 1140926 或 19790926", help="輸入民國(6-7碼)或西元(8碼)")
     with c5:
         inp_time = st.text_input("出生時間 (24h)", value=val_time, placeholder="如: 1830", help="HHMM 格式")
 
@@ -182,35 +184,32 @@ with st.form("main_form"):
     with b2:
         btn_calc = st.form_submit_button("🧪 僅試算 (不儲存)", use_container_width=True)
 
-# --- 6. 處理按鈕動作 ---
+# --- 6. 按鈕邏輯 ---
 if btn_save or btn_calc:
-    # 驗證
     is_valid_date, y, m, d, cal_type = parse_date_input(inp_date)
-    
     h, minute = 0, 0
     is_valid_time = False
+    
     if len(inp_time) == 4 and inp_time.isdigit():
         h, minute = int(inp_time[:2]), int(inp_time[2:])
         if 0 <= h <= 23 and 0 <= minute <= 59:
             is_valid_time = True
 
-    # 錯誤檢查
     has_error = False
     if btn_save and not inp_name:
         st.error("❌ 儲存時「姓名」為必填！")
         has_error = True
     elif not is_valid_date:
-        st.error(f"❌ 日期格式無法識別：{inp_date}。請輸入如 1140926 (民國114年) 或 19790926。")
+        st.error(f"❌ 日期格式錯誤：{inp_date}")
         has_error = True
     elif inp_time and not is_valid_time:
-        st.error("❌ 時間格式錯誤，請輸入 4 碼數字，例如 1830。")
+        st.error("❌ 時間格式錯誤，請輸入 4 碼數字 (如 1830)")
         has_error = True
 
     if not has_error:
-        # 資料準備
         ming_star = get_demo_stars(y)
         data_packet = {
-            "name": inp_name if inp_name else "未命名",
+            "name": inp_name if inp_name else "試算命主",
             "gender": inp_gender,
             "category": inp_cat,
             "y": y, "m": m, "d": d, "h": h, "min": minute,
@@ -219,7 +218,6 @@ if btn_save or btn_calc:
         }
 
         if btn_save:
-            # 儲存邏輯
             if is_edit_mode:
                 data_packet['id'] = st.session_state.current_id
                 for i, item in enumerate(st.session_state.db):
@@ -235,50 +233,43 @@ if btn_save or btn_calc:
                 st.toast(f"已新增資料")
             
             st.session_state.show_chart = True
-            st.session_state.temp_preview_data = None # 已存檔，清空試算暫存
+            st.session_state.temp_preview_data = None
             time.sleep(0.5)
             st.rerun()
         
         if btn_calc:
-            # 試算邏輯：不存 DB，存在 temp 裡
             st.session_state.temp_preview_data = data_packet
             st.session_state.show_chart = True
-            st.warning("⚠️ 這是試算模式，資料尚未儲存。")
 
-# --- 7. 排盤顯示 (修正 NameError) ---
+# --- 7. 排盤顯示 (修正 HTML 結構) ---
 if st.session_state.show_chart:
-    # 決定要顯示的資料來源
+    # 決定顯示資料來源
     display_data = None
-    
-    # 優先檢查是否有「試算暫存」
     if st.session_state.temp_preview_data:
         display_data = st.session_state.temp_preview_data
-    # 否則從 DB 抓當前 ID
     elif st.session_state.current_id != 0:
         display_data = next((x for x in st.session_state.db if x['id'] == st.session_state.current_id), None)
 
-    # 開始繪圖
     if display_data:
-        # 解包資料，避免 NameError
-        d_name = display_data['name']
-        d_gender = display_data['gender']
-        d_cat = display_data['category']
-        d_y = display_data['y']
-        d_m = display_data['m']
-        d_d = display_data['d']
-        d_h = display_data['h']
-        d_min = display_data['min']
-        d_cal = display_data['cal_type']
-        
+        # 解包變數，防止 NameError
+        d_name = display_data.get('name', '')
+        d_gender = display_data.get('gender', '')
+        d_cat = display_data.get('category', '')
+        d_y = display_data.get('y', 0)
+        d_m = display_data.get('m', 0)
+        d_d = display_data.get('d', 0)
+        d_h = display_data.get('h', 0)
+        d_min = display_data.get('min', 0)
+        d_cal = display_data.get('cal_type', '')
+        d_star = display_data.get('ming_star', '')
+
         st.markdown("---")
-        
-        # 定義宮位佈局 (對應 Grid)
-        # 1-4 (上), 5,8 (右), 9,12 (下), 10,11 (左)
-        # CSS Grid 順序: 
-        # R1: 巳(1,1) 午(1,2) 未(1,3) 申(1,4)
-        # R2: 辰(2,1)               酉(2,4)
-        # R3: 卯(3,1)               戌(3,4)
-        # R4: 寅(4,1) 丑(4,2) 子(4,3) 亥(4,4)
+
+        # 定義 12 格位置 (標準紫微斗數 4x4)
+        # 巳(1,1) 午(1,2) 未(1,3) 申(1,4)
+        # 辰(2,1)               酉(2,4)
+        # 卯(3,1)               戌(3,4)
+        # 寅(4,1) 丑(4,2) 子(4,3) 亥(4,4)
         
         layout_map = [
             ("巳", 1, 1), ("午", 1, 2), ("未", 1, 3), ("申", 1, 4),
@@ -289,35 +280,39 @@ if st.session_state.show_chart:
         
         stars_list = ["紫微", "天機", "太陽", "武曲", "天同", "廉貞", "天府", "太陰", "貪狼", "巨門", "天相", "天梁"]
         
-        html = '<div class="zwds-grid">'
-        
-        # 繪製 12 宮
+        # 開始構建 HTML (注意：這裡使用單行拼接以避免格式跑掉)
+        cells_html = ""
         for i, (branch, r, c) in enumerate(layout_map):
-            star = stars_list[(i + d_y) % 12] # 假算法
-            html += f"""
+            # 模擬星曜 (之後這裡換成真實運算)
+            star = stars_list[(i + d_y) % 12]
+            
+            cell = f"""
             <div class="zwds-cell" style="grid-row: {r}; grid-column: {c};">
                 <div class="cell-stars">{star}</div>
-                <div style="flex-grow:1;"></div>
+                <div class="cell-name">宮位名稱</div>
                 <div class="cell-label">{branch}</div>
             </div>
             """
-            
-        # 繪製中間
+            cells_html += cell
+
+        # 中間命主資料
         center_html = f"""
         <div class="zwds-center">
-            <h3 style="color:#FFF; margin:0;">{d_name}</h3>
-            <p style="color:#CCC; font-size:14px; margin:2px;">{d_gender} | {d_cat}</p>
-            <div style="margin-top:10px; color:#4CAF50; font-size:16px;">
+            <h3 style="margin:0; color:#d4a0ff;">{d_name}</h3>
+            <p style="font-size:12px; margin:5px 0; color:#ccc;">{d_gender} | {d_cat}</p>
+            <div style="font-size:16px; color:#4CAF50; margin-top:5px;">
                 {d_cal} {d_y} 年 {d_m} 月 {d_d} 日
             </div>
-            <div style="color:#4CAF50; font-size:16px;">
+            <div style="font-size:16px; color:#4CAF50;">
                 {d_h:02d} 時 {d_min:02d} 分
             </div>
             <hr style="width:80%; border-color:#444; margin:10px 0;">
-            <div style="color:#d4a0ff; font-size:14px;">命宮主星: {display_data.get('ming_star', '')}</div>
+            <div style="color:#fff;">命宮主星: {d_star}</div>
         </div>
         """
-        html += center_html
-        html += "</div>"
         
-        st.markdown(html, unsafe_allow_html=True)
+        # 組合最終 HTML
+        final_html = f'<div class="zwds-grid">{cells_html}{center_html}</div>'
+        
+        # 渲染
+        st.markdown(final_html, unsafe_allow_html=True)
