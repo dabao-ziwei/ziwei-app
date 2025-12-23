@@ -4,72 +4,84 @@ def apply_style():
     st.markdown("""
     <style>
         /* =================================================================
-           1. 強制覆蓋 Streamlit 深色模式 (Theme Override)
-           這段代碼會把所有原本黑黑的輸入框、容器、選單強制改成白底黑字
+           1. 強力覆蓋 Streamlit 深色模式 (Theme Override)
            ================================================================= */
         
-        /* 全局字體與背景 */
+        /* 根變數強制設定為亮色系 */
+        :root {
+            --primary-color: #4B0082;
+            --background-color: #ffffff;
+            --secondary-background-color: #f0f2f6;
+            --text-color: #000000;
+            --font: sans-serif;
+        }
+
+        /* 全局背景與文字 */
         .stApp {
             background-color: #ffffff !important;
             color: #000000 !important;
         }
-        
-        /* 修正：頂部容器、Expander、Form 的黑色背景 */
-        [data-testid="stContainer"], [data-testid="stExpander"], [data-testid="stForm"] {
+
+        /* 關鍵修正：隱藏或白化頂部巨大的黑色 Header */
+        header[data-testid="stHeader"] {
             background-color: #ffffff !important;
             color: #000000 !important;
-            border-color: #e0e0e0 !important; /* 淺灰邊框 */
         }
         
-        /* 修正：Expander 的標題列 (原本是黑的) */
-        .streamlit-expanderHeader {
-            background-color: #f8f9fa !important;
-            color: #000000 !important;
-            border: 1px solid #e0e0e0 !important;
-            border-radius: 4px;
-        }
-        
-        /* 修正：輸入框 (Text Input) - 強制白底黑字 */
-        .stTextInput input {
+        /* 修正：輸入框 (BaseWeb Input) 強制白底黑字 */
+        div[data-baseweb="input"] {
             background-color: #ffffff !important;
-            color: #000000 !important;
             border: 1px solid #ccc !important;
+            color: #000000 !important;
         }
-        /* 修正：輸入框被選取時的邊框顏色 */
-        .stTextInput input:focus {
-            border-color: #4B0082 !important;
-            box-shadow: 0 0 0 1px #4B0082 !important;
+        div[data-baseweb="input"] input {
+            color: #000000 !important;
+            background-color: transparent !important;
+            -webkit-text-fill-color: #000000 !important; /* 確保 Safari/Chrome 文字也是黑的 */
+            caret-color: #000000 !important; /* 游標黑色 */
         }
         
-        /* 修正：下拉選單 (Selectbox) - 強制白底黑字 */
+        /* 修正：下拉選單 (Select) */
         div[data-baseweb="select"] > div {
             background-color: #ffffff !important;
+            border-color: #ccc !important;
             color: #000000 !important;
-            border: 1px solid #ccc !important;
         }
-        /* 下拉選單內的文字 */
         div[data-baseweb="select"] span {
             color: #000000 !important;
         }
-        /* 下拉選單彈出的列表 */
         ul[data-baseweb="menu"] {
             background-color: #ffffff !important;
         }
-        ul[data-baseweb="menu"] li {
+        li[data-baseweb="option"] {
             color: #000000 !important;
+            background-color: #ffffff !important;
         }
         
-        /* 修正：所有 Label (標籤文字) 變回黑色 */
-        .stMarkdown p, .stMarkdown label, .stTextInput label, .stSelectbox label, .stRadio label {
+        /* 修正：Expander (摺疊區塊) 的黑色背景 */
+        .streamlit-expanderHeader {
+            background-color: #f8f9fa !important;
+            color: #000000 !important;
+            border: 1px solid #ddd !important;
+        }
+        [data-testid="stExpanderDetails"] {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            border: 1px solid #ddd;
+            border-top: none;
+        }
+        
+        /* 修正：Label (標籤文字) 顏色 */
+        label, .stMarkdown p {
             color: #333333 !important;
         }
         
-        /* 修正：Radio Button (單選按鈕) */
-        div[role="radiogroup"] label {
+        /* 修正：Radio 按鈕文字 */
+        div[role="radiogroup"] p {
             color: #000000 !important;
         }
 
-        /* 修正：按鈕樣式 (白底黑字風格) */
+        /* 修正：按鈕樣式 */
         div.stButton > button {
             background-color: #f0f0f0 !important;
             color: #000000 !important;
@@ -87,7 +99,7 @@ def apply_style():
         }
 
         /* =================================================================
-           2. 排版間距調整
+           2. 命盤樣式 (維持不變)
            ================================================================= */
         .block-container {
             padding-top: 1rem !important;
@@ -96,15 +108,12 @@ def apply_style():
         }
         [data-testid="stVerticalBlock"] { gap: 0.5rem !important; }
 
-        /* =================================================================
-           3. 命盤樣式 (維持不變，確保命盤顯示正確)
-           ================================================================= */
         .zwds-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             grid-template-rows: repeat(4, 160px); 
             gap: 0;
-            background-color: #000; /* 格線顏色 */
+            background-color: #000; 
             border: 2px solid #000;
             margin-bottom: 20px;
             font-family: "Microsoft JhengHei", "Heiti TC", sans-serif;
