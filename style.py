@@ -4,60 +4,65 @@ def apply_style():
     st.markdown("""
     <style>
         /* =================================================================
-           1. 全局強制亮色與字體
+           1. 根變數強制設定 (欺騙瀏覽器這是亮色模式)
            ================================================================= */
         :root {
             --primary-color: #4B0082;
             --background-color: #ffffff;
-            --secondary-background-color: #ffffff;
+            --secondary-background-color: #f0f2f6;
             --text-color: #000000;
             --font: sans-serif;
         }
-        
+
+        /* 全局背景 */
         .stApp {
             background-color: #ffffff !important;
             color: #000000 !important;
         }
-        
+
+        /* 頂部 Header 強制白底 */
         header[data-testid="stHeader"] {
             background-color: #ffffff !important;
-            border-bottom: 1px solid #eee !important;
+            border-bottom: 1px solid #f0f0f0 !important;
         }
 
         /* =================================================================
-           2. 針對截圖問題的【暴力修正區】
+           2. 修正黑色區塊 (針對您的截圖問題點)
            ================================================================= */
 
         /* (A) 修正全黑的輸入框 (Text Input) */
-        /* 這會強制把輸入框的底色變成白色，邊框變成灰色 */
-        div[data-testid="stTextInput"] > div > div {
-            background-color: #ffffff !important;
+        /* 針對 BaseWeb 的 Input 容器 */
+        div[data-baseweb="input"] {
+            background-color: #ffffff !important; /* 強制白底 */
+            border: 1px solid #cccccc !important; /* 灰邊框 */
             color: #000000 !important;
-            border-color: #cccccc !important; 
         }
-        /* 輸入框裡的文字 */
-        div[data-testid="stTextInput"] input {
+        
+        /* 針對輸入框內部的 Input 元素 */
+        input[type="text"] {
+            background-color: transparent !important;
             color: #000000 !important;
             -webkit-text-fill-color: #000000 !important;
             caret-color: #000000 !important;
         }
-        /* 輸入框標籤 (如：姓名、出生年月日...) */
-        div[data-testid="stTextInput"] label {
-            color: #333333 !important;
-        }
 
-        /* (B) 修正全黑的摺疊區塊標題 (Expander Summary) - 即「資料輸入 / 修改」那條 */
-        details[data-testid="stExpander"] > summary {
+        /* (B) 修正全黑的摺疊區塊標題 (Expander - 資料輸入/修改) */
+        /* 針對未展開與展開的狀態 */
+        div[data-testid="stExpander"] details > summary {
             background-color: #f8f9fa !important; /* 淺灰底 */
             color: #000000 !important; /* 黑字 */
             border: 1px solid #cccccc !important;
             border-radius: 4px !important;
         }
-        details[data-testid="stExpander"] > summary:hover {
-            color: #4B0082 !important; /* 滑鼠移過去變紫色 */
+        div[data-testid="stExpander"] details[open] > summary {
+            color: #000000 !important;
         }
-        /* 展開後的內容背景 */
-        details[data-testid="stExpander"] {
+        div[data-testid="stExpander"] {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+        }
+        /* 修正 expander 內部的文字顏色 */
+        .streamlit-expanderContent {
             background-color: #ffffff !important;
             color: #000000 !important;
         }
@@ -70,33 +75,42 @@ def apply_style():
         }
         button[kind="secondary"]:hover {
             background-color: #f0f0f0 !important;
-            border-color: #999999 !important;
+            border-color: #b0b0b0 !important;
             color: #000000 !important;
         }
-        /* 確保紅色按鈕 (Primary) 正常 */
-        button[kind="primary"] {
-            background-color: #ff4b4b !important;
-            color: #ffffff !important;
-            border: none !important;
-        }
-
-        /* (D) 下拉選單修正 (Selectbox) - 確保它是白的 */
-        div[data-testid="stSelectbox"] > div > div {
+        
+        /* (D) 修正下拉選單 (Selectbox - 新增命盤) */
+        div[data-baseweb="select"] > div {
             background-color: #ffffff !important;
             color: #000000 !important;
             border-color: #cccccc !important;
         }
-        div[data-testid="stSelectbox"] label {
-            color: #333333 !important;
+        /* 選單內的文字 */
+        div[data-testid="stSelectbox"] div[data-baseweb="select"] span {
+            color: #000000 !important;
+        }
+        /* 下拉選單的選項列表 */
+        ul[data-baseweb="menu"] {
+            background-color: #ffffff !important;
+            border: 1px solid #cccccc !important;
+        }
+        li[data-baseweb="option"] {
+            color: #000000 !important;
+            background-color: #ffffff !important;
         }
 
-        /* (E) 單選按鈕 (Radio) 文字顏色 */
-        div[role="radiogroup"] label p {
+        /* (E) 修正標籤文字 (Label) - 姓名、日期等 */
+        label, .stMarkdown p {
+            color: #333333 !important;
+        }
+        
+        /* (F) 修正單選按鈕 (Radio) */
+        div[role="radiogroup"] p {
             color: #000000 !important;
         }
 
         /* =================================================================
-           3. 命盤網格樣式 (保持您滿意的狀態)
+           3. 命盤網格樣式 (維持不變)
            ================================================================= */
         .block-container {
             padding-top: 1rem !important;
@@ -151,7 +165,7 @@ def apply_style():
 
         .main-stars-col {
             display: flex;
-            flex-direction: row;
+            flex-direction: row; 
             padding-right: 4px;
             margin-right: 4px;
             border-right: 1px dashed #ccc;
