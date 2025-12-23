@@ -8,15 +8,16 @@ from renderer import get_palace_html, get_center_html
 st.set_page_config(page_title="專業紫微斗數排盤系統", page_icon="🔮", layout="wide")
 apply_style()
 
-# 2. 初始化 Session State
+# 2. 初始化 Session State (增加 is_pure_benming 狀態)
 if 'db' not in st.session_state: st.session_state.db = [] 
 if 'current_id' not in st.session_state: st.session_state.current_id = 0
 if 'show_chart' not in st.session_state: st.session_state.show_chart = False
 if 'temp_preview_data' not in st.session_state: st.session_state.temp_preview_data = None
-if 'sel_daxian_idx' not in st.session_state: st.session_state.sel_daxian_idx = 0 
-if 'sel_liunian_offset' not in st.session_state: st.session_state.sel_liunian_offset = 0 
+# 預設選中第一大限 (命宮)，但我們可以設為 -1 代表未選
+if 'sel_daxian_idx' not in st.session_state: st.session_state.sel_daxian_idx = -1 
+if 'sel_liunian_offset' not in st.session_state: st.session_state.sel_liunian_offset = -1 
 
-# 3. 標題區
+# 3. 標題與搜尋
 st.title("🔮 專業紫微斗數排盤")
 
 with st.container(border=True):
@@ -28,7 +29,10 @@ with st.container(border=True):
         curr = st.session_state.current_id if st.session_state.current_id in opts else 0
         sel = st.selectbox("選擇命主", options=list(opts.keys()), format_func=lambda x: opts[x], index=list(opts.keys()).index(curr))
         if sel != st.session_state.current_id:
-            st.session_state.current_id = sel; st.session_state.show_chart = False; st.session_state.temp_preview_data = None; st.rerun()
+            st.session_state.current_id = sel; st.session_state.show_chart = False; st.session_state.temp_preview_data = None; 
+            # 切換命主時重置為本命盤
+            st.session_state.sel_daxian_idx = -1; st.session_state.sel_liunian_offset = -1; 
+            st.rerun()
 
 # 4. 資料輸入表單
 if st.session_state.current_id != 0:
@@ -44,11 +48,9 @@ with st.expander("📝 資料輸入 / 修改", expanded=(not st.session_state.sh
         with c1: i_name = st.text_input("姓名", value=v_name)
         with c2: i_gen = st.radio("性別", ["男", "女"], index=0 if v_gen=="男" else 1, horizontal=True)
         with c3: i_cat = st.text_input("分類", value=v_cat)
-        
         c4, c5 = st.columns(2)
-        with c4: i_date = st.text_input("出生年月日", value=v_date, help="如 19790926 或 0680926")
+        with c4: i_date = st.text_input("出生年月日", value=v_date, help="如 19790926")
         with c5: i_time = st.text_input("出生時間", value=v_time, help="如 1830")
-        
         b1, b2 = st.columns(2)
         with b1: btn_save = st.form_submit_button("💾 儲存並排盤", type="primary", use_container_width=True)
         with b2: btn_calc = st.form_submit_button("🧪 僅試算", use_container_width=True)
@@ -56,7 +58,7 @@ with st.expander("📝 資料輸入 / 修改", expanded=(not st.session_state.sh
 if btn_save or btn_calc:
     y, m, d, cal = parse_date(i_date)
     h, mn = int(i_time[:2]) if len(i_time)==4 else 0, int(i_time[2:]) if len(i_time)==4 else 0
-    if not i_name or y==0: st.error("資料不完整 (請輸入正確出生年月日)")
+    if not i_name or y==0: st.error("資料不完整")
     else:
         calc = ZWDSCalculator(y, m, d, h, mn, i_gen); p_data, m_star, bur, b_yr, ming_pos = calc.get_result()
         pkt = {"name": i_name, "gender": i_gen, "category": i_cat, "y": y, "m": m, "d": d, "h": h, "min": mn, "cal_type": cal, "ming_star": m_star, "bureau": bur, "palace_data": p_data, "ming_pos": ming_pos}
@@ -66,8 +68,13 @@ if btn_save or btn_calc:
             else: 
                 for idx, x in enumerate(st.session_state.db):
                     if x['id']==st.session_state.current_id: st.session_state.db[idx]=pkt
-            st.session_state.temp_preview_data = None; st.session_state.show_chart = True; st.rerun()
-        if btn_calc: st.session_state.temp_preview_data = pkt; st.session_state.show_chart = True
+            st.session_state.temp_preview_data = None; st.session_state.show_chart = True
+            # 新排盤預設回本命
+            st.session_state.sel_daxian_idx = -1; st.session_state.sel_liunian_offset = -1;
+            st.rerun()
+        if btn_calc: 
+            st.session_state.temp_preview_data = pkt; st.session_state.show_chart = True
+            st.session_state.sel_daxian_idx = -1; st.session_state.sel_liunian_offset = -1;
 
 # 5. 顯示命盤
 if st.session_state.show_chart:
@@ -76,23 +83,37 @@ if st.session_state.show_chart:
         calc_obj = ZWDSCalculator(data['y'], data['m'], data['d'], data['h'], data['min'], data['gender'])
         
         sorted_limits = sorted(calc_obj.palaces.items(), key=lambda x: x[1]['age_start'])
+        
+        # 判斷是否為「純本命模式」
         daxian_idx = st.session_state.sel_daxian_idx
         liunian_off = st.session_state.sel_liunian_offset
-        d_pos_idx, d_info = sorted_limits[daxian_idx]
-        daxian_pos = int(d_pos_idx)
-        
-        curr_year = data['y'] + d_info['age_start'] + liunian_off - 1
-        daxian_gan = d_info['gan_idx']
-        ln_gan, ln_zhi = get_ganzhi_for_year(curr_year)
-        
-        calc_obj.calculate_sihua(daxian_gan, ln_gan)
-        
-        # 找流年命宮位置
-        liunian_pos = -1
-        for pid, info in calc_obj.palaces.items():
-            if info['zhi_idx'] == ln_zhi: liunian_pos = int(pid); break
+        is_pure_benming = (daxian_idx == -1)
 
-        # 本命命宮位置
+        daxian_pos = -1
+        liunian_pos = -1
+        
+        if not is_pure_benming:
+            # 計算大限與流年
+            d_pos_idx, d_info = sorted_limits[daxian_idx]
+            daxian_pos = int(d_pos_idx)
+            
+            # 如果流年未選，預設選第一個流年(或不顯示流年，依需求，這裡先設為不顯示流年，只顯示大限)
+            if liunian_off != -1:
+                curr_year = data['y'] + d_info['age_start'] + liunian_off - 1
+                daxian_gan = d_info['gan_idx']
+                ln_gan, ln_zhi = get_ganzhi_for_year(curr_year)
+                calc_obj.calculate_sihua(daxian_gan, ln_gan)
+                
+                for pid, info in calc_obj.palaces.items():
+                    if info['zhi_idx'] == ln_zhi: liunian_pos = int(pid); break
+            else:
+                # 只選大限，未選流年 -> 只算大限四化
+                daxian_gan = d_info['gan_idx']
+                calc_obj.calculate_sihua(daxian_gan, -1) # -1 表示無流年
+        else:
+            # 純本命 -> 只算本命四化
+            calc_obj.calculate_sihua(-1, -1)
+
         benming_pos = calc_obj.ming_pos
 
         layout = [(5,"巳",1,1),(6,"午",1,2),(7,"未",1,3),(8,"申",1,4),
@@ -103,14 +124,18 @@ if st.session_state.show_chart:
         cells_html = ""
         for idx, branch, r, c in layout:
             info = calc_obj.palaces[idx]
-            # 傳遞三個盤的命宮位置，讓 renderer 去計算相對宮名
-            cells_html += get_palace_html(idx, branch, r, c, info, daxian_pos, liunian_pos, benming_pos)
+            cells_html += get_palace_html(idx, branch, r, c, info, daxian_pos, liunian_pos, benming_pos, is_pure_benming)
             
         center_html = get_center_html(data, calc_obj)
-        
         st.markdown(f'<div class="zwds-grid">{cells_html}{center_html}</div>', unsafe_allow_html=True)
         
+        # 運限控制區
         st.markdown("---")
+        
+        # 回到本命盤按鈕
+        if st.button("↺ 重置 / 回到本命盤", use_container_width=True):
+            st.session_state.sel_daxian_idx = -1; st.session_state.sel_liunian_offset = -1; st.rerun()
+
         limit_names = ["一限", "二限", "三限", "四限", "五限", "六限", "七限", "八限", "九限", "十限", "十一", "十二"]
         cols_d = st.columns(12)
         for i, col in enumerate(cols_d):
@@ -120,16 +145,24 @@ if st.session_state.show_chart:
             is_selected = (i == daxian_idx)
             btn_type = "primary" if is_selected else "secondary"
             if col.button(label, key=f"d_{i}", type=btn_type, use_container_width=True):
-                st.session_state.sel_daxian_idx = i; st.session_state.sel_liunian_offset = 0; st.rerun()
+                # 點擊已選中的大限 -> 取消選取 (回本命)
+                if is_selected: st.session_state.sel_daxian_idx = -1
+                else: st.session_state.sel_daxian_idx = i; st.session_state.sel_liunian_offset = -1; 
+                st.rerun()
 
-        cols_l = st.columns(10)
-        for j, col in enumerate(cols_l):
-            age = d_info['age_start'] + j
-            yr = calc_obj.birth_year + age - 1
-            gy, zy = get_ganzhi_for_year(yr)
-            gz = f"{GAN[gy]}{ZHI[zy]}"
-            label = f"{yr}\n{gz}({age})"
-            is_selected = (j == liunian_off)
-            btn_type = "primary" if is_selected else "secondary"
-            if col.button(label, key=f"l_{j}", type=btn_type, use_container_width=True):
-                st.session_state.sel_liunian_offset = j; st.rerun()
+        # 只有在選了大限後，才顯示流年選項
+        if not is_pure_benming:
+            cols_l = st.columns(10)
+            d_info = sorted_limits[daxian_idx][1]
+            for j, col in enumerate(cols_l):
+                age = d_info['age_start'] + j
+                yr = calc_obj.birth_year + age - 1
+                gy, zy = get_ganzhi_for_year(yr)
+                gz = f"{GAN[gy]}{ZHI[zy]}"
+                label = f"{yr}\n{gz}({age})"
+                is_selected = (j == liunian_offset)
+                btn_type = "primary" if is_selected else "secondary"
+                if col.button(label, key=f"l_{j}", type=btn_type, use_container_width=True):
+                    if is_selected: st.session_state.sel_liunian_offset = -1
+                    else: st.session_state.sel_liunian_offset = j; 
+                    st.rerun()
