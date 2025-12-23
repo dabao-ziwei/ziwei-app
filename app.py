@@ -3,7 +3,7 @@ import time
 from lunar_python import Lunar, Solar
 
 # ==========================================
-# 1. 頁面設定與 CSS 樣式 (v5.0 白底/直書/四化修正版)
+# 1. 頁面設定與 CSS 樣式 (v6.0 三代四化疊加版)
 # ==========================================
 st.set_page_config(page_title="專業紫微斗數排盤系統", page_icon="🔮", layout="wide")
 
@@ -22,10 +22,10 @@ st.markdown("""
     .zwds-grid {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
-        grid-template-rows: repeat(4, 160px); /* 加高高度，確保底部資訊不被切到 */
-        gap: 0; /* 貼合 */
+        grid-template-rows: repeat(4, 160px); 
+        gap: 0;
         background-color: #000; /* 格線顏色 */
-        border: 2px solid #000; /* 外框加粗 */
+        border: 2px solid #000;
         margin-bottom: 20px;
         font-family: "Microsoft JhengHei", "Heiti TC", sans-serif;
         max-width: 1200px;
@@ -43,7 +43,7 @@ st.markdown("""
     /* 單一宮位卡片 */
     .zwds-cell {
         background-color: #ffffff;
-        border: 1px solid #ccc; /* 內格線 */
+        border: 1px solid #ccc;
         padding: 4px;
         position: relative;
         display: flex;
@@ -53,10 +53,9 @@ st.markdown("""
         overflow: hidden;
     }
 
-    /* 狀態高亮 (邊框加粗變色) */
+    /* 狀態高亮 */
     .active-daxian { background-color: #f5f5f5 !important; border: 2px solid #666 !important; }
-    .active-liunian { border: 3px solid #007bff !important; z-index: 5; } /* 流年藍框 */
-    .active-benming { border: 2px solid #d32f2f !important; } /* 暫留 */
+    .active-liunian { border: 3px solid #007bff !important; z-index: 5; }
 
     /* === 星曜區塊 === */
     .stars-box {
@@ -64,7 +63,7 @@ st.markdown("""
         flex-direction: row; 
         flex: 1;
         min-height: 0;
-        align-items: flex-start;
+        align-items: flex-start; /* 靠上對齊 */
     }
 
     /* 左側：主星欄 */
@@ -74,39 +73,66 @@ st.markdown("""
         padding-right: 4px;
         margin-right: 4px;
         border-right: 1px dashed #ccc;
+        height: 100%;
     }
 
-    /* 主星樣式 */
-    .star-major {
-        font-size: 18px; /* 大於12號字 */
+    /* 主星容器 (包含名字和四化) */
+    .star-major-container {
+        display: flex;
+        flex-direction: column; /* 垂直排列：星名在上，四化在下 */
+        align-items: center;
+        margin-left: 2px;
+        margin-right: 2px;
+        writing-mode: vertical-rl; /* 關鍵：直書模式 */
+    }
+
+    /* 主星名字 */
+    .star-name {
+        font-size: 18px; 
         font-weight: 900;
-        line-height: 1.1;
-        color: #000; /* 黑字 */
-        writing-mode: vertical-rl;
-        margin-left: 4px;
-        position: relative;
+        color: #000;
         letter-spacing: 2px;
+        margin-bottom: 4px; /* 與四化標籤的距離 */
+    }
+
+    /* 四化標籤 (通用) */
+    .hua-badge {
+        font-size: 10px;
+        border-radius: 2px;
+        padding: 2px 2px;
+        color: #fff;
+        text-align: center;
+        font-weight: normal;
+        margin-top: 1px; /* 標籤之間的間距 */
+        writing-mode: horizontal-tb; /* 讓字轉正 */
+        width: 14px; /* 固定寬度，形成正方形感 */
+        height: 14px;
+        line-height: 10px;
+        display: block;
     }
     
-    /* 輔星/煞星欄 (羊陀祿存等) - 強制直書 */
+    /* 四化顏色定義 */
+    .bg-ben { background-color: #d32f2f; } /* 本命：紅 */
+    .bg-da  { background-color: #808080; } /* 大限：灰 */
+    .bg-liu { background-color: #0056b3; } /* 流年：藍 */
+
+    /* 輔星/煞星欄 (羊陀祿存等) - 直書 */
     .sub-stars-col {
         display: flex;
-        flex-direction: row-reverse; /* 讓星星從右向左排列 */
+        flex-direction: row-reverse;
         flex-wrap: wrap-reverse;
         align-content: flex-start;
         gap: 4px;
     }
 
-    /* 乙級星/煞星樣式 (直書) */
     .star-medium {
-        font-size: 14px; /* 清晰可見 */
+        font-size: 14px;
         font-weight: bold;
-        writing-mode: vertical-rl; /* 關鍵：直書 */
-        line-height: 1;
+        writing-mode: vertical-rl;
         color: #333;
+        line-height: 1;
     }
     
-    /* 丙級/雜曜樣式 (可小一點) */
     .star-small {
         font-size: 10px;
         color: #666;
@@ -115,29 +141,9 @@ st.markdown("""
         margin-top: 2px;
     }
     
-    /* 顏色定義 */
-    .color-bad { color: #d32f2f !important; } /* 煞星紅 */
-    .color-good { color: #2e7d32 !important; } /* 吉星綠 */
+    .color-bad { color: #d32f2f !important; } 
+    .color-good { color: #2e7d32 !important; } 
     
-    /* === 四化標籤系統 (修正版) === */
-    .hua-badge {
-        font-size: 10px;
-        border-radius: 2px;
-        padding: 1px 2px;
-        position: absolute;
-        bottom: -12px; 
-        left: 50%;
-        transform: translateX(-50%);
-        white-space: nowrap;
-        writing-mode: horizontal-tb;
-        font-weight: normal;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-    }
-    /* 依照指示配色 */
-    .bg-ben { background-color: #d32f2f; color: #fff; } /* 本命：紅底白字 */
-    .bg-da  { background-color: #808080; color: #fff; } /* 大限：灰底白字 */
-    .bg-liu { background-color: #0056b3; color: #fff; } /* 流年：藍底白字 */
-
     /* === 底部資訊區 === */
     .cell-footer {
         margin-top: 2px;
@@ -148,31 +154,18 @@ st.markdown("""
         align-items: flex-end;
     }
 
-    .footer-left {
-        display: flex;
-        flex-direction: column;
-        line-height: 1;
-    }
-    
+    .footer-left { display: flex; flex-direction: column; line-height: 1; }
     .ganzhi-label { color: #666; font-size: 12px; font-weight: bold; }
     .zhi-label { color: #000; font-size: 16px; font-weight: 900; }
 
-    .footer-right {
-        text-align: right;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        line-height: 1.1;
-    }
-
+    .footer-right { text-align: right; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
     .palace-name { font-size: 14px; font-weight: 900; color: #000; }
     .limit-info { font-size: 12px; color: #444; font-weight: bold; }
     
-    /* 流運標籤 */
     .status-tags { display: flex; gap: 2px; margin-top: 2px; }
     .tag-flow { font-size: 10px; padding: 1px 3px; border-radius: 2px; color: white; font-weight: bold; }
-    .tag-liu { background-color: #0056b3; } /* 流命藍 */
-    .tag-da { background-color: #666; } /* 大限灰 */
+    .tag-liu { background-color: #0056b3; } 
+    .tag-da { background-color: #666; } 
 
     /* 中宮資訊 */
     .center-info-box {
@@ -185,7 +178,7 @@ st.markdown("""
         height: 100%;
     }
 
-    /* 按鈕樣式 (白底風格) */
+    /* 按鈕樣式 */
     div.stButton > button {
         width: 100%; border-radius: 0; border: 1px solid #ccc; 
         font-size: 12px; height: auto; min-height: 35px;
@@ -193,7 +186,6 @@ st.markdown("""
         margin: 0; padding: 2px 0;
     }
     div.stButton > button:hover { border-color: #999; background-color: #e9e9e9; color: #000; }
-    /* 選中狀態：深紫 */
     div.stButton > button[kind="primary"] { 
         background-color: #4B0082 !important; 
         color: white !important; 
@@ -288,28 +280,25 @@ class ZWDSCalculator:
         lu_pos = [2, 3, 5, 6, 5, 6, 8, 9, 11, 0] 
         lu_idx = lu_pos[self.year_gan_idx]
         
-        # 參數: (名稱, 是否為煞星, 是否為重要乙級星)
         self.palaces[lu_idx]["minor_stars"].append(("祿存", False, True)) 
         self.palaces[(lu_idx+1)%12]["minor_stars"].append(("擎羊", True, True)) 
         self.palaces[(lu_idx-1)%12]["minor_stars"].append(("陀羅", True, True)) 
-        
-        # 示範用，之後可依需求恢復安星
-        # self.palaces[(self.ming_pos + 4)%12]["minor_stars"].append(("火星", True, True))
 
     def calculate_sihua(self, daxian_gan_idx, liunian_gan_idx):
         sihua_table = [
-            ["廉貞", "破軍", "武曲", "太陽"], 
-            ["天機", "天梁", "紫微", "太陰"], 
-            ["天同", "天機", "文昌", "廉貞"], 
-            ["太陰", "天同", "天機", "巨門"], 
-            ["貪狼", "太陰", "右弼", "天機"], 
-            ["武曲", "貪狼", "天梁", "文曲"], 
-            ["太陽", "武曲", "天同", "天相"], 
-            ["巨門", "太陽", "文曲", "文昌"], 
-            ["天梁", "紫微", "左輔", "武曲"], 
-            ["破軍", "巨門", "太陰", "貪狼"]
+            ["廉貞", "破軍", "武曲", "太陽"], # 甲
+            ["天機", "天梁", "紫微", "太陰"], # 乙
+            ["天同", "天機", "文昌", "廉貞"], # 丙
+            ["太陰", "天同", "天機", "巨門"], # 丁
+            ["貪狼", "太陰", "右弼", "天機"], # 戊
+            ["武曲", "貪狼", "天梁", "文曲"], # 己
+            ["太陽", "武曲", "天同", "天相"], # 庚
+            ["巨門", "太陽", "文曲", "文昌"], # 辛
+            ["天梁", "紫微", "左輔", "武曲"], # 壬
+            ["破軍", "巨門", "太陰", "貪狼"]  # 癸
         ]
         
+        # 定義三層四化，順序：本 -> 大 -> 流 (這將決定顯示順序)
         layers = [
             (self.year_gan_idx, "本"),
             (daxian_gan_idx, "大"), 
@@ -319,12 +308,14 @@ class ZWDSCalculator:
         
         for pid, palace in self.palaces.items():
             for star in palace["major_stars"]:
-                star['sihua'] = [] 
+                star['sihua'] = [] # 重置
                 s_name = star['name']
+                # 遍歷每一層 (本、大、流)
                 for gan_idx, layer_name in layers:
                     stars_list = sihua_table[gan_idx]
                     if s_name in stars_list:
                         s_type = types[stars_list.index(s_name)]
+                        # 存入列表，後續會依照列表順序渲染
                         star['sihua'].append({'type': s_type, 'layer': layer_name})
 
     def get_result(self):
@@ -441,32 +432,34 @@ if st.session_state.show_chart:
             if idx == daxian_pos: classes.append("active-daxian")
             if idx == liunian_pos: classes.append("active-liunian")
             
-            # --- 主星 (直書，不換行) ---
+            # --- 主星 (直書，四化在下) ---
             main_stars_html = ""
             for star in info['major_stars']:
                 sihua_html = ""
-                # 四化標籤渲染：顏色判斷
+                # 這裡已經依照 本->大->流 排序過了，直接渲染
                 for sh in star['sihua']:
-                    layer_cls = ""
-                    if sh['layer'] == '本': layer_cls = "bg-ben"
-                    elif sh['layer'] == '大': layer_cls = "bg-da"
-                    elif sh['layer'] == '流': layer_cls = "bg-liu"
-                    # 顯示文字：本忌、大祿...
-                    sihua_html += f'<span class="hua-badge {layer_cls}">{sh["layer"]}{sh["type"]}</span>'
+                    bg_cls = ""
+                    if sh['layer'] == '本': bg_cls = "bg-ben"
+                    elif sh['layer'] == '大': bg_cls = "bg-da"
+                    elif sh['layer'] == '流': bg_cls = "bg-liu"
+                    # 只顯示四化單字 (如：權)
+                    sihua_html += f'<span class="hua-badge {bg_cls}">{sh["type"]}</span>'
                 
-                main_stars_html += f'<div class="star-major">{star["name"]}{sihua_html}</div>'
+                # 結構：Container(直書) -> [星名, 四化1, 四化2...]
+                main_stars_html += f'''
+                <div class="star-major-container">
+                    <div class="star-name">{star["name"]}</div>
+                    {sihua_html}
+                </div>
+                '''
             
             # --- 副星/煞星 (直書) ---
             sub_stars_html = ""
             for m_name, is_bad, is_impt in info['minor_stars']:
-                # 配色
                 if m_name == "祿存": style_cls = "color-good"
                 elif is_bad: style_cls = "color-bad"
                 else: style_cls = ""
-                
-                # 字體大小控制
                 size_cls = "star-medium" if is_impt else "star-small"
-                
                 sub_stars_html += f'<div class="{size_cls} {style_cls}">{m_name}</div>'
             
             # --- 狀態標籤 ---
