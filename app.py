@@ -3,200 +3,170 @@ import pandas as pd
 from datetime import datetime
 import time
 
-# --- 1. 頁面設定 (針對平板優化) ---
+# --- 1. 頁面設定 ---
 st.set_page_config(
     page_title="專業紫微斗數排盤系統",
     page_icon="🔮",
-    layout="centered", # 使用 centered 在平板上閱讀體驗通常比 wide 好，較像 App
-    initial_sidebar_state="expanded"
+    layout="centered" 
 )
 
-# --- 2. 模擬資料庫與 Session State 初始化 ---
-# 初始化資料庫 (實際應用請連接 SQL 或 JSON)
+# --- 2. 資料庫與狀態初始化 ---
 if 'db' not in st.session_state:
     st.session_state.db = [
-        {"id": 1, "name": "陳小美", "gender": "女", "category": "客戶", "cal_type": "民國", "y": 68, "m": 9, "d": 26, "h": 17, "min": 30, "stars": "紫微,七殺"},
-        {"id": 2, "name": "王大明", "gender": "男", "category": "學員", "cal_type": "西元", "y": 1985, "m": 1, "d": 1, "h": 9, "min": 0, "stars": "天機,太陰"},
+        {"id": 1, "name": "陳小美", "gender": "女", "category": "客戶", "cal_type": "民國", "y": 68, "m": 9, "d": 26, "h": 17, "min": 30},
+        {"id": 2, "name": "王大明", "gender": "男", "category": "學員", "cal_type": "西元", "y": 1985, "m": 1, "d": 1, "h": 9, "min": 0},
     ]
 
-# 初始化當前編輯狀態
-if 'current_profile' not in st.session_state:
-    st.session_state.current_profile = None # None 代表新增模式
-if 'chart_visible' not in st.session_state:
-    st.session_state.chart_visible = False
+# 追蹤當前選擇的命盤 ID (預設為 0 代表新增)
+if 'current_id' not in st.session_state:
+    st.session_state.current_id = 0 
 
-# --- 3. 側邊欄：命理資料庫 (需求 1, 2, 6) ---
-with st.sidebar:
-    st.header("📂 命理資料庫") # 修改標題 (需求 1)
+# --- 3. 頂部導覽區 (取代側邊欄) ---
+st.title("🔮 專業紫微斗數排盤系統")
+
+# 使用容器將搜尋區塊包起來
+with st.container(border=True):
+    c1, c2 = st.columns([1, 2])
     
-    # 搜尋引擎 (需求 6)
-    search_query = st.text_input("🔍 全文檢索", placeholder="輸入姓名、日期或星曜...")
-    
-    # 類別篩選 (需求 2)
-    # 先抓出所有存在的類別
+    # 3-1. 類別篩選
     all_categories = ["全部"] + list(set([p['category'] for p in st.session_state.db]))
-    category_filter = st.selectbox("📂 類別篩選", all_categories)
+    with c1:
+        cat_filter = st.selectbox("📂 篩選類別", all_categories)
     
-    st.divider()
+    # 3-2. 建立選單列表
+    # 過濾資料
+    filtered_list = st.session_state.db
+    if cat_filter != "全部":
+        filtered_list = [p for p in filtered_list if p['category'] == cat_filter]
+    
+    # 製作下拉選單選項：(ID, 顯示文字)
+    # 格式：0: ➕ 新增命盤, 1: 陳小美..., 2: 王大明...
+    options = {0: "➕ 新增命盤 (請在此輸入新資料)"}
+    for p in filtered_list:
+        options[p['id']] = f"{p['name']} ({p['category']}) - {p['y']}/{p['m']}/{p['d']}"
+    
+    # 讓使用者選擇 (根據 options 的 key 來選，顯示 value)
+    with c2:
+        # 找出當前 session_state.current_id 是否還在選項中 (避免篩選後消失)
+        current_index = 0
+        current_keys = list(options.keys())
+        if st.session_state.current_id in current_keys:
+            current_index = current_keys.index(st.session_state.current_id)
+            
+        selected_id = st.selectbox(
+            "👤 選擇命主 / 新增", 
+            options=current_keys, 
+            format_func=lambda x: options[x],
+            index=current_index
+        )
+        
+        # 如果使用者改變了選擇，更新 session_state
+        if selected_id != st.session_state.current_id:
+            st.session_state.current_id = selected_id
+            st.rerun() # 立即刷新載入資料
 
-    # 執行搜尋邏輯
-    filtered_data = st.session_state.db
-    
-    # 1. 類別過濾
-    if category_filter != "全部":
-        filtered_data = [p for p in filtered_data if p['category'] == category_filter]
-    
-    # 2. 關鍵字搜尋 (包含姓名、日期字串、星曜)
-    if search_query:
-        query = search_query.lower()
-        results = []
-        for p in filtered_data:
-            # 組合一個大字串來搜
-            full_text = f"{p['name']}{p['y']}/{p['m']}/{p['d']}{p['stars']}".lower()
-            if query in full_text:
-                results.append(p)
-        filtered_data = results
-
-    # 顯示列表供選擇
-    # 使用 Radio Button 讓使用者選擇 (包含一個「新增」選項)
-    options = ["➕ 新增命盤"] + [f"{p['name']} ({p['category']})" for p in filtered_data]
-    
-    # 這裡使用 index 來控制預設選取，若有在 session_state 紀錄則維持
-    selected_option = st.radio("請選擇個案：", options)
-
-# --- 4. 資料載入邏輯 ---
-# 當使用者在側邊欄切換選擇時，更新 Session State 中的輸入值
-if selected_option == "➕ 新增命盤":
-    if st.session_state.current_profile is not None:
-        st.session_state.current_profile = None
-        st.session_state.chart_visible = False
-        st.rerun()
+# --- 4. 準備表單預設值 ---
+# 根據 selected_id 抓取資料
+if st.session_state.current_id == 0:
+    # 新增模式：給預設空值
+    p_data = {"name": "", "gender": "女", "category": "客戶", "cal_type": "民國", "y": 70, "m": 1, "d": 1, "h": 0, "min": 0}
+    is_edit = False
 else:
-    # 從選項文字反查 ID (這裡簡單處理，實際可用 ID 對應)
-    name_selected = selected_option.split(" (")[0]
-    profile = next((p for p in filtered_data if p['name'] == name_selected), None)
-    
-    if profile and st.session_state.current_profile != profile:
-        st.session_state.current_profile = profile
-        st.session_state.chart_visible = False # 切換人名時先隱藏舊盤
-        st.rerun()
+    # 編輯模式：抓出該 ID 的資料
+    p_data = next((item for item in st.session_state.db if item["id"] == st.session_state.current_id), None)
+    is_edit = True
 
-# 設定表單預設值
-if st.session_state.current_profile:
-    p = st.session_state.current_profile
-    def_name, def_gender, def_cat = p['name'], p['gender'], p['category']
-    def_cal, def_y, def_m, def_d = p['cal_type'], p['y'], p['m'], p['d']
-    def_h, def_min = p['h'], p['min']
-    is_edit_mode = True
-else:
-    def_name, def_gender, def_cat = "", "女", "客戶"
-    def_cal, def_y, def_m, def_d = "民國", 68, 9, 26
-    def_h, def_min = 17, 30
-    is_edit_mode = False
+# --- 5. 主輸入表單 ---
+# 使用 st.form 避免輸入一格就重整
+st.write("") # 間距
+st.subheader("📝 命盤資料設定")
 
-# --- 5. 主畫面：一頁式操作 (需求 7) ---
-st.title("🔮 專業紫微斗數排盤系統 (v0.3.3)")
-
-# 使用 st.form 解決「按 Enter」問題 (需求 3)
-with st.form(key='profile_form'):
-    st.subheader("📝 命主資料輸入")
-    
+with st.form(key='main_form'):
     # 第一列：基本資料
     c1, c2, c3 = st.columns([2, 1, 1.5])
     with c1:
-        name = st.text_input("姓名", value=def_name)
+        # 注意：这里的提示文字 "Press Enter..." 是 Streamlit 內建的，無法完全隱藏，
+        # 但我們透過下面的程式邏輯防止它誤存。
+        name = st.text_input("姓名 (必填)", value=p_data['name'])
     with c2:
-        gender = st.radio("性別", ["男", "女"], index=0 if def_gender=="男" else 1, horizontal=True)
+        gender = st.radio("性別", ["男", "女"], index=0 if p_data['gender']=="男" else 1, horizontal=True)
     with c3:
-        # 這裡示範可編輯的下拉選單
-        category = st.selectbox("類別", ["客戶", "學員", "親友", "名人"], index=["客戶", "學員", "親友", "名人"].index(def_cat) if def_cat in ["客戶", "學員", "親友", "名人"] else 0)
+        # 這裡可以手動輸入新類別，也可以選舊的
+        category = st.selectbox("類別", ["客戶", "學員", "親友", "自分"], index=["客戶", "學員", "親友", "自分"].index(p_data['category']) if p_data['category'] in ["客戶", "學員", "親友", "自分"] else 0)
 
-    # 第二列：日期 (需求 5：日期先)
     st.markdown("---")
-    st.caption("出生日期")
-    d1, d2, d3, d4 = st.columns([1, 1, 1, 1])
+    
+    # 第二列：日期 (日期在上)
+    st.caption("📅 出生日期")
+    d1, d2, d3, d4 = st.columns([1, 1.2, 1.2, 1.2])
     with d1:
-        cal_type = st.radio("曆法", ["西元", "民國"], index=0 if def_cal=="西元" else 1, horizontal=True)
+        cal_type = st.radio("曆法", ["西元", "民國"], index=0 if p_data['cal_type']=="西元" else 1)
     with d2:
-        year = st.number_input("年", min_value=1, value=def_y)
+        year = st.number_input("年", min_value=1, value=p_data['y'])
     with d3:
-        month = st.number_input("月", min_value=1, max_value=12, value=def_m)
+        month = st.number_input("月", min_value=1, max_value=12, value=p_data['m'])
     with d4:
-        day = st.number_input("日", min_value=1, max_value=31, value=def_d)
+        day = st.number_input("日", min_value=1, max_value=31, value=p_data['d'])
 
-    # 第三列：時間 (需求 5：時間後)
-    st.caption("出生時間")
+    # 第三列：時間 (時間在下)
+    st.caption("⏰ 出生時間")
     t1, t2 = st.columns(2)
     with t1:
-        hour = st.number_input("時 (0-23)", min_value=0, max_value=23, value=def_h)
+        hour = st.number_input("時 (0-23)", min_value=0, max_value=23, value=p_data['h'])
     with t2:
-        minute = st.number_input("分 (0-59)", min_value=0, max_value=59, value=def_min)
+        minute = st.number_input("分 (0-59)", min_value=0, max_value=59, value=p_data['min'])
 
-    # 按鈕區 (需求 4：儲存與排盤分開)
     st.markdown("---")
+    
+    # 按鈕區 (分開儲存與排盤)
     b1, b2 = st.columns(2)
     with b1:
-        # submit_button 會觸發整個 form 的提交
-        save_btn = st.form_submit_button("💾 儲存資料", type="primary", use_container_width=True)
+        btn_save = st.form_submit_button("💾 儲存資料", type="primary", use_container_width=True)
     with b2:
-        chart_btn = st.form_submit_button("🔮 僅排盤 (不儲存)", use_container_width=True)
+        btn_chart = st.form_submit_button("🔮 僅排盤 (暫不儲存)", use_container_width=True)
 
-# --- 6. 邏輯處理區 ---
+# --- 6. 邏輯處理與驗證 ---
 
-# 整理當前表單數據
-current_input_data = {
-    "name": name, "gender": gender, "category": category,
-    "cal_type": cal_type, "y": year, "m": month, "d": day,
-    "h": hour, "min": minute, "stars": "" # 這裡假設排盤後才會有星星資料
-}
-
-# 判斷是儲存還是排盤
-if save_btn:
-    # 執行儲存邏輯
-    if is_edit_mode:
-        # 更新舊資料
-        p_index = st.session_state.db.index(st.session_state.current_profile)
-        current_input_data['id'] = st.session_state.current_profile['id'] # 保持 ID
-        st.session_state.db[p_index] = current_input_data
-        st.session_state.current_profile = current_input_data
-        st.success(f"✅ 已更新 {name} 的資料！")
+if btn_save or btn_chart:
+    # 0. 必填驗證 (防止按 Enter 產生空資料)
+    if not name.strip():
+        st.error("⚠️ 姓名不能為空！請輸入姓名後再試。")
     else:
-        # 新增資料
-        new_id = len(st.session_state.db) + 1
-        current_input_data['id'] = new_id
-        st.session_state.db.append(current_input_data)
-        st.session_state.current_profile = current_input_data
-        st.success(f"✅ 已新增 {name} 到資料庫！")
-    
-    # 儲存後通常順便排盤
-    st.session_state.chart_visible = True
+        # 準備資料物件
+        form_data = {
+            "name": name, "gender": gender, "category": category,
+            "cal_type": cal_type, "y": year, "m": month, "d": day,
+            "h": hour, "min": minute
+        }
 
-if chart_btn:
-    # 需求 4：如果資料有變更，提醒使用者
-    if is_edit_mode:
-        # 簡單的比對邏輯 (比對當前輸入 vs 原始載入資料)
-        # 為了比對方便，這裡忽略 stars 欄位
-        original = {k:v for k,v in st.session_state.current_profile.items() if k != 'stars'}
-        current = {k:v for k,v in current_input_data.items() if k != 'stars'}
-        # 補上 ID 才能比對
-        current['id'] = original['id'] 
+        # 邏輯 A: 按下儲存
+        if btn_save:
+            if is_edit:
+                # 更新舊資料
+                form_data['id'] = st.session_state.current_id
+                # 找到原本在 list 中的位置並更新
+                for idx, item in enumerate(st.session_state.db):
+                    if item['id'] == st.session_state.current_id:
+                        st.session_state.db[idx] = form_data
+                        break
+                st.success(f"✅ {name} 資料已更新！")
+            else:
+                # 新增資料
+                new_id = len(st.session_state.db) + 1 + int(time.time()) # 簡單產生唯一 ID
+                form_data['id'] = new_id
+                st.session_state.db.append(form_data)
+                st.session_state.current_id = new_id # 儲存後自動切換到這個人
+                st.success(f"✅ 已新增 {name} 到資料庫！")
+                time.sleep(1) # 稍等一下讓使用者看到成功訊息
+                st.rerun()
+
+        # 邏輯 B: 排盤 (無論是只排盤還是儲存後都要顯示)
+        st.markdown("### 🌠 排盤結果")
+        st.info(f"正在為 **{name}** 排盤... \n\n {cal_type} {year} 年 {month} 月 {day} 日 {hour} 時 {minute} 分")
         
-        if original != current:
-            st.warning("⚠️ 注意：您修改了資料但尚未儲存，以下顯示的是根據修改後數據的預覽。")
-    
-    st.session_state.chart_visible = True
-
-# --- 7. 排盤結果顯示區 ---
-if st.session_state.chart_visible:
-    st.markdown("---")
-    st.subheader(f"🌠 {name} 的命盤")
-    
-    # 這裡放您的排盤繪圖邏輯
-    # 範例顯示
-    st.info(f"【命造資訊】{cal_type} {year} 年 {month} 月 {day} 日 {hour}:{minute} 生")
-    
-    # 模擬顯示命盤結構 (Grid Layout)
-    grid = st.columns(4)
-    for i in range(12):
-        with grid[i%4]:
-            st.container(border=True).write(f"宮位 {i+1}\n\n主星: ...")
+        # --- 這裡放您的排盤核心程式碼 (ZWDS_Calculator) ---
+        # 範例顯示區塊
+        grid = st.columns(4)
+        for i in range(12):
+            with grid[i%4]:
+                st.container(border=True).write(f"【宮位 {i+1}】\n\n(星曜顯示區)")
