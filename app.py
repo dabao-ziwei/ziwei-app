@@ -1,10 +1,10 @@
 import streamlit as st
 import time
 
-# --- 1. 頁面設定與 CSS 樣式 (修復排盤顯示與亂碼問題) ---
+# --- 1. 頁面設定與 CSS 樣式 ---
 st.set_page_config(page_title="專業紫微斗數排盤系統", page_icon="🔮", layout="centered")
 
-# 使用更嚴謹的 CSS 來確保格子不會跑版
+# CSS 樣式定義 (修復顯示問題)
 st.markdown("""
 <style>
     /* 隱藏預設選單 */
@@ -15,24 +15,26 @@ st.markdown("""
     .zwds-grid {
         display: grid;
         grid-template-columns: 1fr 1fr 1fr 1fr;
-        grid-template-rows: 120px 120px 120px 120px;
+        grid-template-rows: 110px 110px 110px 110px;
         gap: 2px;
-        background-color: #444;
-        border: 2px solid #666;
-        border-radius: 8px;
-        margin-top: 20px;
+        background-color: #666;
+        border: 4px solid #444;
+        border-radius: 4px;
+        margin-top: 10px;
         font-family: "Microsoft JhengHei", sans-serif;
     }
     
     /* 12宮位格子樣式 */
     .zwds-cell {
-        background-color: #222; /* 深色背景 */
-        color: #fff;            /* 白色文字 */
-        padding: 5px;
+        background-color: #222;
+        color: #fff;
+        padding: 4px;
         position: relative;
         display: flex;
         flex-direction: column;
+        justify-content: space-between;
         font-size: 13px;
+        overflow: hidden;
     }
 
     /* 中間命主資料區 (跨越中間 2x2 區域) */
@@ -46,15 +48,13 @@ st.markdown("""
         align-items: center;
         text-align: center;
         border: 1px solid #333;
-        padding: 10px;
+        padding: 5px;
         color: #fff;
     }
     
     /* 地支標籤 (右下角) */
     .cell-label {
-        position: absolute;
-        bottom: 2px;
-        right: 5px;
+        align-self: flex-end;
         color: #888;
         font-weight: bold;
         font-size: 14px;
@@ -64,15 +64,14 @@ st.markdown("""
     .cell-stars {
         color: #d4a0ff; /* 紫色字 */
         font-weight: bold;
-        font-size: 15px;
-        margin-bottom: 4px;
+        font-size: 14px;
+        line-height: 1.2;
     }
     
     /* 宮位名稱 (左下角 - 模擬用) */
     .cell-name {
-        font-size: 12px;
+        font-size: 11px;
         color: #aaa;
-        margin-top: auto; /* 推到底部 */
     }
 </style>
 """, unsafe_allow_html=True)
@@ -145,7 +144,6 @@ with st.container(border=True):
 # --- 5. 資料輸入表單 ---
 st.subheader("📝 資料輸入")
 
-# 準備預設值 (防止變數未定義)
 val_name, val_gender, val_cat, val_date, val_time = "", "女", "", "", ""
 is_edit_mode = False
 
@@ -174,7 +172,7 @@ with st.form("main_form"):
 
     c4, c5 = st.columns(2)
     with c4:
-        inp_date = st.text_input("出生日期", value=val_date, placeholder="如: 1140926 或 19790926", help="輸入民國(6-7碼)或西元(8碼)")
+        inp_date = st.text_input("出生日期", value=val_date, placeholder="如: 1140926 或 19790926", help="輸入民國或西元皆可")
     with c5:
         inp_time = st.text_input("出生時間 (24h)", value=val_time, placeholder="如: 1830", help="HHMM 格式")
 
@@ -203,7 +201,7 @@ if btn_save or btn_calc:
         st.error(f"❌ 日期格式錯誤：{inp_date}")
         has_error = True
     elif inp_time and not is_valid_time:
-        st.error("❌ 時間格式錯誤，請輸入 4 碼數字 (如 1830)")
+        st.error("❌ 時間格式錯誤")
         has_error = True
 
     if not has_error:
@@ -241,9 +239,8 @@ if btn_save or btn_calc:
             st.session_state.temp_preview_data = data_packet
             st.session_state.show_chart = True
 
-# --- 7. 排盤顯示 (修正 HTML 結構) ---
+# --- 7. 排盤顯示 (修正 Markdown 縮排問題) ---
 if st.session_state.show_chart:
-    # 決定顯示資料來源
     display_data = None
     if st.session_state.temp_preview_data:
         display_data = st.session_state.temp_preview_data
@@ -251,7 +248,7 @@ if st.session_state.show_chart:
         display_data = next((x for x in st.session_state.db if x['id'] == st.session_state.current_id), None)
 
     if display_data:
-        # 解包變數，防止 NameError
+        # 解包變數
         d_name = display_data.get('name', '')
         d_gender = display_data.get('gender', '')
         d_cat = display_data.get('category', '')
@@ -265,12 +262,11 @@ if st.session_state.show_chart:
 
         st.markdown("---")
 
-        # 定義 12 格位置 (標準紫微斗數 4x4)
+        # 定義 12 格位置
         # 巳(1,1) 午(1,2) 未(1,3) 申(1,4)
         # 辰(2,1)               酉(2,4)
         # 卯(3,1)               戌(3,4)
         # 寅(4,1) 丑(4,2) 子(4,3) 亥(4,4)
-        
         layout_map = [
             ("巳", 1, 1), ("午", 1, 2), ("未", 1, 3), ("申", 1, 4),
             ("酉", 2, 4), ("戌", 3, 4),
@@ -280,39 +276,28 @@ if st.session_state.show_chart:
         
         stars_list = ["紫微", "天機", "太陽", "武曲", "天同", "廉貞", "天府", "太陰", "貪狼", "巨門", "天相", "天梁"]
         
-        # 開始構建 HTML (注意：這裡使用單行拼接以避免格式跑掉)
+        # 構建 HTML 字串 (注意：這裡強制移除所有縮排，避免被當成 Code Block)
         cells_html = ""
         for i, (branch, r, c) in enumerate(layout_map):
-            # 模擬星曜 (之後這裡換成真實運算)
             star = stars_list[(i + d_y) % 12]
-            
-            cell = f"""
-            <div class="zwds-cell" style="grid-row: {r}; grid-column: {c};">
-                <div class="cell-stars">{star}</div>
-                <div class="cell-name">宮位名稱</div>
-                <div class="cell-label">{branch}</div>
-            </div>
-            """
-            cells_html += cell
+            # 使用單行拼接，這是最安全的方法
+            cell_style = f"grid-row: {r}; grid-column: {c};"
+            cells_html += f'<div class="zwds-cell" style="{cell_style}">'
+            cells_html += f'<div class="cell-stars">{star}</div>'
+            cells_html += f'<div class="cell-name">宮位</div>'
+            cells_html += f'<div class="cell-label">{branch}</div>'
+            cells_html += '</div>'
 
         # 中間命主資料
-        center_html = f"""
-        <div class="zwds-center">
-            <h3 style="margin:0; color:#d4a0ff;">{d_name}</h3>
-            <p style="font-size:12px; margin:5px 0; color:#ccc;">{d_gender} | {d_cat}</p>
-            <div style="font-size:16px; color:#4CAF50; margin-top:5px;">
-                {d_cal} {d_y} 年 {d_m} 月 {d_d} 日
-            </div>
-            <div style="font-size:16px; color:#4CAF50;">
-                {d_h:02d} 時 {d_min:02d} 分
-            </div>
-            <hr style="width:80%; border-color:#444; margin:10px 0;">
-            <div style="color:#fff;">命宮主星: {d_star}</div>
-        </div>
-        """
+        center_html = f'<div class="zwds-center">'
+        center_html += f'<h3 style="margin:0; color:#d4a0ff;">{d_name}</h3>'
+        center_html += f'<p style="font-size:12px; margin:5px 0; color:#ccc;">{d_gender} | {d_cat}</p>'
+        center_html += f'<div style="font-size:16px; color:#4CAF50; margin-top:5px;">{d_cal} {d_y} 年 {d_m} 月 {d_d} 日</div>'
+        center_html += f'<div style="font-size:16px; color:#4CAF50;">{d_h:02d} 時 {d_min:02d} 分</div>'
+        center_html += f'<hr style="width:80%; border-color:#444; margin:10px 0;">'
+        center_html += f'<div style="color:#fff;">命宮主星: {d_star}</div>'
+        center_html += '</div>'
         
-        # 組合最終 HTML
+        # 最終渲染
         final_html = f'<div class="zwds-grid">{cells_html}{center_html}</div>'
-        
-        # 渲染
         st.markdown(final_html, unsafe_allow_html=True)
