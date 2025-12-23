@@ -2,7 +2,7 @@ import streamlit as st
 import time
 from lunar_python import Lunar, Solar
 
-# --- 1. 頁面設定與 CSS 樣式 (極致表格化版) ---
+# --- 1. 頁面設定與 CSS 樣式 (極致無縫貼合版) ---
 st.set_page_config(page_title="專業紫微斗數排盤系統", page_icon="🔮", layout="centered")
 
 st.markdown("""
@@ -10,21 +10,37 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     
-    /* 命盤外框 */
+    /* === 核心佈局修正 === */
+    
+    /* 1. 全局垂直間距歸零 (解決紅圈處的縫隙) */
+    [data-testid="stVerticalBlock"] {
+        gap: 0px !important;
+    }
+    
+    /* 2. 容器邊距調整 */
+    .block-container {
+        padding-top: 1rem;
+        padding-bottom: 2rem;
+    }
+
+    /* 3. Column 間距歸零 */
+    [data-testid="column"] {
+        padding: 0px !important;
+        min-width: 0px !important;
+    }
+    
+    /* === 命盤樣式 === */
     .zwds-grid {
         display: grid;
         grid-template-columns: 1fr 1fr 1fr 1fr;
         grid-template-rows: 120px 120px 120px 120px;
-        gap: 3px;
-        background-color: #555;
-        border: 4px solid #333;
-        border-radius: 6px;
-        margin-top: 0px; 
-        margin-bottom: 0px; /* 緊貼下方 */
+        gap: 2px;
+        background-color: #444; /* 框線色 */
+        border: 2px solid #333;
+        margin-bottom: 0px; /* 緊貼下方控制列 */
         font-family: "Microsoft JhengHei", sans-serif;
     }
     
-    /* 宮位格子 */
     .zwds-cell {
         background-color: #222;
         color: #fff;
@@ -38,10 +54,10 @@ st.markdown("""
         cursor: pointer;
     }
     
-    /* 狀態顯示 */
+    /* 狀態高亮 */
     .zwds-cell.active-daxian {
         background-color: #1a2a40 !important; 
-        border: 1px solid #4da6ff;
+        border: 2px solid #4da6ff;
         box-shadow: inset 0 0 15px rgba(77, 166, 255, 0.4);
     }
     .zwds-cell.active-liunian {
@@ -69,62 +85,60 @@ st.markdown("""
     .cell-name { position: absolute; bottom: 2px; left: 4px; background-color: #444; color: #ccc; padding: 0 3px; font-size: 11px; border-radius: 2px; }
     .cell-ganzhi { position: absolute; bottom: 2px; right: 4px; color: #aaa; font-weight: bold; font-size: 13px; }
     
-    /* === 關鍵 CSS: 無縫表格修正 (v1.1) === */
+    /* === 按鈕表格化樣式 (Strip Style) === */
     
-    /* 1. 全局 Layout 壓縮 */
-    .block-container { padding-top: 1rem; padding-bottom: 2rem; }
-    [data-testid="column"] { padding: 0px !important; min-width: 0px !important; }
-    [data-testid="stHorizontalBlock"] { gap: 0px !important; }
-    
-    /* 2. 強制壓縮垂直間距 */
-    /* 這會影響所有容器，確保沒有多餘的 gap */
-    div.element-container {
-        margin-bottom: 0px !important;
-    }
-
-    /* 3. 按鈕樣式極致微調 */
+    /* 通用按鈕設定 */
     div.stButton > button {
         width: 100%;
         border-radius: 0px;
-        border: 1px solid #444; /* 邊框顏色 */
+        border: 1px solid #444; 
         margin: 0px;
-        /* 極小的 padding，確保字體能擠進去 */
-        padding: 4px 0px !important; 
-        
-        /* 字體縮小，解決破版 */
-        font-size: 10.5px !important; 
-        
-        /* 允許換行但行距縮小 */
-        white-space: pre-wrap !important; 
+        padding: 4px 0px !important; /* 緊湊 Padding */
+        white-space: pre-wrap !important; /* 允許換行 */
         line-height: 1.1 !important;
-        
         height: auto;
-        min-height: 42px; /* 固定高度讓它整齊 */
-        background-color: #222;
+        min-height: 38px; /* 固定高度 */
+        background-color: #262730;
         color: #ccc;
+        transition: all 0.1s;
     }
     
+    /* 第一排：大限按鈕 (字體稍大) */
+    div[data-testid="column"] > div > div > div > div.stButton > button {
+        font-size: 12px !important;
+    }
+
+    /* 懸停效果 */
     div.stButton > button:hover {
         border-color: #888;
         color: #fff;
         background-color: #333;
-        z-index: 5;
+        z-index: 2; 
     }
     
     /* 選中狀態 - 大限 (深紫) */
     div.stButton > button.daxian-active {
         background-color: #4B0082 !important; 
         color: white !important;
-        border: 1px solid #aaa !important;
+        border: 1px solid #d4a0ff !important;
         font-weight: bold;
     }
     
     /* 選中狀態 - 流年 (亮藍) */
     div.stButton > button.liunian-active {
-        background-color: #008CBA !important;
+        background-color: #007acc !important;
         color: white !important;
-        border: 1px solid #fff !important;
+        border: 1px solid #80d4ff !important;
         font-weight: bold;
+    }
+
+    /* 針對流年按鈕的特別字體縮小，防止破版 */
+    /* 這裡使用 CSS 選擇器技巧，假設流年在下方，通常我們會給流年按鈕特殊的 key，
+       但 CSS 無法直接選取 key。我們透過 Python 中的 HTML ID hack 來處理，
+       或者簡單地將所有按鈕字體統一縮小。 */
+       
+    div.stButton > button p {
+        font-size: 11px;
     }
 
 </style>
@@ -149,11 +163,7 @@ class ZWDSCalculator:
         self.direction = 1 if (is_yang_year and is_male) or (not is_yang_year and not is_male) else -1 
 
         self.palaces = {i: {"name": "", "stars": [], "gan_idx": 0, "zhi_idx": i, "age_start": 0, "age_end": 0} for i in range(12)}
-        
-        self._calc_palaces()    
-        self._calc_bureau()      
-        self._calc_main_stars()  
-        self._calc_daxian()      
+        self._calc_palaces(); self._calc_bureau(); self._calc_main_stars(); self._calc_daxian()      
 
     def _calc_palaces(self):
         start_idx = 2 
@@ -165,12 +175,10 @@ class ZWDSCalculator:
             self.palaces[pos]["name"] = names[i]
             if pos == self.shen_pos: self.palaces[pos]["name"] += "(身宮)"
         start_gan = (self.year_gan_idx % 5) * 2 + 2
-        for i in range(12):
-            self.palaces[i]["gan_idx"] = (start_gan + (i - 2) % 12) % 10
+        for i in range(12): self.palaces[i]["gan_idx"] = (start_gan + (i - 2) % 12) % 10
 
     def _calc_bureau(self):
-        m_gan = self.palaces[self.ming_pos]["gan_idx"]
-        m_zhi = self.ming_pos
+        m_gan = self.palaces[self.ming_pos]["gan_idx"]; m_zhi = self.ming_pos
         table = {0: [4,4,6,6,5,5,4,4,6,6,5,5], 1: [2,2,5,5,6,6,2,2,5,5,6,6], 
                  2: [6,6,3,3,5,5,6,6,3,3,5,5], 3: [5,5,4,4,3,3,5,5,4,4,3,3], 
                  4: [3,3,4,4,2,2,3,3,4,4,2,2]}
@@ -182,9 +190,7 @@ class ZWDSCalculator:
         for i in range(12):
             offset = i if self.direction == 1 else -i
             pos = (self.ming_pos + offset) % 12
-            self.palaces[pos]["age_start"] = start_age
-            self.palaces[pos]["age_end"] = start_age + 9
-            start_age += 10
+            self.palaces[pos]["age_start"] = start_age; self.palaces[pos]["age_end"] = start_age + 9; start_age += 10
 
     def _calc_main_stars(self):
         b = self.bureau_num; d = self.lunar_day
@@ -197,8 +203,7 @@ class ZWDSCalculator:
         for off, name in tf_map.items(): self.palaces[(tp + off)%12]["stars"].append(name)
         self.ming_star = self.palaces[self.ming_pos]["stars"][0] if self.palaces[self.ming_pos]["stars"] else ""
 
-    def get_result(self):
-        return self.palaces, self.ming_star, self.bureau_name, self.birth_year
+    def get_result(self): return self.palaces, self.ming_star, self.bureau_name, self.birth_year
 
 # --- 3. 狀態與輔助 ---
 if 'db' not in st.session_state: st.session_state.db = [] 
@@ -220,10 +225,9 @@ def parse_date(d):
     except: return 0,0,0,""
     return 0,0,0,""
 
-def get_ganzhi_for_year(year):
-    return (year - 1984) % 10, (year - 1984) % 12
+def get_ganzhi_for_year(year): return (year - 1984) % 10, (year - 1984) % 12
 
-# --- 4. 頂部與輸入區 ---
+# --- 4. 介面 ---
 st.title("🔮 專業紫微斗數排盤")
 with st.container(border=True):
     c1, c2 = st.columns([1, 1.5])
@@ -241,8 +245,7 @@ if st.session_state.current_id != 0:
     v_name, v_gen, v_cat = rec['name'], rec['gender'], rec['category']
     v_date = f"{rec['y']:04d}{rec['m']:02d}{rec['d']:02d}" if rec['cal_type']=="西元" else f"{rec['y']-1911}{rec['m']:02d}{rec['d']:02d}"
     v_time = f"{rec['h']:02d}{rec['min']:02d}"
-else:
-    v_name, v_gen, v_cat, v_date, v_time = "", "女", "", "", ""
+else: v_name, v_gen, v_cat, v_date, v_time = "", "女", "", "", ""
 
 with st.expander("📝 資料輸入 / 修改", expanded=(not st.session_state.show_chart)):
     with st.form("main_form"):
@@ -257,7 +260,23 @@ with st.expander("📝 資料輸入 / 修改", expanded=(not st.session_state.sh
         with b1: btn_save = st.form_submit_button("💾 儲存並排盤", type="primary", use_container_width=True)
         with b2: btn_calc = st.form_submit_button("🧪 僅試算", use_container_width=True)
 
-# --- 5. 排盤與時間軸 (Sticky Timeline) ---
+if btn_save or btn_calc:
+    y, m, d, cal = parse_date(i_date)
+    h, mn = int(i_time[:2]) if len(i_time)==4 else 0, int(i_time[2:]) if len(i_time)==4 else 0
+    if not i_name or y==0: st.error("資料不完整")
+    else:
+        calc = ZWDSCalculator(y, m, d, h, mn, i_gen); p_data, m_star, bur, b_yr = calc.get_result()
+        pkt = {"name": i_name, "gender": i_gen, "category": i_cat, "y": y, "m": m, "d": d, "h": h, "min": mn, "cal_type": cal, "ming_star": m_star, "bureau": bur, "palace_data": p_data}
+        if btn_save:
+            pkt['id'] = int(time.time()) if st.session_state.current_id==0 else st.session_state.current_id
+            if st.session_state.current_id==0: st.session_state.db.append(pkt); st.session_state.current_id = pkt['id']
+            else: 
+                for idx, x in enumerate(st.session_state.db):
+                    if x['id']==st.session_state.current_id: st.session_state.db[idx]=pkt
+            st.session_state.temp_preview_data = None; st.session_state.show_chart = True; st.rerun()
+        if btn_calc: st.session_state.temp_preview_data = pkt; st.session_state.show_chart = True
+
+# --- 5. 排盤與時間軸 (Seamless Sticky Timeline) ---
 if st.session_state.show_chart:
     data = st.session_state.temp_preview_data or next((x for x in st.session_state.db if x['id']==st.session_state.current_id), None)
     if data:
@@ -268,21 +287,19 @@ if st.session_state.show_chart:
         daxian_idx = st.session_state.sel_daxian_idx
         liunian_off = st.session_state.sel_liunian_offset
         d_pos_idx, d_info = sorted_limits[daxian_idx]
-        daxian_pos = int(d_pos_idx)
-        start_age = d_info['age_start']
+        daxian_pos = int(d_pos_idx); start_age = d_info['age_start']
         curr_year = b_yr + start_age + liunian_off - 1
         ln_gan, ln_zhi = get_ganzhi_for_year(curr_year)
         liunian_pos = -1
         for pid, info in p_data.items():
             if info['zhi_idx'] == ln_zhi: liunian_pos = int(pid); break
 
-        # === A. 命盤 ===
+        # A. 命盤區
         layout = [(5,"巳",1,1),(6,"午",1,2),(7,"未",1,3),(8,"申",1,4),(4,"辰",2,1),(9,"酉",2,4),(3,"卯",3,1),(10,"戌",3,4),(2,"寅",4,1),(1,"丑",4,2),(0,"子",4,3),(11,"亥",4,4)]
         cells_html = ""
         for idx, branch, r, c in layout:
             info = p_data[str(idx)] if str(idx) in p_data else p_data[idx]
-            classes = []
-            markers = ""
+            classes = []; markers = ""
             if idx == daxian_pos: classes.append("active-daxian"); markers += '<div class="marker-daxian">大限</div>'
             if idx == liunian_pos: classes.append("active-liunian"); markers += '<div class="marker-liunian">流年</div>'
             
@@ -297,8 +314,7 @@ if st.session_state.show_chart:
         center_html += f'<hr style="width:80%;border-color:#444;margin:5px 0;"><div style="color:#fff;">命宮: {data.get("ming_star","")}</div></div>'
         st.markdown(f'<div class="zwds-grid">{cells_html}{center_html}</div>', unsafe_allow_html=True)
         
-        # === B. 無縫控制列 (Seamless Strip) ===
-        # 標題簡化，確保寬度
+        # B. 無縫控制列 (Seamless Strip)
         limit_names = ["一限", "二限", "三限", "四限", "五限", "六限", "七限", "八限", "九限", "十限", "十一", "十二"]
         
         # Row 1: 大限
@@ -306,34 +322,28 @@ if st.session_state.show_chart:
         for i, col in enumerate(cols_d):
             pos_idx, info = sorted_limits[i]
             gz = f"{GAN[info['gan_idx']]}{ZHI[info['zhi_idx']]}"
-            # 關鍵修改：使用 HTML 換行符讓字變直/變兩行，節省寬度
+            # 使用 <br> 強制換行，並用 HTML 標籤讓文字分行顯示
             label = f"{limit_names[i]}\n{gz}"
-            
             is_selected = (i == daxian_idx)
             btn_type = "primary" if is_selected else "secondary"
             if col.button(label, key=f"d_{i}", type=btn_type, use_container_width=True):
                 st.session_state.sel_daxian_idx = i; st.session_state.sel_liunian_offset = 0; st.rerun()
 
-        # 垂直縫隙消除術 (Super Gap Killer) 
-        # 使用負 Margin 將下方元素強行拉上，同時加上 pointer-events 避免遮擋
-        st.markdown('<div style="margin-top: -35px; pointer-events: none;"></div>', unsafe_allow_html=True)
-
-        # Row 2: 流年
+        # Row 2: 流年 (自動緊貼，因 CSS 已將 gap 設為 0)
         cols_l = st.columns(10)
         for j, col in enumerate(cols_l):
             age = d_info['age_start'] + j
             yr = b_yr + age - 1
             gy, zy = get_ganzhi_for_year(yr)
             gz = f"{GAN[gy]}{ZHI[zy]}"
-            # 簡化標籤：西元\n干支(歲)
+            # 簡化標籤：1980\n庚申(2) -> 確保字體小不破版
             label = f"{yr}\n{gz}({age})"
-            
             is_selected = (j == liunian_off)
             btn_type = "primary" if is_selected else "secondary"
             if col.button(label, key=f"l_{j}", type=btn_type, use_container_width=True):
                 st.session_state.sel_liunian_offset = j; st.rerun()
 
-        # JS/CSS 注入：確保 Primary Button 顏色覆寫
+        # JS/CSS 注入：按鈕顏色覆寫
         st.markdown("""
         <style>
             div.stButton > button[kind="primary"] {
@@ -341,5 +351,8 @@ if st.session_state.show_chart:
                 border-color: #9933ff !important;
                 color: white !important;
             }
+            /* 針對流年列的顏色微調 (假設是第二組 primary button) */
+            /* 由於無法精確區分，這裡統一使用深紫色，保持視覺一致性，
+               或者您可以接受目前選中都是深紫色。 */
         </style>
         """, unsafe_allow_html=True)
