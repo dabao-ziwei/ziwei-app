@@ -4,127 +4,42 @@ def apply_style():
     st.markdown("""
     <style>
         /* =================================================================
-           1. 根變數強制設定 (欺騙瀏覽器這是亮色模式)
+           1. 版面間距修正 (針對標題被切掉的終極修正)
            ================================================================= */
-        :root {
-            --primary-color: #4B0082;
-            --background-color: #ffffff;
-            --secondary-background-color: #f0f2f6;
-            --text-color: #000000;
-            --font: sans-serif;
-        }
-
-        /* 全局背景 */
-        .stApp {
-            background-color: #ffffff !important;
-            color: #000000 !important;
-        }
-
-        /* 頂部 Header 強制白底 */
-        header[data-testid="stHeader"] {
-            background-color: #ffffff !important;
-            border-bottom: 1px solid #f0f0f0 !important;
-        }
-
-        /* =================================================================
-           2. 修正黑色區塊 (針對您的截圖問題點)
-           ================================================================= */
-
-        /* (A) 修正全黑的輸入框 (Text Input) */
-        /* 針對 BaseWeb 的 Input 容器 */
-        div[data-baseweb="input"] {
-            background-color: #ffffff !important; /* 強制白底 */
-            border: 1px solid #cccccc !important; /* 灰邊框 */
-            color: #000000 !important;
-        }
         
-        /* 針對輸入框內部的 Input 元素 */
-        input[type="text"] {
-            background-color: transparent !important;
-            color: #000000 !important;
-            -webkit-text-fill-color: #000000 !important;
-            caret-color: #000000 !important;
-        }
-
-        /* (B) 修正全黑的摺疊區塊標題 (Expander - 資料輸入/修改) */
-        /* 針對未展開與展開的狀態 */
-        div[data-testid="stExpander"] details > summary {
-            background-color: #f8f9fa !important; /* 淺灰底 */
-            color: #000000 !important; /* 黑字 */
-            border: 1px solid #cccccc !important;
-            border-radius: 4px !important;
-        }
-        div[data-testid="stExpander"] details[open] > summary {
-            color: #000000 !important;
-        }
-        div[data-testid="stExpander"] {
-            background-color: #ffffff !important;
-            color: #000000 !important;
-        }
-        /* 修正 expander 內部的文字顏色 */
-        .streamlit-expanderContent {
-            background-color: #ffffff !important;
-            color: #000000 !important;
-        }
-
-        /* (C) 修正全黑的「僅試算」按鈕 (Secondary Button) */
-        button[kind="secondary"] {
-            background-color: #ffffff !important;
-            color: #000000 !important;
-            border: 1px solid #cccccc !important;
-        }
-        button[kind="secondary"]:hover {
-            background-color: #f0f0f0 !important;
-            border-color: #b0b0b0 !important;
-            color: #000000 !important;
-        }
-        
-        /* (D) 修正下拉選單 (Selectbox - 新增命盤) */
-        div[data-baseweb="select"] > div {
-            background-color: #ffffff !important;
-            color: #000000 !important;
-            border-color: #cccccc !important;
-        }
-        /* 選單內的文字 */
-        div[data-testid="stSelectbox"] div[data-baseweb="select"] span {
-            color: #000000 !important;
-        }
-        /* 下拉選單的選項列表 */
-        ul[data-baseweb="menu"] {
-            background-color: #ffffff !important;
-            border: 1px solid #cccccc !important;
-        }
-        li[data-baseweb="option"] {
-            color: #000000 !important;
-            background-color: #ffffff !important;
-        }
-
-        /* (E) 修正標籤文字 (Label) - 姓名、日期等 */
-        label, .stMarkdown p {
-            color: #333333 !important;
-        }
-        
-        /* (F) 修正單選按鈕 (Radio) */
-        div[role="radiogroup"] p {
-            color: #000000 !important;
-        }
-
-        /* =================================================================
-           3. 命盤網格樣式 (維持不變)
-           ================================================================= */
+        /* 關鍵修正：
+           原本是 4rem，現在加大到 6rem (約 96px)，
+           強制把內容往下推，確保標題不會被 Streamlit 的頂部選單列遮住。
+        */
         .block-container {
-            padding-top: 1rem !important;
+            padding-top: 6rem !important; 
             padding-bottom: 3rem !important;
             max-width: 1200px !important;
         }
-        [data-testid="stVerticalBlock"] { gap: 0.5rem !important; }
+        
+        /* 隱藏 Streamlit 右上角選單與 Footer (選填，讓畫面更乾淨) */
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        
+        /* 讓頂部 Header 背景透明化，減少視覺干擾 */
+        header[data-testid="stHeader"] {
+            background-color: rgba(255, 255, 255, 0.0) !important;
+        }
 
+        /* =================================================================
+           2. 命盤網格系統 (維持您滿意的排版)
+           ================================================================= */
+        
+        /* 消除元件間的預設空隙 */
+        [data-testid="stVerticalBlock"] { gap: 0px !important; }
+
+        /* 網格設定 */
         .zwds-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             grid-template-rows: repeat(4, 160px); 
             gap: 0;
-            background-color: #000; 
+            background-color: #000; /* 格線顏色：黑 */
             border: 2px solid #000;
             margin-bottom: 20px;
             font-family: "Microsoft JhengHei", "Heiti TC", sans-serif;
@@ -133,6 +48,7 @@ def apply_style():
             margin-right: auto;
         }
         
+        /* 手機版適配 */
         @media (max-width: 800px) {
             .zwds-grid {
                 grid-template-columns: repeat(2, 1fr);
@@ -140,6 +56,7 @@ def apply_style():
             }
         }
 
+        /* 宮位卡片 */
         .zwds-cell {
             background-color: #ffffff;
             border: 1px solid #ccc;
@@ -152,9 +69,11 @@ def apply_style():
             overflow: hidden;
         }
 
+        /* 狀態高亮 (流年/大限) */
         .active-daxian { background-color: #f5f5f5 !important; border: 2px solid #666 !important; }
         .active-liunian { border: 3px solid #007bff !important; z-index: 5; }
 
+        /* === 星曜排版 === */
         .stars-box {
             display: flex;
             flex-direction: row; 
@@ -163,22 +82,24 @@ def apply_style():
             align-items: flex-start;
         }
 
+        /* 左側：主星欄 */
         .main-stars-col {
             display: flex;
-            flex-direction: row; 
+            flex-direction: row; /* 讓雙星並排 */
             padding-right: 4px;
             margin-right: 4px;
             border-right: 1px dashed #ccc;
             height: 100%;
         }
 
+        /* 主星容器 (包含名字和四化) */
         .star-major-container {
             display: flex;
             flex-direction: column;
             align-items: center;
             margin-left: 2px;
             margin-right: 2px;
-            writing-mode: vertical-rl;
+            writing-mode: vertical-rl; /* 直書 */
         }
 
         .star-name {
@@ -189,6 +110,7 @@ def apply_style():
             margin-bottom: 4px;
         }
 
+        /* 四化標籤 */
         .hua-badge {
             font-size: 10px;
             border-radius: 2px;
@@ -197,7 +119,7 @@ def apply_style():
             text-align: center;
             font-weight: normal;
             margin-top: 1px;
-            writing-mode: horizontal-tb;
+            writing-mode: horizontal-tb; /* 轉正 */
             width: 14px;
             height: 14px;
             line-height: 10px;
@@ -208,9 +130,10 @@ def apply_style():
         .bg-da  { background-color: #808080; }
         .bg-liu { background-color: #0056b3; }
 
+        /* 右側：副星欄 (直書) */
         .sub-stars-col {
             display: flex;
-            flex-direction: row-reverse;
+            flex-direction: row-reverse; /* 從右排到左 */
             flex-wrap: wrap-reverse;
             align-content: flex-start;
             gap: 4px;
@@ -235,6 +158,7 @@ def apply_style():
         .color-bad { color: #d32f2f !important; } 
         .color-good { color: #2e7d32 !important; } 
         
+        /* 底部資訊區 */
         .cell-footer {
             margin-top: 2px;
             border-top: 1px solid #eee;
@@ -257,6 +181,7 @@ def apply_style():
         .tag-liu { background-color: #0056b3; } 
         .tag-da { background-color: #666; } 
 
+        /* 中宮 */
         .center-info-box {
             grid-column: 2 / 4; grid-row: 2 / 4;
             background-color: #fff;
@@ -265,6 +190,23 @@ def apply_style():
             border: 1px solid #ccc;
             color: #000;
             height: 100%;
+        }
+        
+        /* === 3. 按鈕微調 (確保按鈕看起來是乾淨的白底風格) === */
+        div.stButton > button {
+            background-color: #f9f9f9;
+            border: 1px solid #ccc;
+            color: #333;
+        }
+        div.stButton > button:hover {
+            border-color: #999;
+            color: #000;
+        }
+        /* 選中的按鈕 (紫色) */
+        div.stButton > button[kind="primary"] {
+            background-color: #4B0082 !important;
+            color: #fff !important;
+            border: none;
         }
     </style>
     """, unsafe_allow_html=True)
