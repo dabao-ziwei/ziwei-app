@@ -2,7 +2,7 @@ import streamlit as st
 import time
 from lunar_python import Lunar, Solar
 
-# --- 1. 頁面設定與 CSS 樣式 (Layout Fix) ---
+# --- 1. 頁面設定與 CSS 樣式 (Layout Fix v1.4) ---
 st.set_page_config(page_title="專業紫微斗數排盤系統", page_icon="🔮", layout="centered")
 
 st.markdown("""
@@ -10,16 +10,11 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     
-    /* === 1. 核心無縫佈局修正 (The Clean Way) === */
+    /* === 1. 核心無縫佈局修正 === */
     
-    /* 移除垂直堆疊的間隙 (正規解法，不破版) */
+    /* 移除垂直堆疊的間隙 (讓元件緊鄰) */
     [data-testid="stVerticalBlock"] {
         gap: 0px !important;
-    }
-    
-    /* 移除元件容器的邊距 */
-    .element-container {
-        margin-bottom: 0px !important;
     }
     
     /* 移除 Column 間隙 */
@@ -31,7 +26,7 @@ st.markdown("""
         gap: 0px !important;
     }
 
-    /* 調整主容器，避免頂部太擠 */
+    /* 調整主容器 */
     .block-container {
         padding-top: 1rem;
         padding-bottom: 3rem;
@@ -45,7 +40,10 @@ st.markdown("""
         gap: 2px;
         background-color: #444; 
         border: 2px solid #333;
-        margin-bottom: 0px; /* 緊貼下方 */
+        
+        /* 關鍵修正：給予底部一點空間，防止下方按鈕重疊上來 */
+        margin-bottom: 10px; 
+        
         font-family: "Microsoft JhengHei", sans-serif;
     }
     
@@ -90,32 +88,29 @@ st.markdown("""
     .cell-name { position: absolute; bottom: 2px; left: 4px; background-color: #444; color: #ccc; padding: 0 3px; font-size: 11px; border-radius: 2px; }
     .cell-ganzhi { position: absolute; bottom: 2px; right: 4px; color: #aaa; font-weight: bold; font-size: 13px; }
     
-    /* === 3. 按鈕表格化樣式 (Strip Style v2) === */
+    /* === 3. 按鈕表格化樣式 (Safe Mode) === */
     
     div.stButton > button {
         width: 100%;
         border-radius: 0px;
         border: 1px solid #444; 
-        /* 使用負 Margin 讓邊框重疊，看起來像 Excel 格線 */
         margin-right: -1px; 
         margin-bottom: -1px;
-        
         padding: 4px 0px !important; 
         
-        /* 基礎字體大小 */
-        font-size: 10px !important; 
+        /* 字體設定 */
+        font-size: 11px !important; 
         white-space: pre-wrap !important; 
-        line-height: 1.2 !important;
+        line-height: 1.3 !important;
         
         height: auto;
-        min-height: 36px; /* 更矮的高度 */
+        min-height: 45px; /* 增加高度，防止文字被切 */
         
         background-color: #222;
         color: #bbb;
         transition: background-color 0.1s;
     }
     
-    /* Hover */
     div.stButton > button:hover {
         background-color: #333;
         color: #fff;
@@ -127,7 +122,7 @@ st.markdown("""
     div.stButton > button.daxian-active {
         background-color: #4B0082 !important; 
         color: #fff !important;
-        border: 1px solid #b366ff !important;
+        border: 1px solid #d4a0ff !important;
         font-weight: bold;
         z-index: 5;
     }
@@ -139,6 +134,11 @@ st.markdown("""
         border: 1px solid #4da6ff !important;
         font-weight: bold;
         z-index: 5;
+    }
+    
+    /* 修正流年按鈕的文字大小，確保不破版 */
+    div.stButton > button p {
+        font-size: 10px;
     }
 
 </style>
