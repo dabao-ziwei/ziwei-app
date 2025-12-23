@@ -62,12 +62,11 @@ def apply_style():
             overflow: hidden;
         }
 
-        /* 狀態高亮邊框 */
         .active-daxian { background-color: #f9f9f9 !important; border: 2px solid #666 !important; }
         .active-liunian { border: 3px solid #007bff !important; z-index: 5; }
 
         /* =================================================================
-           3. 星曜樣式 (修正重點：深紅主星、黑色雜曜)
+           3. 星曜樣式
            ================================================================= */
         .stars-box {
             display: flex;
@@ -89,7 +88,7 @@ def apply_style():
         .star-name {
             font-size: 18px; 
             font-weight: 900;
-            color: #8B0000; /* 深紅色 */
+            color: #8B0000;
             letter-spacing: 2px;
             margin-bottom: 4px;
             writing-mode: vertical-rl;
@@ -109,9 +108,9 @@ def apply_style():
             line-height: 1.2;
             display: block;
         }
-        .bg-ben { background-color: #d32f2f; } /* 紅 */
-        .bg-da  { background-color: #808080; } /* 灰 */
-        .bg-liu { background-color: #0056b3; } /* 藍 */
+        .bg-ben { background-color: #d32f2f; }
+        .bg-da  { background-color: #808080; }
+        .bg-liu { background-color: #0056b3; }
 
         /* 副星：黑色 */
         .sub-stars-col {
@@ -126,26 +125,26 @@ def apply_style():
         .star-medium {
             font-size: 14px;
             font-weight: bold;
-            color: #000000; /* 純黑 */
+            color: #000000;
             writing-mode: vertical-rl;
             line-height: 1;
         }
         
         .star-small {
             font-size: 10px;
-            color: #000000; /* 純黑 */
+            color: #000000;
             writing-mode: vertical-rl;
             line-height: 1;
             margin-top: 2px;
         }
         
-        /* 祿存權科忌 的顏色 (文字顏色維持特殊色以示區別，還是您希望全黑？目前維持特殊色較易讀) */
-        /* 若希望祿存也是黑色，可移除 color-good 設定。這裡暫時保留綠色以突顯祿存 */
-        .color-bad { color: #d32f2f !important; } 
+        /* 關鍵修正：煞星顏色改為黑色 */
+        .color-bad { color: #000000 !important; } 
+        /* 祿存維持綠色以示區別 */
         .color-good { color: #2e7d32 !important; } 
 
         /* =================================================================
-           4. 底部資訊 (修正重點：三層宮名堆疊)
+           4. 底部資訊
            ================================================================= */
         .cell-footer {
             margin-top: 2px;
@@ -166,7 +165,6 @@ def apply_style():
         .ganzhi-label { color: #000000 !important; font-size: 16px !important; font-weight: 900 !important; margin-bottom: -2px; }
         .zhi-label { color: #000000; font-size: 16px; font-weight: 900; }
 
-        /* 右側宮名堆疊區 */
         .footer-right { 
             text-align: right; 
             display: flex; 
@@ -175,28 +173,11 @@ def apply_style():
             line-height: 1.2;
         }
 
-        /* 1. 流年宮名 (藍色) */
-        .p-name-liu {
-            color: #0056b3;
-            font-size: 14px;
-            font-weight: 900;
-        }
+        .p-name-liu { color: #0056b3; font-size: 14px; font-weight: 900; }
+        .p-name-da { color: #666666; font-size: 14px; font-weight: 900; }
+        .p-name-ben { color: #d32f2f; font-size: 14px; font-weight: 900; }
         
-        /* 2. 大限宮名 (深灰色) */
-        .p-name-da {
-            color: #666666;
-            font-size: 14px;
-            font-weight: 900;
-        }
-        
-        /* 3. 本命宮名 (紅色) */
-        .p-name-ben {
-            color: #d32f2f;
-            font-size: 14px;
-            font-weight: 900;
-        }
-        
-        /* 歲數範圍 (接在本命宮名旁或下方) */
+        /* 歲數範圍樣式 (雖然目前隱藏，但保留樣式定義) */
         .limit-info {
             font-size: 11px;
             color: #333;
