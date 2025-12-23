@@ -3,7 +3,7 @@ import time
 from lunar_python import Lunar, Solar
 
 # ==========================================
-# 1. 頁面設定與 CSS 樣式 (修正版 v2.1)
+# 1. 頁面設定與 CSS 樣式 (v2.2 縮排修正版)
 # ==========================================
 st.set_page_config(page_title="專業紫微斗數排盤系統", page_icon="🔮", layout="wide")
 
@@ -222,6 +222,7 @@ class ZWDSCalculator:
         start_idx = 2 
         self.ming_pos = (start_idx + (self.lunar_month - 1) - self.time_zhi_idx) % 12
         self.shen_pos = (start_idx + (self.lunar_month - 1) + self.time_zhi_idx) % 12
+        # 更名：交友 -> 僕役
         names = ["命宮", "兄弟", "夫妻", "子女", "財帛", "疾厄", "遷移", "僕役", "官祿", "田宅", "福德", "父母"]
         for i in range(12):
             pos = (self.ming_pos - i) % 12
@@ -386,7 +387,7 @@ if btn_save or btn_calc:
         if btn_calc: st.session_state.temp_preview_data = pkt; st.session_state.show_chart = True
 
 # ==========================================
-# 5. 排盤顯示核心 (HTML 組合邏輯修正版)
+# 5. 排盤顯示核心 (HTML 組合邏輯修正版 - 無縮排)
 # ==========================================
 if st.session_state.show_chart:
     data = st.session_state.temp_preview_data or next((x for x in st.session_state.db if x['id']==st.session_state.current_id), None)
@@ -428,16 +429,14 @@ if st.session_state.show_chart:
             if idx == daxian_pos: classes.append("active-daxian")
             if idx == liunian_pos: classes.append("active-liunian")
             
-            # --- 1. 左欄：主星 HTML (移除縮排，單行串接) ---
+            # --- 1. 左欄：主星 HTML (完全無縮排拼接) ---
             main_stars_html = ""
             for star in info['major_stars']:
                 sihua_html = ""
                 for sh in star['sihua']:
                     bg_cls = {"祿":"sh-lu", "權":"sh-quan", "科":"sh-ke", "忌":"sh-ji"}[sh['type']]
-                    # 注意：這裡使用單行字串
                     sihua_html += f'<span class="hua-badge {bg_cls}">{sh["type"]}</span>'
                 
-                # 注意：主星 div 也改為單行，確保不會因為換行被誤判
                 main_stars_html += f'<div class="star-major">{star["name"]}{sihua_html}</div>'
             
             # --- 2. 右欄：副星/雜曜 HTML ---
@@ -456,38 +455,36 @@ if st.session_state.show_chart:
             if is_liu: status_tags += '<div class="tag-flow tag-liu">流命</div>'
             if is_da: status_tags += '<div class="tag-flow tag-da">大限</div>'
             
-            # --- 4. 組合 Cell HTML (極度簡化以避免格式錯誤) ---
-            # 使用單一 f-string，但內部不換行，或者小心換行
-            cell_html = f"""
-            <div class="zwds-cell {' '.join(classes)}" style="grid-row: {r}; grid-column: {c};">
-                <div class="stars-box">
-                    <div class="main-stars-col">{main_stars_html}</div>
-                    <div class="sub-stars-col">{sub_stars_html}</div>
-                </div>
-                <div class="cell-footer">
-                    <div class="footer-left">
-                        <span class="ganzhi-label">{GAN[info['gan_idx']]}</span>
-                        <span class="zhi-label">{branch}</span>
-                    </div>
-                    <div class="footer-right">
-                        <div class="palace-name">{info['name']}</div>
-                        <div class="limit-info">{info['age_start']}-{info['age_end']}</div>
-                        <div class="status-tags">{status_tags}</div>
-                    </div>
-                </div>
-            </div>
-            """
+            # --- 4. 組合 Cell HTML (極度重要：不要用多行字串，改用 +=) ---
+            # 這樣可以確保 Streamlit 不會誤判縮排
+            cell_html = f'<div class="zwds-cell {" ".join(classes)}" style="grid-row: {r}; grid-column: {c};">'
+            cell_html += '<div class="stars-box">'
+            cell_html += f'<div class="main-stars-col">{main_stars_html}</div>'
+            cell_html += f'<div class="sub-stars-col">{sub_stars_html}</div>'
+            cell_html += '</div>'
+            
+            cell_html += '<div class="cell-footer">'
+            cell_html += '<div class="footer-left">'
+            cell_html += f'<span class="ganzhi-label">{GAN[info["gan_idx"]]}</span>'
+            cell_html += f'<span class="zhi-label">{branch}</span>'
+            cell_html += '</div>'
+            
+            cell_html += '<div class="footer-right">'
+            cell_html += f'<div class="palace-name">{info["name"]}</div>'
+            cell_html += f'<div class="limit-info">{info["age_start"]}-{info["age_end"]}</div>'
+            cell_html += f'<div class="status-tags">{status_tags}</div>'
+            cell_html += '</div></div>'
+            cell_html += '</div>'
+            
             cells_html += cell_html
             
-        # 中宮資訊 (使用 strip 確保乾淨)
-        center_html = f"""
-        <div class="center-info-box">
-            <h3 style="margin:0;color:#d4a0ff;font-size:1.5rem;">{data["name"]}</h3>
-            <div style="color:#aaa;font-size:0.9rem;margin:5px 0;">{data["gender"]} | {calc_obj.bureau_name} | {data.get("ming_star","")}坐命</div>
-            <div style="color:#4CAF50;">國曆：{data["y"]}/{data["m"]}/{data["d"]} {data["h"]}:{data["min"]:02d}</div>
-            <div style="color:#888;font-size:0.8rem;">農曆：{calc_obj.lunar.getYearInGanZhi()}年 {calc_obj.lunar.getMonthInChinese()}月 {calc_obj.lunar.getDayInChinese()}</div>
-        </div>
-        """
+        # 中宮資訊
+        center_html = '<div class="center-info-box">'
+        center_html += f'<h3 style="margin:0;color:#d4a0ff;font-size:1.5rem;">{data["name"]}</h3>'
+        center_html += f'<div style="color:#aaa;font-size:0.9rem;margin:5px 0;">{data["gender"]} | {calc_obj.bureau_name} | {data.get("ming_star","")}坐命</div>'
+        center_html += f'<div style="color:#4CAF50;">國曆：{data["y"]}/{data["m"]}/{data["d"]} {data["h"]}:{data["min"]:02d}</div>'
+        center_html += f'<div style="color:#888;font-size:0.8rem;">農曆：{calc_obj.lunar.getYearInGanZhi()}年 {calc_obj.lunar.getMonthInChinese()}月 {calc_obj.lunar.getDayInChinese()}</div>'
+        center_html += '</div>'
         
         # 渲染
         st.markdown(f'<div class="zwds-grid">{cells_html}{center_html}</div>', unsafe_allow_html=True)
