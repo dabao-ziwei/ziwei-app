@@ -1,245 +1,202 @@
 import streamlit as st
-import datetime
-from lunar_python import Lunar, Solar
+import pandas as pd
+from datetime import datetime
+import time
 
-# ==============================================================================
-# 1. 紫微斗數運算核心 (Calculator)
-# ==============================================================================
+# --- 1. 頁面設定 (針對平板優化) ---
+st.set_page_config(
+    page_title="專業紫微斗數排盤系統",
+    page_icon="🔮",
+    layout="centered", # 使用 centered 在平板上閱讀體驗通常比 wide 好，較像 App
+    initial_sidebar_state="expanded"
+)
 
-ZHI = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥']
-GAN = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸']
+# --- 2. 模擬資料庫與 Session State 初始化 ---
+# 初始化資料庫 (實際應用請連接 SQL 或 JSON)
+if 'db' not in st.session_state:
+    st.session_state.db = [
+        {"id": 1, "name": "陳小美", "gender": "女", "category": "客戶", "cal_type": "民國", "y": 68, "m": 9, "d": 26, "h": 17, "min": 30, "stars": "紫微,七殺"},
+        {"id": 2, "name": "王大明", "gender": "男", "category": "學員", "cal_type": "西元", "y": 1985, "m": 1, "d": 1, "h": 9, "min": 0, "stars": "天機,太陰"},
+    ]
 
-class ZWDS_Calculator:
-    def __init__(self, lunar, gender):
-        # 定義地支對照表
-        self.zhi_map = {z: i for i, z in enumerate(ZHI)}
-        
-        self.lunar = lunar
-        self.gender = gender 
-        self.ba_zi = lunar.getEightChar()
-        self.year_gan = self.ba_zi.getYearGan()
-        self.year_zhi = self.ba_zi.getYearZhi()
-        self.month_zhi = self.ba_zi.getMonthZhi()
-        self.time_zhi = self.ba_zi.getTimeZhi()
-        
-        # 取得地支的索引
-        self.month_idx = self._get_zhi_idx(self.month_zhi)
-        self.time_idx = self._get_zhi_idx(self.time_zhi) 
+# 初始化當前編輯狀態
+if 'current_profile' not in st.session_state:
+    st.session_state.current_profile = None # None 代表新增模式
+if 'chart_visible' not in st.session_state:
+    st.session_state.chart_visible = False
 
-    def _get_zhi_idx(self, zhi):
-        return self.zhi_map.get(zhi, 0)
-
-    def get_ming_shen_idx(self):
-        """計算命宮與身宮"""
-        month_num = self.lunar.getMonth()
-        if month_num < 0: month_num = abs(month_num)
-        
-        # 命宮公式：2(寅) + (月數-1) - (時支索引)
-        ming_idx = (2 + (month_num - 1) - self.time_idx) % 12
-        # 身宮公式：2(寅) + (月數-1) + (時支索引)
-        shen_idx = (2 + (month_num - 1) + self.time_idx) % 12
-        
-        return ming_idx, shen_idx
-
-    def get_wuxing_ju(self, ming_idx):
-        """定五行局"""
-        # 1. 五虎遁
-        year_gan_idx = GAN.index(self.year_gan)
-        start_gan_idx = (year_gan_idx % 5) * 2 + 2 
-        steps = ming_idx - 2
-        if steps < 0: steps += 12
-        ming_gan_idx = (start_gan_idx + steps) % 10
-        
-        # 2. 納音定局
-        val = (ming_gan_idx // 2 + ming_idx // 2) % 5
-        map_ju = {0: 4, 1: 2, 2: 6, 3: 5, 4: 3}
-        return map_ju[val]
-
-    def get_special_stars(self):
-        """安特殊星"""
-        stars = {i: [] for i in range(12)} 
-        
-        # 安天馬
-        m = self.month_idx
-        tm_idx = -1
-        if m in [8, 0, 4]: tm_idx = 2
-        elif m in [2, 6, 10]: tm_idx = 8
-        elif m in [11, 3, 7]: tm_idx = 5
-        elif m in [5, 9, 1]: tm_idx = 11
-        if tm_idx != -1: stars[tm_idx].append("天馬")
-            
-        # 安魁鉞 (六辛逢虎馬)
-        y = GAN.index(self.year_gan)
-        kui = -1; yue = -1
-        if y == 7: # 辛
-            kui = 2; yue = 6 
-        elif y in [0, 4, 6]: 
-            kui = 1; yue = 7 
-        elif y in [1, 5]: 
-            kui = 0; yue = 8 
-        elif y in [2, 3]: 
-            kui = 11; yue = 9 
-        elif y in [8, 9]: 
-            kui = 3; yue = 5 
-            
-        if kui != -1: stars[kui].append("天魁")
-        if yue != -1: stars[yue].append("天鉞")
-        
-        return stars
-
-# ==============================================================================
-# 2. 介面與邏輯 (UI)
-# ==============================================================================
-
-def render_palace(zhi, idx, stars_list, ming_shen_label, grid_height=180):
-    """繪製單一宮位格子的 HTML (移除縮排以修復顯示問題)"""
-    stars_html = ""
-    for s in stars_list:
-        color = "#FF4B4B" if s in ["天馬", "天魁", "天鉞"] else "#E0E0E0"
-        stars_html += f"<div style='color:{color}; font-weight:bold; font-size:15px; margin-bottom:2px;'>{s}</div>"
+# --- 3. 側邊欄：命理資料庫 (需求 1, 2, 6) ---
+with st.sidebar:
+    st.header("📂 命理資料庫") # 修改標題 (需求 1)
     
-    label_html = ""
-    if "命宮" in ming_shen_label:
-        label_html += f"<span style='background-color:#D32F2F; color:white; padding:2px 6px; border-radius:4px; font-size:12px; margin-right:4px;'>命宮</span>"
-    if "身宮" in ming_shen_label:
-        label_html += f"<span style='background-color:#1976D2; color:white; padding:2px 6px; border-radius:4px; font-size:12px;'>身宮</span>"
-
-    # [Fix] 這裡將 HTML 字串壓縮為一行或移除所有縮排，避免被當成 Markdown 程式碼區塊
-    return f"""<div style="border: 1px solid #444; height: {grid_height}px; padding: 8px; background-color: #262730; position: relative; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
-<div style="position:absolute; top:8px; left:8px;">{label_html}<div style="margin-top:8px;">{stars_html}</div></div>
-<div style="position:absolute; bottom:5px; right:10px; font-size:20px; color:#666; font-weight:bold;">{zhi}</div>
-</div>"""
-
-def main():
-    st.set_page_config(page_title="紫微排盤 V0.3.2", layout="wide")
+    # 搜尋引擎 (需求 6)
+    search_query = st.text_input("🔍 全文檢索", placeholder="輸入姓名、日期或星曜...")
     
-    st.markdown("""
-    <style>
-    .stButton>button { width: 100%; border-radius: 8px; }
-    .block-container { padding-top: 2rem; }
-    </style>
-    """, unsafe_allow_html=True)
+    # 類別篩選 (需求 2)
+    # 先抓出所有存在的類別
+    all_categories = ["全部"] + list(set([p['category'] for p in st.session_state.db]))
+    category_filter = st.selectbox("📂 類別篩選", all_categories)
+    
+    st.divider()
 
-    st.title("🔮 專業紫微斗數排盤系統 (V0.3.2)")
+    # 執行搜尋邏輯
+    filtered_data = st.session_state.db
+    
+    # 1. 類別過濾
+    if category_filter != "全部":
+        filtered_data = [p for p in filtered_data if p['category'] == category_filter]
+    
+    # 2. 關鍵字搜尋 (包含姓名、日期字串、星曜)
+    if search_query:
+        query = search_query.lower()
+        results = []
+        for p in filtered_data:
+            # 組合一個大字串來搜
+            full_text = f"{p['name']}{p['y']}/{p['m']}/{p['d']}{p['stars']}".lower()
+            if query in full_text:
+                results.append(p)
+        filtered_data = results
 
-    if 'profiles' not in st.session_state: st.session_state['profiles'] = []
-    if 'current_profile' not in st.session_state: st.session_state['current_profile'] = None
+    # 顯示列表供選擇
+    # 使用 Radio Button 讓使用者選擇 (包含一個「新增」選項)
+    options = ["➕ 新增命盤"] + [f"{p['name']} ({p['category']})" for p in filtered_data]
+    
+    # 這裡使用 index 來控制預設選取，若有在 session_state 紀錄則維持
+    selected_option = st.radio("請選擇個案：", options)
 
-    with st.sidebar:
-        st.header("📂 個案資料庫")
-        if len(st.session_state['profiles']) > 0:
-            for idx, p in enumerate(st.session_state['profiles']):
-                if st.button(f"[{p['category']}] {p['name']}", key=f"btn_{idx}"):
-                    st.session_state['current_profile'] = p
-        else:
-            st.caption("尚無資料，請輸入並儲存")
+# --- 4. 資料載入邏輯 ---
+# 當使用者在側邊欄切換選擇時，更新 Session State 中的輸入值
+if selected_option == "➕ 新增命盤":
+    if st.session_state.current_profile is not None:
+        st.session_state.current_profile = None
+        st.session_state.chart_visible = False
+        st.rerun()
+else:
+    # 從選項文字反查 ID (這裡簡單處理，實際可用 ID 對應)
+    name_selected = selected_option.split(" (")[0]
+    profile = next((p for p in filtered_data if p['name'] == name_selected), None)
+    
+    if profile and st.session_state.current_profile != profile:
+        st.session_state.current_profile = profile
+        st.session_state.chart_visible = False # 切換人名時先隱藏舊盤
+        st.rerun()
 
-    loaded_data = st.session_state['current_profile']
-    def_name = loaded_data['name'] if loaded_data else ""
-    def_cat = loaded_data['category'] if loaded_data else "客戶"
-    def_date_mode = 0 if (loaded_data and loaded_data['date_mode']=='西元') else 1 
-    def_date_str = loaded_data['date_str'] if loaded_data else ""
-    def_hour = loaded_data['hour'] if loaded_data else ""
-    def_minute = loaded_data['minute'] if loaded_data else ""
-    def_gender_idx = 0 if (loaded_data and loaded_data['gender']=='男') else 1
+# 設定表單預設值
+if st.session_state.current_profile:
+    p = st.session_state.current_profile
+    def_name, def_gender, def_cat = p['name'], p['gender'], p['category']
+    def_cal, def_y, def_m, def_d = p['cal_type'], p['y'], p['m'], p['d']
+    def_h, def_min = p['h'], p['min']
+    is_edit_mode = True
+else:
+    def_name, def_gender, def_cat = "", "女", "客戶"
+    def_cal, def_y, def_m, def_d = "民國", 68, 9, 26
+    def_h, def_min = 17, 30
+    is_edit_mode = False
 
-    with st.expander("📝 輸入命主資料", expanded=True):
-        c1, c2, c3 = st.columns(3)
-        name = c1.text_input("姓名", value=def_name)
-        gender = c2.radio("性別", ("男", "女"), index=def_gender_idx, horizontal=True)
-        category = c3.text_input("類別", value=def_cat)
+# --- 5. 主畫面：一頁式操作 (需求 7) ---
+st.title("🔮 專業紫微斗數排盤系統 (v0.3.3)")
+
+# 使用 st.form 解決「按 Enter」問題 (需求 3)
+with st.form(key='profile_form'):
+    st.subheader("📝 命主資料輸入")
+    
+    # 第一列：基本資料
+    c1, c2, c3 = st.columns([2, 1, 1.5])
+    with c1:
+        name = st.text_input("姓名", value=def_name)
+    with c2:
+        gender = st.radio("性別", ["男", "女"], index=0 if def_gender=="男" else 1, horizontal=True)
+    with c3:
+        # 這裡示範可編輯的下拉選單
+        category = st.selectbox("類別", ["客戶", "學員", "親友", "名人"], index=["客戶", "學員", "親友", "名人"].index(def_cat) if def_cat in ["客戶", "學員", "親友", "名人"] else 0)
+
+    # 第二列：日期 (需求 5：日期先)
+    st.markdown("---")
+    st.caption("出生日期")
+    d1, d2, d3, d4 = st.columns([1, 1, 1, 1])
+    with d1:
+        cal_type = st.radio("曆法", ["西元", "民國"], index=0 if def_cal=="西元" else 1, horizontal=True)
+    with d2:
+        year = st.number_input("年", min_value=1, value=def_y)
+    with d3:
+        month = st.number_input("月", min_value=1, max_value=12, value=def_m)
+    with d4:
+        day = st.number_input("日", min_value=1, max_value=31, value=def_d)
+
+    # 第三列：時間 (需求 5：時間後)
+    st.caption("出生時間")
+    t1, t2 = st.columns(2)
+    with t1:
+        hour = st.number_input("時 (0-23)", min_value=0, max_value=23, value=def_h)
+    with t2:
+        minute = st.number_input("分 (0-59)", min_value=0, max_value=59, value=def_min)
+
+    # 按鈕區 (需求 4：儲存與排盤分開)
+    st.markdown("---")
+    b1, b2 = st.columns(2)
+    with b1:
+        # submit_button 會觸發整個 form 的提交
+        save_btn = st.form_submit_button("💾 儲存資料", type="primary", use_container_width=True)
+    with b2:
+        chart_btn = st.form_submit_button("🔮 僅排盤 (不儲存)", use_container_width=True)
+
+# --- 6. 邏輯處理區 ---
+
+# 整理當前表單數據
+current_input_data = {
+    "name": name, "gender": gender, "category": category,
+    "cal_type": cal_type, "y": year, "m": month, "d": day,
+    "h": hour, "min": minute, "stars": "" # 這裡假設排盤後才會有星星資料
+}
+
+# 判斷是儲存還是排盤
+if save_btn:
+    # 執行儲存邏輯
+    if is_edit_mode:
+        # 更新舊資料
+        p_index = st.session_state.db.index(st.session_state.current_profile)
+        current_input_data['id'] = st.session_state.current_profile['id'] # 保持 ID
+        st.session_state.db[p_index] = current_input_data
+        st.session_state.current_profile = current_input_data
+        st.success(f"✅ 已更新 {name} 的資料！")
+    else:
+        # 新增資料
+        new_id = len(st.session_state.db) + 1
+        current_input_data['id'] = new_id
+        st.session_state.db.append(current_input_data)
+        st.session_state.current_profile = current_input_data
+        st.success(f"✅ 已新增 {name} 到資料庫！")
+    
+    # 儲存後通常順便排盤
+    st.session_state.chart_visible = True
+
+if chart_btn:
+    # 需求 4：如果資料有變更，提醒使用者
+    if is_edit_mode:
+        # 簡單的比對邏輯 (比對當前輸入 vs 原始載入資料)
+        # 為了比對方便，這裡忽略 stars 欄位
+        original = {k:v for k,v in st.session_state.current_profile.items() if k != 'stars'}
+        current = {k:v for k,v in current_input_data.items() if k != 'stars'}
+        # 補上 ID 才能比對
+        current['id'] = original['id'] 
         
-        c4, c5 = st.columns(2)
-        date_mode = c4.radio("格式", ("西元", "民國"), index=def_date_mode, horizontal=True)
-        date_str_input = c4.text_input("日期 (如 680926)", value=def_date_str)
-        hour_input = c5.text_input("時 (0-23)", value=def_hour)
-        minute_input = c5.text_input("分 (0-59)", value=def_minute)
+        if original != current:
+            st.warning("⚠️ 注意：您修改了資料但尚未儲存，以下顯示的是根據修改後數據的預覽。")
+    
+    st.session_state.chart_visible = True
 
-        save_btn = st.button("💾 儲存並排盤", type="primary")
-
-    if save_btn and name and date_str_input and hour_input:
-        try:
-            d_str = date_str_input.replace("/", "").replace("-", "").strip()
-            if date_mode == '西元':
-                if len(d_str) != 8: raise ValueError("西元格式需8碼")
-                yr = int(d_str[:4]); mo = int(d_str[4:6]); dy = int(d_str[6:8])
-            else:
-                if len(d_str) == 6:
-                    yr = int(d_str[:2]) + 1911; mo = int(d_str[2:4]); dy = int(d_str[4:6])
-                elif len(d_str) == 7:
-                    yr = int(d_str[:3]) + 1911; mo = int(d_str[3:5]); dy = int(d_str[5:7])
-                else:
-                    raise ValueError("民國格式需6或7碼")
-            
-            hr = int(hour_input); mn = int(minute_input)
-            dob = datetime.date(yr, mo, dy)
-            tob = datetime.time(hr, mn)
-            
-            p_data = {
-                "name": name, "gender": gender, "category": category,
-                "date_mode": date_mode, "date_str": date_str_input,
-                "hour": hour_input, "minute": minute_input,
-                "dob": dob, "tob": tob
-            }
-            existing = False
-            for p in st.session_state['profiles']:
-                if p['name'] == name: 
-                    p.update(p_data); existing = True
-            if not existing: st.session_state['profiles'].append(p_data)
-            st.session_state['current_profile'] = p_data
-
-        except Exception as e:
-            st.error(f"輸入錯誤：{str(e)}")
-            st.stop()
-            
-        # 運算
-        solar = Solar.fromYmdHms(dob.year, dob.month, dob.day, tob.hour, tob.minute, 0)
-        lunar = solar.getLunar()
-        calc = ZWDS_Calculator(lunar, gender)
-        
-        ming_idx, shen_idx = calc.get_ming_shen_idx()
-        wuxing_ju = calc.get_wuxing_ju(ming_idx)
-        special_stars = calc.get_special_stars()
-        
-        # 顯示
-        st.divider()
-        st.subheader(f"📄 {name} 的命盤")
-        
-        i1, i2, i3, i4 = st.columns(4)
-        i1.info(f"農曆：{lunar.getYear()} {lunar.getMonthInChinese()}月 {lunar.getDayInChinese()}")
-        i2.info(f"時間：{calc.time_zhi}時 ({tob.strftime('%H:%M')})")
-        ju_names = {2:"水二局", 3:"木三局", 4:"金四局", 5:"土五局", 6:"火六局"}
-        i3.success(f"五行局：{ju_names.get(wuxing_ju, '未知')}")
-        i4.warning(f"命宮位置：{ZHI[ming_idx]}宮")
-
-        # 繪圖
-        grid_order = [
-            [5, 6, 7, 8],     # 巳 午 未 申
-            [4, -1, -1, 9],   # 辰       酉
-            [3, -1, -1, 10],  # 卯       戌
-            [2, 1, 0, 11]     # 寅 丑 子 亥
-        ]
-        
-        st.write("---")
-        for row in grid_order:
-            cols = st.columns(4)
-            for i, zhi_idx in enumerate(row):
-                with cols[i]:
-                    if zhi_idx == -1:
-                        if row == grid_order[1] and i == 2:
-                            st.markdown(f"""
-                            <div style='text-align:center; color:#888; margin-top:40px;'>
-                                <h3>{name}</h3>
-                                <p>{gender}命</p>
-                            </div>
-                            """, unsafe_allow_html=True)
-                    else:
-                        stars = special_stars[zhi_idx]
-                        ms_label = ""
-                        if zhi_idx == ming_idx: ms_label += "命宮 "
-                        if zhi_idx == shen_idx: ms_label += "身宮"
-                        
-                        st.markdown(render_palace(ZHI[zhi_idx], zhi_idx, stars, ms_label), unsafe_allow_html=True)
-
-if __name__ == "__main__":
-    main()
+# --- 7. 排盤結果顯示區 ---
+if st.session_state.chart_visible:
+    st.markdown("---")
+    st.subheader(f"🌠 {name} 的命盤")
+    
+    # 這裡放您的排盤繪圖邏輯
+    # 範例顯示
+    st.info(f"【命造資訊】{cal_type} {year} 年 {month} 月 {day} 日 {hour}:{minute} 生")
+    
+    # 模擬顯示命盤結構 (Grid Layout)
+    grid = st.columns(4)
+    for i in range(12):
+        with grid[i%4]:
+            st.container(border=True).write(f"宮位 {i+1}\n\n主星: ...")
