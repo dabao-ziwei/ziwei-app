@@ -2,7 +2,7 @@ import streamlit as st
 import time
 from lunar_python import Lunar, Solar
 
-# --- 1. 頁面設定與 CSS 樣式 (魔改按鈕樣式) ---
+# --- 1. 頁面設定與 CSS 樣式 (極致緊湊版) ---
 st.set_page_config(page_title="專業紫微斗數排盤系統", page_icon="🔮", layout="centered")
 
 st.markdown("""
@@ -19,8 +19,8 @@ st.markdown("""
         background-color: #555;
         border: 4px solid #333;
         border-radius: 6px;
-        margin-top: 0px; /* 緊貼頂部 */
-        margin-bottom: 5px; /* 緊貼下方控制列 */
+        margin-top: 0px; 
+        margin-bottom: 0px; /* 緊貼下方 */
         font-family: "Microsoft JhengHei", sans-serif;
     }
     
@@ -38,7 +38,7 @@ st.markdown("""
         cursor: pointer;
     }
     
-    /* 狀態顯示 (大限/流年高亮) */
+    /* 狀態顯示 */
     .zwds-cell.active-daxian {
         background-color: #1a2a40 !important; 
         border: 1px solid #4da6ff;
@@ -69,53 +69,62 @@ st.markdown("""
     .cell-name { position: absolute; bottom: 2px; left: 4px; background-color: #444; color: #ccc; padding: 0 3px; font-size: 11px; border-radius: 2px; }
     .cell-ganzhi { position: absolute; bottom: 2px; right: 4px; color: #aaa; font-weight: bold; font-size: 13px; }
     
-    /* === 關鍵 CSS: 打造表格化按鈕 (Timeline Strip) === */
+    /* === 關鍵 CSS: 打造無縫表格 (Seamless Table) === */
     
-    /* 強制讓 column 之間的間距變小，模擬表格 */
+    /* 1. 移除 Column 之間的間隙 (Horizontal Gap) */
     [data-testid="column"] {
         padding: 0px !important;
         min-width: 0px !important;
     }
     
-    /* 按鈕基礎樣式：方正、無邊距、像表格儲存格 */
+    /* 2. 移除 Horizontal Block 內部的 Gap (這是 Streamlit v1.10+ 的關鍵) */
+    [data-testid="stHorizontalBlock"] {
+        gap: 0px !important;
+    }
+    
+    /* 3. 按鈕基礎樣式：完全方正，無邊距 */
     div.stButton > button {
         width: 100%;
         border-radius: 0px;
-        border: 1px solid #444;
+        border: 1px solid #333; /* 細邊框 */
         margin: 0px;
-        padding: 8px 2px; /* 上下有點空間，左右緊湊 */
+        padding: 10px 0px; /* 增加上下 padding 讓字置中 */
         font-size: 12px;
-        line-height: 1.1;
-        height: 100%;
-        background-color: #262730;
-        color: #fff;
+        line-height: 1.2;
+        height: auto;
+        min-height: 50px; /* 固定高度，確保整齊 */
+        background-color: #222;
+        color: #ccc;
+        transition: all 0.2s;
     }
     
-    /* Hover 效果 */
+    /* Hover */
     div.stButton > button:hover {
-        border-color: #4da6ff;
-        color: #4da6ff;
+        border-color: #666;
+        color: #fff;
+        background-color: #333;
+        z-index: 2; /* 浮起 */
     }
     
-    /* 選中狀態 - 大限 (深紫色風格) */
+    /* 選中狀態 - 大限 (深紫) */
     div.stButton > button.daxian-active {
-        background-color: #4B0082 !important; /* Indigo */
+        background-color: #4B0082 !important; 
         color: white !important;
-        border: 1px solid #9933ff !important;
+        border: 1px solid #aaa !important;
         font-weight: bold;
     }
     
-    /* 選中狀態 - 流年 (亮藍色風格) */
+    /* 選中狀態 - 流年 (亮藍/青色) */
     div.stButton > button.liunian-active {
-        background-color: #008CBA !important; /* Blue */
+        background-color: #008CBA !important;
         color: white !important;
-        border: 1px solid #00bfff !important;
+        border: 1px solid #fff !important;
         font-weight: bold;
     }
-    
-    /* 修正 Streamlit 預設容器邊距，讓控制列緊貼命盤 */
+
+    /* 調整主容器邊距 */
     .block-container {
-        padding-top: 2rem;
+        padding-top: 1rem;
         padding-bottom: 2rem;
     }
     
@@ -249,24 +258,6 @@ with st.expander("📝 資料輸入 / 修改", expanded=(not st.session_state.sh
         with b1: btn_save = st.form_submit_button("💾 儲存並排盤", type="primary", use_container_width=True)
         with b2: btn_calc = st.form_submit_button("🧪 僅試算", use_container_width=True)
 
-if btn_save or btn_calc:
-    y, m, d, cal = parse_date(i_date)
-    h, mn = int(i_time[:2]) if len(i_time)==4 else 0, int(i_time[2:]) if len(i_time)==4 else 0
-    if not i_name or y==0: st.error("資料不完整")
-    else:
-        calc = ZWDSCalculator(y, m, d, h, mn, i_gen)
-        p_data, m_star, bur, b_yr = calc.get_result()
-        pkt = {"name": i_name, "gender": i_gen, "category": i_cat, "y": y, "m": m, "d": d, "h": h, "min": mn, "cal_type": cal, "ming_star": m_star, "bureau": bur, "palace_data": p_data}
-        if btn_save:
-            pkt['id'] = int(time.time()) if st.session_state.current_id==0 else st.session_state.current_id
-            if st.session_state.current_id==0: st.session_state.db.append(pkt); st.session_state.current_id = pkt['id']
-            else: 
-                for idx, x in enumerate(st.session_state.db):
-                    if x['id']==st.session_state.current_id: st.session_state.db[idx]=pkt
-            st.session_state.temp_preview_data = None; st.session_state.show_chart = True; st.rerun()
-        if btn_calc:
-            st.session_state.temp_preview_data = pkt; st.session_state.show_chart = True
-
 # --- 5. 排盤與時間軸 (Sticky Timeline) ---
 if st.session_state.show_chart:
     data = st.session_state.temp_preview_data or next((x for x in st.session_state.db if x['id']==st.session_state.current_id), None)
@@ -275,22 +266,18 @@ if st.session_state.show_chart:
         p_data, m_star, bur, b_yr = calc_obj.get_result()
         sorted_limits = sorted(p_data.items(), key=lambda x: x[1]['age_start'])
 
-        # 計算位置
         daxian_idx = st.session_state.sel_daxian_idx
         liunian_off = st.session_state.sel_liunian_offset
-        
         d_pos_idx, d_info = sorted_limits[daxian_idx]
         daxian_pos = int(d_pos_idx)
-        
         start_age = d_info['age_start']
         curr_year = b_yr + start_age + liunian_off - 1
         ln_gan, ln_zhi = get_ganzhi_for_year(curr_year)
-        
         liunian_pos = -1
         for pid, info in p_data.items():
             if info['zhi_idx'] == ln_zhi: liunian_pos = int(pid); break
 
-        # === A. 命盤繪製 ===
+        # === A. 命盤 ===
         layout = [(5,"巳",1,1),(6,"午",1,2),(7,"未",1,3),(8,"申",1,4),(4,"辰",2,1),(9,"酉",2,4),(3,"卯",3,1),(10,"戌",3,4),(2,"寅",4,1),(1,"丑",4,2),(0,"子",4,3),(11,"亥",4,4)]
         cells_html = ""
         for idx, branch, r, c in layout:
@@ -311,29 +298,25 @@ if st.session_state.show_chart:
         center_html += f'<hr style="width:80%;border-color:#444;margin:5px 0;"><div style="color:#fff;">命宮: {data.get("ming_star","")}</div></div>'
         st.markdown(f'<div class="zwds-grid">{cells_html}{center_html}</div>', unsafe_allow_html=True)
         
-        # === B. 表格化控制列 (Timeline Strip) ===
+        # === B. 無縫控制列 (Seamless Strip) ===
         limit_names = ["一限", "二限", "三限", "四限", "五限", "六限", "七限", "八限", "九限", "十限", "十一", "十二"]
         
-        # Row 1: 大限列表 (12個)
-        # 為了要做出「長條表格」感，這裡使用 12 columns，並透過 CSS 去除 padding
+        # Row 1: 大限
         cols_d = st.columns(12)
         for i, col in enumerate(cols_d):
             pos_idx, info = sorted_limits[i]
             gz = f"{GAN[info['gan_idx']]}{ZHI[info['zhi_idx']]}"
             label = f"{limit_names[i]}\n{gz}"
-            
-            # 判斷選中狀態 (透過 key 觸發，透過 CSS class 變色)
-            # 這裡有點小技巧：我們無法直接給 button 加 class，但可以透過 type="primary" 來區分
-            # 如果是選中的，用 primary，否則 secondary
             is_selected = (i == daxian_idx)
             btn_type = "primary" if is_selected else "secondary"
-            
             if col.button(label, key=f"d_{i}", type=btn_type, use_container_width=True):
-                st.session_state.sel_daxian_idx = i
-                st.session_state.sel_liunian_offset = 0
-                st.rerun()
+                st.session_state.sel_daxian_idx = i; st.session_state.sel_liunian_offset = 0; st.rerun()
 
-        # Row 2: 流年列表 (10個)
+        # === 垂直縫隙消除術 (Vertical Gap Killer) ===
+        # 使用負 Margin 將下方元素強行拉上，抵銷 Streamlit 預設的 1rem 間距
+        st.markdown('<div style="margin-top: -22px;"></div>', unsafe_allow_html=True)
+
+        # Row 2: 流年
         cols_l = st.columns(10)
         for j, col in enumerate(cols_l):
             age = d_info['age_start'] + j
@@ -341,32 +324,18 @@ if st.session_state.show_chart:
             gy, zy = get_ganzhi_for_year(yr)
             gz = f"{GAN[gy]}{ZHI[zy]}"
             label = f"{yr}{gz}\n{age}"
-            
             is_selected = (j == liunian_off)
             btn_type = "primary" if is_selected else "secondary"
-            
             if col.button(label, key=f"l_{j}", type=btn_type, use_container_width=True):
-                st.session_state.sel_liunian_offset = j
-                st.rerun()
-        
-        # 注入 JavaScript / CSS hack 讓 Primary button 變成我們想要的顏色
-        # 這是為了覆蓋 Streamlit 預設的紅色 Primary
+                st.session_state.sel_liunian_offset = j; st.rerun()
+
+        # JS/CSS 注入：確保 Primary Button 顏色覆寫
         st.markdown("""
-        <script>
-            // 由於 Streamlit 不允許直接注入 CSS 到按鈕內部，這裡純依賴上方的 CSS style 
-            // 透過 .stButton button[kind="primary"] 來抓取選中項目
-        </script>
         <style>
-            /* 覆寫 Primary Button 顏色為自定義樣式 */
             div.stButton > button[kind="primary"] {
-                background-color: #4B0082 !important; /* 選中的大限變深紫 */
+                background-color: #4B0082 !important;
                 border-color: #9933ff !important;
                 color: white !important;
             }
-            /* 針對第二列流年，我們希望它是藍色，但 CSS 選擇器很難區分這兩列按鈕 */
-            /* 變通方法：我們接受選中都是深紫色，這也很清楚。或者... */
-            
-            /* 更精細的 CSS：利用 nth-of-type 區分第一排(大限)和第二排(流年)容器? 
-               Streamlit 結構複雜，這裡先統一用深紫色高亮，保持簡潔。 */
         </style>
         """, unsafe_allow_html=True)
