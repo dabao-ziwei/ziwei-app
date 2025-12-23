@@ -3,7 +3,7 @@ import time
 from lunar_python import Lunar, Solar
 
 # ==========================================
-# 1. 頁面設定與 CSS 樣式 (v2.2 縮排修正版)
+# 1. 頁面設定與 CSS 樣式 (v3.0 最終修正版：強制緊湊排版)
 # ==========================================
 st.set_page_config(page_title="專業紫微斗數排盤系統", page_icon="🔮", layout="wide")
 
@@ -15,20 +15,23 @@ st.markdown("""
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
-    /* 去除 Streamlit 預設間距 */
-    .block-container { padding-top: 1rem; padding-bottom: 3rem; }
+    /* 去除 Streamlit 預設間距 (關鍵：避免版面被撐大) */
+    .block-container { padding-top: 1rem; padding-bottom: 2rem; }
     [data-testid="stVerticalBlock"] { gap: 0px !important; }
     
-    /* === 命盤網格系統 === */
+    /* === 命盤網格系統 (鎖定高度) === */
     .zwds-grid {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
-        grid-template-rows: repeat(4, 160px);
-        gap: 6px;
-        background-color: #222; 
-        padding: 5px;
+        grid-template-rows: repeat(4, 150px); /* 強制固定高度 150px */
+        gap: 4px;
+        background-color: #333; 
+        padding: 4px;
         margin-bottom: 5px;
         font-family: "Microsoft JhengHei", sans-serif;
+        max-width: 1200px; /* 限制最大寬度，避免在寬螢幕變超級大 */
+        margin-left: auto;
+        margin-right: auto;
     }
     
     /* 手機版適配 */
@@ -42,8 +45,8 @@ st.markdown("""
     /* 單一宮位卡片 */
     .zwds-cell {
         background-color: #1e1e1e;
-        border: 1px solid #333;
-        border-radius: 4px;
+        border: 1px solid #444;
+        border-radius: 2px;
         padding: 4px;
         position: relative;
         display: flex;
@@ -56,27 +59,29 @@ st.markdown("""
     .active-daxian { border: 1px solid #4da6ff !important; box-shadow: inset 0 0 10px rgba(77, 166, 255, 0.2); }
     .active-liunian { border: 2px solid #ff4d4d !important; z-index: 10; }
 
-    /* === 核心排版：左右分欄 === */
+    /* === 核心排版：左右分欄 (回到最初設計) === */
     .stars-box {
         display: flex;
         flex-direction: row;
         flex: 1;
         min-height: 0;
+        align-items: flex-start;
     }
 
-    /* 左側：主星欄 */
+    /* 左側：主星欄 (鎖定寬度) */
     .main-stars-col {
         display: flex;
         flex-direction: column;
         align-items: center;
-        padding-right: 6px;
-        margin-right: 4px;
+        width: 36px; /* 固定寬度 */
+        min-width: 36px;
         border-right: 1px dashed #444;
-        min-width: 38px;
+        margin-right: 4px;
+        padding-top: 2px;
     }
 
     .star-major {
-        font-size: 1.3rem;
+        font-size: 16px; /* 強制 px 單位 */
         font-weight: bold;
         line-height: 1.1;
         color: #b197fc;
@@ -84,6 +89,7 @@ st.markdown("""
         writing-mode: vertical-rl;
         text-shadow: 0 0 2px rgba(177, 151, 252, 0.3);
         position: relative;
+        letter-spacing: 1px;
     }
 
     /* 右側：副星與雜曜欄 */
@@ -97,22 +103,21 @@ st.markdown("""
 
     /* 星星標籤樣式 */
     .star-tag {
-        font-size: 0.8rem;
-        padding: 0 2px;
-        border-radius: 2px;
-        line-height: 1.2;
+        font-size: 11px; /* 小字體 */
+        padding: 0 1px;
+        line-height: 1.3;
     }
     
     .color-bad { color: #ff6b6b; font-weight: bold; }
     .color-good { color: #51cf66; font-weight: bold; }
-    .color-normal { color: #aaaaaa; font-size: 0.75rem; }
+    .color-normal { color: #aaaaaa; }
     
-    /* 四化標籤 */
+    /* 四化標籤 (精確定位) */
     .hua-badge {
-        font-size: 0.6rem;
+        font-size: 9px;
         color: #fff;
         border-radius: 2px;
-        padding: 1px;
+        padding: 0px 2px;
         position: absolute;
         bottom: -10px; 
         left: 50%;
@@ -125,9 +130,9 @@ st.markdown("""
     .sh-ke { background-color: #e67700; }
     .sh-ji { background-color: #c92a2a; }
 
-    /* === 底部資訊區 === */
+    /* === 底部資訊區 (緊湊化) === */
     .cell-footer {
-        margin-top: 4px;
+        margin-top: 2px;
         border-top: 1px solid #333;
         padding-top: 2px;
         display: flex;
@@ -138,32 +143,32 @@ st.markdown("""
     .footer-left {
         display: flex;
         flex-direction: column;
-        align-items: flex-start;
         line-height: 1;
     }
     
-    .ganzhi-label { color: #888; font-size: 0.8rem; }
-    .zhi-label { color: #ddd; font-size: 1.1rem; font-weight: bold; }
+    .ganzhi-label { color: #888; font-size: 10px; }
+    .zhi-label { color: #ddd; font-size: 14px; font-weight: bold; }
 
     .footer-right {
         text-align: right;
         display: flex;
         flex-direction: column;
         align-items: flex-end;
+        line-height: 1.1;
     }
 
-    .palace-name { font-size: 0.95rem; font-weight: bold; color: #fff; }
-    .limit-info { font-size: 0.7rem; color: #666; }
+    .palace-name { font-size: 13px; font-weight: bold; color: #fff; }
+    .limit-info { font-size: 10px; color: #888; }
 
     .status-tags { display: flex; gap: 2px; margin-top: 2px; }
-    .tag-flow { font-size: 0.7rem; padding: 0 3px; border-radius: 2px; color: white; }
+    .tag-flow { font-size: 9px; padding: 0 3px; border-radius: 2px; color: white; }
     .tag-liu { background-color: #c92a2a; }
     .tag-da { background-color: #1971c2; }
 
-    /* 中宮資訊 */
+    /* 中宮資訊 (修正過大問題) */
     .center-info-box {
         grid-column: 2 / 4; grid-row: 2 / 4;
-        background-color: #111;
+        background-color: #181818;
         display: flex; flex-direction: column;
         justify-content: center; align-items: center; text-align: center;
         border: 1px solid #444;
@@ -173,8 +178,9 @@ st.markdown("""
     /* 按鈕列樣式 */
     div.stButton > button {
         width: 100%; border-radius: 0; border: 1px solid #444; 
-        font-size: 12px; height: auto; min-height: 40px;
+        font-size: 12px; height: auto; min-height: 35px;
         background-color: #222; color: #ccc;
+        margin: 0;
     }
     div.stButton > button:hover { border-color: #888; color: white; }
     div.stButton > button[kind="primary"] { background-color: #4B0082 !important; color: white !important; border: 1px solid #d4a0ff !important; }
@@ -222,7 +228,7 @@ class ZWDSCalculator:
         start_idx = 2 
         self.ming_pos = (start_idx + (self.lunar_month - 1) - self.time_zhi_idx) % 12
         self.shen_pos = (start_idx + (self.lunar_month - 1) + self.time_zhi_idx) % 12
-        # 更名：交友 -> 僕役
+        # 名稱設定：僕役
         names = ["命宮", "兄弟", "夫妻", "子女", "財帛", "疾厄", "遷移", "僕役", "官祿", "田宅", "福德", "父母"]
         for i in range(12):
             pos = (self.ming_pos - i) % 12
@@ -387,15 +393,13 @@ if btn_save or btn_calc:
         if btn_calc: st.session_state.temp_preview_data = pkt; st.session_state.show_chart = True
 
 # ==========================================
-# 5. 排盤顯示核心 (HTML 組合邏輯修正版 - 無縮排)
+# 5. 排盤顯示核心 (組合 HTML - 無縮排版)
 # ==========================================
 if st.session_state.show_chart:
     data = st.session_state.temp_preview_data or next((x for x in st.session_state.db if x['id']==st.session_state.current_id), None)
     if data:
-        # 重建運算物件
         calc_obj = ZWDSCalculator(data['y'], data['m'], data['d'], data['h'], data['min'], data['gender'])
         
-        # 準備大限與流年資料
         sorted_limits = sorted(calc_obj.palaces.items(), key=lambda x: x[1]['age_start'])
         daxian_idx = st.session_state.sel_daxian_idx
         liunian_off = st.session_state.sel_liunian_offset
@@ -406,10 +410,8 @@ if st.session_state.show_chart:
         daxian_gan = d_info['gan_idx']
         ln_gan, ln_zhi = get_ganzhi_for_year(curr_year)
         
-        # 執行飛星
         calc_obj.calculate_sihua(daxian_gan, ln_gan)
         
-        # 找流年命宮
         liunian_pos = -1
         for pid, info in calc_obj.palaces.items():
             if info['zhi_idx'] == ln_zhi: liunian_pos = int(pid); break
@@ -424,22 +426,21 @@ if st.session_state.show_chart:
         for idx, branch, r, c in layout:
             info = calc_obj.palaces[idx]
             
-            # 判斷 Class
             classes = []
             if idx == daxian_pos: classes.append("active-daxian")
             if idx == liunian_pos: classes.append("active-liunian")
             
-            # --- 1. 左欄：主星 HTML (完全無縮排拼接) ---
+            # --- 主星 ---
             main_stars_html = ""
             for star in info['major_stars']:
                 sihua_html = ""
                 for sh in star['sihua']:
                     bg_cls = {"祿":"sh-lu", "權":"sh-quan", "科":"sh-ke", "忌":"sh-ji"}[sh['type']]
                     sihua_html += f'<span class="hua-badge {bg_cls}">{sh["type"]}</span>'
-                
+                # 這裡最關鍵：字串不要換行
                 main_stars_html += f'<div class="star-major">{star["name"]}{sihua_html}</div>'
             
-            # --- 2. 右欄：副星/雜曜 HTML ---
+            # --- 副星 ---
             sub_stars_html = ""
             for m_name, is_bad in info['minor_stars']:
                 if m_name == "祿存": style_cls = "color-good"
@@ -447,49 +448,41 @@ if st.session_state.show_chart:
                 else: style_cls = "color-normal"
                 sub_stars_html += f'<span class="star-tag {style_cls}">{m_name}</span>'
             
-            # --- 3. 底部資訊 ---
-            is_liu = (idx == liunian_pos)
-            is_da = (idx == daxian_pos)
-            
+            # --- 狀態標籤 ---
             status_tags = ""
-            if is_liu: status_tags += '<div class="tag-flow tag-liu">流命</div>'
-            if is_da: status_tags += '<div class="tag-flow tag-da">大限</div>'
+            if (idx == liunian_pos): status_tags += '<div class="tag-flow tag-liu">流命</div>'
+            if (idx == daxian_pos): status_tags += '<div class="tag-flow tag-da">大限</div>'
             
-            # --- 4. 組合 Cell HTML (極度重要：不要用多行字串，改用 +=) ---
-            # 這樣可以確保 Streamlit 不會誤判縮排
+            # --- 組合 Cell HTML (純拼接) ---
             cell_html = f'<div class="zwds-cell {" ".join(classes)}" style="grid-row: {r}; grid-column: {c};">'
             cell_html += '<div class="stars-box">'
             cell_html += f'<div class="main-stars-col">{main_stars_html}</div>'
             cell_html += f'<div class="sub-stars-col">{sub_stars_html}</div>'
             cell_html += '</div>'
-            
             cell_html += '<div class="cell-footer">'
             cell_html += '<div class="footer-left">'
             cell_html += f'<span class="ganzhi-label">{GAN[info["gan_idx"]]}</span>'
             cell_html += f'<span class="zhi-label">{branch}</span>'
             cell_html += '</div>'
-            
             cell_html += '<div class="footer-right">'
             cell_html += f'<div class="palace-name">{info["name"]}</div>'
             cell_html += f'<div class="limit-info">{info["age_start"]}-{info["age_end"]}</div>'
             cell_html += f'<div class="status-tags">{status_tags}</div>'
-            cell_html += '</div></div>'
-            cell_html += '</div>'
+            cell_html += '</div></div></div>'
             
             cells_html += cell_html
             
-        # 中宮資訊
+        # 中宮
         center_html = '<div class="center-info-box">'
-        center_html += f'<h3 style="margin:0;color:#d4a0ff;font-size:1.5rem;">{data["name"]}</h3>'
-        center_html += f'<div style="color:#aaa;font-size:0.9rem;margin:5px 0;">{data["gender"]} | {calc_obj.bureau_name} | {data.get("ming_star","")}坐命</div>'
-        center_html += f'<div style="color:#4CAF50;">國曆：{data["y"]}/{data["m"]}/{data["d"]} {data["h"]}:{data["min"]:02d}</div>'
-        center_html += f'<div style="color:#888;font-size:0.8rem;">農曆：{calc_obj.lunar.getYearInGanZhi()}年 {calc_obj.lunar.getMonthInChinese()}月 {calc_obj.lunar.getDayInChinese()}</div>'
+        center_html += f'<h3 style="margin:0;color:#d4a0ff;font-size:24px;">{data["name"]}</h3>'
+        center_html += f'<div style="color:#aaa;font-size:14px;margin:5px 0;">{data["gender"]} | {calc_obj.bureau_name} | {data.get("ming_star","")}坐命</div>'
+        center_html += f'<div style="color:#4CAF50;font-size:14px;">國曆：{data["y"]}/{data["m"]}/{data["d"]} {data["h"]}:{data["min"]:02d}</div>'
+        center_html += f'<div style="color:#888;font-size:12px;">農曆：{calc_obj.lunar.getYearInGanZhi()}年 {calc_obj.lunar.getMonthInChinese()}月 {calc_obj.lunar.getDayInChinese()}</div>'
         center_html += '</div>'
         
-        # 渲染
         st.markdown(f'<div class="zwds-grid">{cells_html}{center_html}</div>', unsafe_allow_html=True)
         
-        # B. 運限控制列
+        # B. 運限控制
         st.markdown("---")
         limit_names = ["一限", "二限", "三限", "四限", "五限", "六限", "七限", "八限", "九限", "十限", "十一", "十二"]
         cols_d = st.columns(12)
