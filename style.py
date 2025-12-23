@@ -4,34 +4,29 @@ def apply_style():
     st.markdown("""
     <style>
         /* =================================================================
-           1. 基礎設定 & 淺色模式強制
+           1. 基礎設定 (白底黑字強制)
            ================================================================= */
         :root {
             --primary-color: #4B0082;
             --background-color: #ffffff;
-            --secondary-background-color: #ffffff;
             --text-color: #000000;
-            --font: sans-serif;
         }
         
         .stApp { background-color: #ffffff !important; color: #000000 !important; }
-        header[data-testid="stHeader"] { background-color: #ffffff !important; border-bottom: 1px solid #eee !important; }
+        header[data-testid="stHeader"] { background-color: #ffffff !important; border-bottom: 1px solid #f0f0f0 !important; }
 
-        /* 輸入框與元件強制白底黑字 (維持之前的修正) */
+        /* 元件強制白底 */
         div[data-baseweb="input"] { background-color: #ffffff !important; border: 1px solid #ccc !important; }
         div[data-baseweb="input"] input { color: #000000 !important; caret-color: #000000 !important; }
-        div[data-testid="stExpander"] details > summary { background-color: #f8f9fa !important; color: #000000 !important; border: 1px solid #ccc !important; }
         button[kind="secondary"] { background-color: #ffffff !important; color: #000000 !important; border: 1px solid #ccc !important; }
-        div[data-baseweb="select"] > div { background-color: #ffffff !important; color: #000000 !important; border-color: #ccc !important; }
-        div[data-baseweb="select"] span { color: #000000 !important; }
-        ul[data-baseweb="menu"] { background-color: #ffffff !important; }
+        div[data-baseweb="select"] > div { background-color: #ffffff !important; color: #000000 !important; }
         label, .stMarkdown p { color: #333 !important; }
 
         /* =================================================================
-           2. 命盤網格與間距
+           2. 版面與網格
            ================================================================= */
         .block-container {
-            padding-top: 6rem !important; /* 避免標題被遮擋 */
+            padding-top: 6rem !important; 
             padding-bottom: 3rem !important;
             max-width: 1200px !important;
         }
@@ -67,14 +62,13 @@ def apply_style():
             overflow: hidden;
         }
 
-        .active-daxian { background-color: #f5f5f5 !important; border: 2px solid #666 !important; }
+        /* 狀態高亮邊框 */
+        .active-daxian { background-color: #f9f9f9 !important; border: 2px solid #666 !important; }
         .active-liunian { border: 3px solid #007bff !important; z-index: 5; }
 
         /* =================================================================
-           3. 星曜與標籤排版 (針對問題點的修正)
+           3. 星曜樣式 (修正重點：深紅主星、黑色雜曜)
            ================================================================= */
-        
-        /* 星曜區塊容器：水平排列多顆主星 */
         .stars-box {
             display: flex;
             flex-direction: row; 
@@ -83,66 +77,75 @@ def apply_style():
             align-items: flex-start;
         }
 
-        /* 單顆主星欄位：垂直堆疊 (名字在上，四化在下) */
         .star-major-container {
             display: flex;
-            flex-direction: column; /* 關鍵：垂直排列 */
-            align-items: center;    /* 水平置中 */
-            margin-left: 4px;
-            margin-right: 4px;
-            /* 這裡不要設 writing-mode，只讓內部的名字直書 */
+            flex-direction: column;
+            align-items: center;
+            margin-left: 2px;
+            margin-right: 2px;
         }
 
-        /* 主星名字：直書 */
+        /* 主星：深紅色、粗體 */
         .star-name {
             font-size: 18px; 
             font-weight: 900;
-            color: #000;
+            color: #8B0000; /* 深紅色 */
             letter-spacing: 2px;
             margin-bottom: 4px;
-            writing-mode: vertical-rl; /* 文字直排 */
-            text-orientation: upright; /* 字體轉正 */
+            writing-mode: vertical-rl;
+            text-orientation: upright;
         }
 
-        /* 四化標籤：橫書，堆疊在下方 */
+        /* 四化標籤 */
         .hua-badge {
-            font-size: 11px; /* 稍微加大 */
+            font-size: 11px;
             border-radius: 3px;
             padding: 1px 3px;
             color: #fff;
             text-align: center;
             font-weight: bold;
-            margin-top: 2px; /* 標籤間距 */
-            width: 18px;     /* 固定寬度，整齊 */
+            margin-top: 2px;
+            width: 18px;
             line-height: 1.2;
-            display: block;  /* 確保換行 */
+            display: block;
         }
-        
         .bg-ben { background-color: #d32f2f; } /* 紅 */
         .bg-da  { background-color: #808080; } /* 灰 */
         .bg-liu { background-color: #0056b3; } /* 藍 */
 
-        /* 副星欄：直書，從右排到左 */
+        /* 副星：黑色 */
         .sub-stars-col {
             display: flex;
             flex-direction: row-reverse;
             flex-wrap: wrap-reverse;
             align-content: flex-start;
             gap: 4px;
-            margin-left: auto; /* 靠右對齊 */
+            margin-left: auto;
         }
 
-        .star-medium, .star-small {
+        .star-medium {
+            font-size: 14px;
+            font-weight: bold;
+            color: #000000; /* 純黑 */
             writing-mode: vertical-rl;
             line-height: 1;
         }
-        .star-medium { font-size: 14px; font-weight: bold; color: #333; }
-        .star-small { font-size: 10px; color: #666; margin-top: 2px; }
+        
+        .star-small {
+            font-size: 10px;
+            color: #000000; /* 純黑 */
+            writing-mode: vertical-rl;
+            line-height: 1;
+            margin-top: 2px;
+        }
+        
+        /* 祿存權科忌 的顏色 (文字顏色維持特殊色以示區別，還是您希望全黑？目前維持特殊色較易讀) */
+        /* 若希望祿存也是黑色，可移除 color-good 設定。這裡暫時保留綠色以突顯祿存 */
         .color-bad { color: #d32f2f !important; } 
         .color-good { color: #2e7d32 !important; } 
 
         /* =================================================================
-           4. 底部資訊 (修正天干太小的問題)
+           4. 底部資訊 (修正重點：三層宮名堆疊)
            ================================================================= */
         .cell-footer {
             margin-top: 2px;
@@ -157,31 +160,49 @@ def apply_style():
             display: flex; 
             flex-direction: column; 
             line-height: 1; 
-            align-items: center; /* 讓干支置中對齊 */
+            align-items: center; 
         }
         
-        /* 修正：天干 (Gan) 加大加黑 */
-        .ganzhi-label { 
-            color: #000000 !important; /* 改成全黑 */
-            font-size: 16px !important; /* 加大到 16px (與地支一樣) */
-            font-weight: 900 !important; 
-            margin-bottom: -2px; /* 稍微拉近與地支的距離 */
-        }
-        
-        /* 地支 (Zhi) */
-        .zhi-label { 
-            color: #000000; 
-            font-size: 16px; 
-            font-weight: 900; 
+        .ganzhi-label { color: #000000 !important; font-size: 16px !important; font-weight: 900 !important; margin-bottom: -2px; }
+        .zhi-label { color: #000000; font-size: 16px; font-weight: 900; }
+
+        /* 右側宮名堆疊區 */
+        .footer-right { 
+            text-align: right; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: flex-end; 
+            line-height: 1.2;
         }
 
-        .footer-right { text-align: right; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
-        .palace-name { font-size: 14px; font-weight: 900; color: #000; }
-        .limit-info { font-size: 12px; color: #444; font-weight: bold; }
-        .status-tags { display: flex; gap: 2px; margin-top: 2px; }
-        .tag-flow { font-size: 10px; padding: 1px 3px; border-radius: 2px; color: white; font-weight: bold; }
-        .tag-liu { background-color: #0056b3; } 
-        .tag-da { background-color: #666; } 
+        /* 1. 流年宮名 (藍色) */
+        .p-name-liu {
+            color: #0056b3;
+            font-size: 14px;
+            font-weight: 900;
+        }
+        
+        /* 2. 大限宮名 (深灰色) */
+        .p-name-da {
+            color: #666666;
+            font-size: 14px;
+            font-weight: 900;
+        }
+        
+        /* 3. 本命宮名 (紅色) */
+        .p-name-ben {
+            color: #d32f2f;
+            font-size: 14px;
+            font-weight: 900;
+        }
+        
+        /* 歲數範圍 (接在本命宮名旁或下方) */
+        .limit-info {
+            font-size: 11px;
+            color: #333;
+            font-weight: normal;
+            margin-left: 2px;
+        }
 
         .center-info-box {
             grid-column: 2 / 4; grid-row: 2 / 4;
