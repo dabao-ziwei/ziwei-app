@@ -2,7 +2,7 @@ import streamlit as st
 import time
 from lunar_python import Lunar, Solar
 
-# --- 1. 頁面設定與 CSS 樣式 (極致緊湊版) ---
+# --- 1. 頁面設定與 CSS 樣式 (極致無縫版) ---
 st.set_page_config(page_title="專業紫微斗數排盤系統", page_icon="🔮", layout="centered")
 
 st.markdown("""
@@ -69,33 +69,31 @@ st.markdown("""
     .cell-name { position: absolute; bottom: 2px; left: 4px; background-color: #444; color: #ccc; padding: 0 3px; font-size: 11px; border-radius: 2px; }
     .cell-ganzhi { position: absolute; bottom: 2px; right: 4px; color: #aaa; font-weight: bold; font-size: 13px; }
     
-    /* === 關鍵 CSS: 打造無縫表格 (Seamless Table) === */
+    /* === 關鍵 CSS: 無縫表格修正 === */
     
-    /* 1. 移除 Column 之間的間隙 (Horizontal Gap) */
-    [data-testid="column"] {
-        padding: 0px !important;
-        min-width: 0px !important;
-    }
+    /* 1. 移除 Column 間隙 */
+    [data-testid="column"] { padding: 0px !important; min-width: 0px !important; }
+    [data-testid="stHorizontalBlock"] { gap: 0px !important; }
     
-    /* 2. 移除 Horizontal Block 內部的 Gap (這是 Streamlit v1.10+ 的關鍵) */
-    [data-testid="stHorizontalBlock"] {
-        gap: 0px !important;
-    }
-    
-    /* 3. 按鈕基礎樣式：完全方正，無邊距 */
+    /* 2. 按鈕樣式極致壓縮 */
     div.stButton > button {
         width: 100%;
         border-radius: 0px;
-        border: 1px solid #333; /* 細邊框 */
+        border: 1px solid #333; 
         margin: 0px;
-        padding: 10px 0px; /* 增加上下 padding 讓字置中 */
-        font-size: 12px;
+        /* 上下 padding 縮小，讓高度更緊湊 */
+        padding: 8px 0px !important; 
+        
+        /* 字體縮小並強制不換行 */
+        font-size: 11px !important; 
+        white-space: nowrap !important;
+        
         line-height: 1.2;
         height: auto;
-        min-height: 50px; /* 固定高度，確保整齊 */
+        min-height: 40px; 
         background-color: #222;
         color: #ccc;
-        transition: all 0.2s;
+        transition: all 0.1s;
     }
     
     /* Hover */
@@ -103,7 +101,7 @@ st.markdown("""
         border-color: #666;
         color: #fff;
         background-color: #333;
-        z-index: 2; /* 浮起 */
+        z-index: 2; 
     }
     
     /* 選中狀態 - 大限 (深紫) */
@@ -114,7 +112,7 @@ st.markdown("""
         font-weight: bold;
     }
     
-    /* 選中狀態 - 流年 (亮藍/青色) */
+    /* 選中狀態 - 流年 (亮藍) */
     div.stButton > button.liunian-active {
         background-color: #008CBA !important;
         color: white !important;
@@ -127,7 +125,6 @@ st.markdown("""
         padding-top: 1rem;
         padding-bottom: 2rem;
     }
-    
 </style>
 """, unsafe_allow_html=True)
 
@@ -258,7 +255,25 @@ with st.expander("📝 資料輸入 / 修改", expanded=(not st.session_state.sh
         with b1: btn_save = st.form_submit_button("💾 儲存並排盤", type="primary", use_container_width=True)
         with b2: btn_calc = st.form_submit_button("🧪 僅試算", use_container_width=True)
 
-# --- 5. 排盤與時間軸 (Sticky Timeline) ---
+if btn_save or btn_calc:
+    y, m, d, cal = parse_date(i_date)
+    h, mn = int(i_time[:2]) if len(i_time)==4 else 0, int(i_time[2:]) if len(i_time)==4 else 0
+    if not i_name or y==0: st.error("資料不完整")
+    else:
+        calc = ZWDSCalculator(y, m, d, h, mn, i_gen)
+        p_data, m_star, bur, b_yr = calc.get_result()
+        pkt = {"name": i_name, "gender": i_gen, "category": i_cat, "y": y, "m": m, "d": d, "h": h, "min": mn, "cal_type": cal, "ming_star": m_star, "bureau": bur, "palace_data": p_data}
+        if btn_save:
+            pkt['id'] = int(time.time()) if st.session_state.current_id==0 else st.session_state.current_id
+            if st.session_state.current_id==0: st.session_state.db.append(pkt); st.session_state.current_id = pkt['id']
+            else: 
+                for idx, x in enumerate(st.session_state.db):
+                    if x['id']==st.session_state.current_id: st.session_state.db[idx]=pkt
+            st.session_state.temp_preview_data = None; st.session_state.show_chart = True; st.rerun()
+        if btn_calc:
+            st.session_state.temp_preview_data = pkt; st.session_state.show_chart = True
+
+# --- 5. 排盤與時間軸 ---
 if st.session_state.show_chart:
     data = st.session_state.temp_preview_data or next((x for x in st.session_state.db if x['id']==st.session_state.current_id), None)
     if data:
@@ -306,15 +321,14 @@ if st.session_state.show_chart:
         for i, col in enumerate(cols_d):
             pos_idx, info = sorted_limits[i]
             gz = f"{GAN[info['gan_idx']]}{ZHI[info['zhi_idx']]}"
-            label = f"{limit_names[i]}\n{gz}"
+            label = f"{limit_names[i]}{gz}" # 移除換行符，嘗試單行
             is_selected = (i == daxian_idx)
             btn_type = "primary" if is_selected else "secondary"
             if col.button(label, key=f"d_{i}", type=btn_type, use_container_width=True):
                 st.session_state.sel_daxian_idx = i; st.session_state.sel_liunian_offset = 0; st.rerun()
 
-        # === 垂直縫隙消除術 (Vertical Gap Killer) ===
-        # 使用負 Margin 將下方元素強行拉上，抵銷 Streamlit 預設的 1rem 間距
-        st.markdown('<div style="margin-top: -22px;"></div>', unsafe_allow_html=True)
+        # 垂直縫隙消除術 (Super Gap Killer) - 增加負值以抵銷容器 padding
+        st.markdown('<div style="margin-top: -30px;"></div>', unsafe_allow_html=True)
 
         # Row 2: 流年
         cols_l = st.columns(10)
@@ -329,7 +343,7 @@ if st.session_state.show_chart:
             if col.button(label, key=f"l_{j}", type=btn_type, use_container_width=True):
                 st.session_state.sel_liunian_offset = j; st.rerun()
 
-        # JS/CSS 注入：確保 Primary Button 顏色覆寫
+        # JS/CSS 注入
         st.markdown("""
         <style>
             div.stButton > button[kind="primary"] {
