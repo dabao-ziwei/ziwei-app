@@ -11,72 +11,55 @@ GAN = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸']
 
 class ZWDS_Calculator:
     def __init__(self, lunar, gender):
-        # [Fix] 先定義地支對照表，避免呼叫時尚未建立
+        # 定義地支對照表
         self.zhi_map = {z: i for i, z in enumerate(ZHI)}
         
         self.lunar = lunar
-        self.gender = gender # "男" or "女"
+        self.gender = gender 
         self.ba_zi = lunar.getEightChar()
         self.year_gan = self.ba_zi.getYearGan()
         self.year_zhi = self.ba_zi.getYearZhi()
         self.month_zhi = self.ba_zi.getMonthZhi()
         self.time_zhi = self.ba_zi.getTimeZhi()
         
-        # 取得地支的索引 (0=子, 1=丑...)
+        # 取得地支的索引
         self.month_idx = self._get_zhi_idx(self.month_zhi)
         self.time_idx = self._get_zhi_idx(self.time_zhi) 
 
     def _get_zhi_idx(self, zhi):
-        # 安全取得地支索引
         return self.zhi_map.get(zhi, 0)
 
     def get_ming_shen_idx(self):
-        """計算命宮與身宮的地支索引 (0=子)"""
-        # 紫微斗數排盤：寅宮(2)為起點
-        # 命宮：寅宮起正月，順數至生月，逆數至生時
-        # 修正：lunar.getMonth() 傳回的是數字 (1~12)，這可以直接用
+        """計算命宮與身宮"""
         month_num = self.lunar.getMonth()
-        if month_num < 0: month_num = abs(month_num) # 處理閏月
+        if month_num < 0: month_num = abs(month_num)
         
         # 命宮公式：2(寅) + (月數-1) - (時支索引)
-        # 注意：子時idx=0, 丑時idx=1...
-        # 這裡的邏輯：正月在寅(2)，所以基數是2
-        # 順數月：(month_num - 1)
-        # 逆數時：直接減去 time_idx (因為子時是起點)
-        
-        # 範例：1月(正月) 子時 -> 2 + 0 - 0 = 2 (寅宮) -> 正確
         ming_idx = (2 + (month_num - 1) - self.time_idx) % 12
-        
         # 身宮公式：2(寅) + (月數-1) + (時支索引)
         shen_idx = (2 + (month_num - 1) + self.time_idx) % 12
         
         return ming_idx, shen_idx
 
     def get_wuxing_ju(self, ming_idx):
-        """定五行局 (水二, 木三, 金四, 土五, 火六)"""
-        # 1. 五虎遁：求命宮天干
+        """定五行局"""
+        # 1. 五虎遁
         year_gan_idx = GAN.index(self.year_gan)
-        start_gan_idx = (year_gan_idx % 5) * 2 + 2 # 甲(0)->丙(2)...
-        
-        # 命宮天干
-        # 命宮在 ming_idx，要算它是從寅宮(2)開始數第幾個
-        # 寅宮對應 start_gan_idx
+        start_gan_idx = (year_gan_idx % 5) * 2 + 2 
         steps = ming_idx - 2
         if steps < 0: steps += 12
         ming_gan_idx = (start_gan_idx + steps) % 10
         
-        # 2. 納音定局 (簡易計算法)
-        # 0:金4, 1:水2, 2:火6, 3:土5, 4:木3
+        # 2. 納音定局
         val = (ming_gan_idx // 2 + ming_idx // 2) % 5
         map_ju = {0: 4, 1: 2, 2: 6, 3: 5, 4: 3}
         return map_ju[val]
 
     def get_special_stars(self):
-        """依照您的需求安特殊星"""
-        stars = {i: [] for i in range(12)} # 12宮的星曜列表
+        """安特殊星"""
+        stars = {i: [] for i in range(12)} 
         
-        # 3.1 安天馬 (依月支)
-        # 申子辰(8,0,4)->寅(2); 寅午戌(2,6,10)->申(8); 亥卯未(11,3,7)->巳(5); 巳酉丑(5,9,1)->亥(11)
+        # 安天馬
         m = self.month_idx
         tm_idx = -1
         if m in [8, 0, 4]: tm_idx = 2
@@ -85,19 +68,19 @@ class ZWDS_Calculator:
         elif m in [5, 9, 1]: tm_idx = 11
         if tm_idx != -1: stars[tm_idx].append("天馬")
             
-        # 3.6 安魁鉞 (依年干, 六辛逢虎馬)
+        # 安魁鉞 (六辛逢虎馬)
         y = GAN.index(self.year_gan)
         kui = -1; yue = -1
         if y == 7: # 辛
-            kui = 2; yue = 6 # 虎(寅), 馬(午)
-        elif y in [0, 4, 6]: # 甲戊庚
-            kui = 1; yue = 7 # 丑未
-        elif y in [1, 5]: # 乙己
-            kui = 0; yue = 8 # 子申
-        elif y in [2, 3]: # 丙丁
-            kui = 11; yue = 9 # 亥酉
-        elif y in [8, 9]: # 壬癸
-            kui = 3; yue = 5 # 卯巳
+            kui = 2; yue = 6 
+        elif y in [0, 4, 6]: 
+            kui = 1; yue = 7 
+        elif y in [1, 5]: 
+            kui = 0; yue = 8 
+        elif y in [2, 3]: 
+            kui = 11; yue = 9 
+        elif y in [8, 9]: 
+            kui = 3; yue = 5 
             
         if kui != -1: stars[kui].append("天魁")
         if yue != -1: stars[yue].append("天鉞")
@@ -109,7 +92,7 @@ class ZWDS_Calculator:
 # ==============================================================================
 
 def render_palace(zhi, idx, stars_list, ming_shen_label, grid_height=180):
-    """繪製單一宮位格子的 HTML"""
+    """繪製單一宮位格子的 HTML (移除縮排以修復顯示問題)"""
     stars_html = ""
     for s in stars_list:
         color = "#FF4B4B" if s in ["天馬", "天魁", "天鉞"] else "#E0E0E0"
@@ -121,30 +104,15 @@ def render_palace(zhi, idx, stars_list, ming_shen_label, grid_height=180):
     if "身宮" in ming_shen_label:
         label_html += f"<span style='background-color:#1976D2; color:white; padding:2px 6px; border-radius:4px; font-size:12px;'>身宮</span>"
 
-    return f"""
-    <div style="
-        border: 1px solid #444; 
-        height: {grid_height}px; 
-        padding: 8px; 
-        background-color: #262730; 
-        position: relative;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    ">
-        <div style="position:absolute; top:8px; left:8px;">
-            {label_html}
-            <div style="margin-top:8px;">{stars_html}</div>
-        </div>
-        <div style="position:absolute; bottom:5px; right:10px; font-size:20px; color:#666; font-weight:bold;">
-            {zhi}
-        </div>
-    </div>
-    """
+    # [Fix] 這裡將 HTML 字串壓縮為一行或移除所有縮排，避免被當成 Markdown 程式碼區塊
+    return f"""<div style="border: 1px solid #444; height: {grid_height}px; padding: 8px; background-color: #262730; position: relative; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+<div style="position:absolute; top:8px; left:8px;">{label_html}<div style="margin-top:8px;">{stars_html}</div></div>
+<div style="position:absolute; bottom:5px; right:10px; font-size:20px; color:#666; font-weight:bold;">{zhi}</div>
+</div>"""
 
 def main():
-    st.set_page_config(page_title="紫微排盤 V0.3.1", layout="wide")
+    st.set_page_config(page_title="紫微排盤 V0.3.2", layout="wide")
     
-    # CSS 優化
     st.markdown("""
     <style>
     .stButton>button { width: 100%; border-radius: 8px; }
@@ -152,13 +120,11 @@ def main():
     </style>
     """, unsafe_allow_html=True)
 
-    st.title("🔮 專業紫微斗數排盤系統 (V0.3.1)")
+    st.title("🔮 專業紫微斗數排盤系統 (V0.3.2)")
 
-    # --- 初始化 Session ---
     if 'profiles' not in st.session_state: st.session_state['profiles'] = []
     if 'current_profile' not in st.session_state: st.session_state['current_profile'] = None
 
-    # --- 側邊欄 ---
     with st.sidebar:
         st.header("📂 個案資料庫")
         if len(st.session_state['profiles']) > 0:
@@ -168,7 +134,6 @@ def main():
         else:
             st.caption("尚無資料，請輸入並儲存")
 
-    # --- 輸入區 ---
     loaded_data = st.session_state['current_profile']
     def_name = loaded_data['name'] if loaded_data else ""
     def_cat = loaded_data['category'] if loaded_data else "客戶"
@@ -192,16 +157,13 @@ def main():
 
         save_btn = st.button("💾 儲存並排盤", type="primary")
 
-    # --- 運算邏輯 ---
     if save_btn and name and date_str_input and hour_input:
-        # 1. 解析日期
         try:
             d_str = date_str_input.replace("/", "").replace("-", "").strip()
             if date_mode == '西元':
-                if len(d_str) != 8: raise ValueError("西元格式需8碼 (YYYYMMDD)")
+                if len(d_str) != 8: raise ValueError("西元格式需8碼")
                 yr = int(d_str[:4]); mo = int(d_str[4:6]); dy = int(d_str[6:8])
             else:
-                # 民國處理: 680926 (6碼) 或 1000101 (7碼)
                 if len(d_str) == 6:
                     yr = int(d_str[:2]) + 1911; mo = int(d_str[2:4]); dy = int(d_str[4:6])
                 elif len(d_str) == 7:
@@ -213,14 +175,12 @@ def main():
             dob = datetime.date(yr, mo, dy)
             tob = datetime.time(hr, mn)
             
-            # 存入 Session
             p_data = {
                 "name": name, "gender": gender, "category": category,
                 "date_mode": date_mode, "date_str": date_str_input,
                 "hour": hour_input, "minute": minute_input,
                 "dob": dob, "tob": tob
             }
-            # 更新資料庫
             existing = False
             for p in st.session_state['profiles']:
                 if p['name'] == name: 
@@ -232,28 +192,27 @@ def main():
             st.error(f"輸入錯誤：{str(e)}")
             st.stop()
             
-        # 2. 開始運算 (初始化 Calculator)
+        # 運算
         solar = Solar.fromYmdHms(dob.year, dob.month, dob.day, tob.hour, tob.minute, 0)
         lunar = solar.getLunar()
-        calc = ZWDS_Calculator(lunar, gender) # 這裡現在安全了
+        calc = ZWDS_Calculator(lunar, gender)
         
         ming_idx, shen_idx = calc.get_ming_shen_idx()
         wuxing_ju = calc.get_wuxing_ju(ming_idx)
         special_stars = calc.get_special_stars()
         
-        # 3. 顯示結果
+        # 顯示
         st.divider()
         st.subheader(f"📄 {name} 的命盤")
         
         i1, i2, i3, i4 = st.columns(4)
         i1.info(f"農曆：{lunar.getYear()} {lunar.getMonthInChinese()}月 {lunar.getDayInChinese()}")
         i2.info(f"時間：{calc.time_zhi}時 ({tob.strftime('%H:%M')})")
-        
         ju_names = {2:"水二局", 3:"木三局", 4:"金四局", 5:"土五局", 6:"火六局"}
         i3.success(f"五行局：{ju_names.get(wuxing_ju, '未知')}")
         i4.warning(f"命宮位置：{ZHI[ming_idx]}宮")
 
-        # 4. 繪製 12 宮位
+        # 繪圖
         grid_order = [
             [5, 6, 7, 8],     # 巳 午 未 申
             [4, -1, -1, 9],   # 辰       酉
@@ -268,7 +227,6 @@ def main():
                 with cols[i]:
                     if zhi_idx == -1:
                         if row == grid_order[1] and i == 2:
-                            # 中央顯示區
                             st.markdown(f"""
                             <div style='text-align:center; color:#888; margin-top:40px;'>
                                 <h3>{name}</h3>
