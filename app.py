@@ -1,7 +1,7 @@
 import streamlit as st
 import json
 import os
-import time  # 修正：補上這個遺漏的 import
+import time  # 修正：補上關鍵的 import
 from st_click_detector import click_detector
 from logic import ZWDSCalculator, parse_date
 from renderer import render_full_chart_html
@@ -50,6 +50,7 @@ with st.sidebar:
             gender = st.radio("性別", ["男", "女"], index=0 if rec and rec['gender']=='男' else 1, horizontal=True)
             cat = st.text_input("分類", value=rec.get('category', '') if rec else "")
             
+            # 單選按鈕：讓使用者明確選擇
             cal_type = st.radio("曆法", ["西元", "民國"], index=0, horizontal=True)
             
             d_val = f"{rec['y']:04}{rec['m']:02}{rec['d']:02}" if rec else ""
@@ -61,40 +62,46 @@ with st.sidebar:
             
             if st.form_submit_button("💾 儲存"):
                 try:
-                    # 移除分隔符
-                    d_str = date_str.replace("/", "").replace("-", "").strip()
-                    t_str = time_str.replace(":", "").strip()
+                    # 1. 移除所有干擾符號，只留數字
+                    d_pure = date_str.replace("/", "").replace("-", "").replace(".", "").replace(" ", "")
+                    t_pure = time_str.replace(":", "").replace(" ", "")
                     
-                    # 時間解析
-                    if len(t_str) == 4:
-                        h = int(t_str[:2])
-                        mn = int(t_str[2:])
-                    elif len(t_str) == 3: 
-                        h = int(t_str[:1])
-                        mn = int(t_str[1:])
+                    # 2. 解析時間
+                    if len(t_pure) == 4:
+                        h = int(t_pure[:2])
+                        mn = int(t_pure[2:])
+                    elif len(t_pure) == 3: # 允許 930 -> 0930
+                        h = int(t_pure[:1])
+                        mn = int(t_pure[1:])
+                    elif len(t_pure) == 0: # 沒填預設 00:00
+                        h, mn = 0, 0
                     else:
-                        raise ValueError("時間格式錯誤 (請輸入 HHMM)")
+                        raise ValueError("時間格式錯誤")
 
-                    # 日期解析
+                    # 3. 解析日期
+                    y, m, d = 0, 0, 0
+                    
                     if cal_type == "民國":
-                        if len(d_str) == 6: # 680926
-                            y = int(d_str[:2]) + 1911
-                            m = int(d_str[2:4])
-                            d = int(d_str[4:])
-                        elif len(d_str) == 7: # 1000101
-                            y = int(d_str[:3]) + 1911
-                            m = int(d_str[3:5])
-                            d = int(d_str[5:])
+                        # 民國年邏輯：直接切字串，最穩
+                        if len(d_pure) == 6: # 680926
+                            y = int(d_pure[:2]) + 1911
+                            m = int(d_pure[2:4])
+                            d = int(d_pure[4:])
+                        elif len(d_pure) == 7: # 1000101
+                            y = int(d_pure[:3]) + 1911
+                            m = int(d_pure[3:5])
+                            d = int(d_pure[5:])
                         else:
-                            raise ValueError("民國日期格式錯誤 (請輸入 YYMMDD)")
+                            raise ValueError("民國日期請輸入 6 碼或 7 碼 (如 680926)")
                     else:
-                        if len(d_str) == 8:
-                            y = int(d_str[:4])
-                            m = int(d_str[4:6])
-                            d = int(d_str[6:])
+                        # 西元邏輯
+                        if len(d_pure) == 8:
+                            y = int(d_pure[:4])
+                            m = int(d_pure[4:6])
+                            d = int(d_pure[6:])
                         else:
-                            # 備用解析
-                            y, m, d, _ = parse_date(d_str)
+                            # 嘗試 fallback 到原邏輯
+                            y, m, d, _ = parse_date(d_pure)
 
                     if name and y > 0:
                         calc = ZWDSCalculator(y, m, d, h, mn, gender)
@@ -114,9 +121,9 @@ with st.sidebar:
                         st.session_state.current_id = new_rec['id']
                         st.rerun()
                     else:
-                        st.error("資料不完整")
+                        st.error("姓名與日期為必填")
                 except Exception as e:
-                    st.error(f"輸入錯誤: {e}")
+                    st.error(f"輸入錯誤: {str(e)}")
 
 if st.session_state.current_id != 0:
     data = next((x for x in st.session_state.db if x['id'] == st.session_state.current_id), None)
@@ -136,7 +143,7 @@ if st.session_state.current_id != 0:
             parts = clicked.split("_")
             if len(parts) == 2:
                 type_code, idx = parts[0], int(parts[1])
-                if type_code == "p":
+                if type_code == "p": 
                     st.session_state.focus_palace_idx = -1 if st.session_state.focus_palace_idx == idx else idx
                     st.rerun()
                 elif type_code == "d":
