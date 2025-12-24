@@ -20,25 +20,16 @@ def apply_style():
             min-width: 280px !important;
         }
 
-        /* === 2. 主容器 (垂直堆疊，防止重疊的核心) === */
-        .main-container {
-            display: flex;
-            flex-direction: column;
-            width: 100%;
-            gap: 0px; /* 積木緊貼 */
-        }
-
-        /* === 3. 命盤容器 === */
+        /* === 2. 命盤容器 (強制推開下方) === */
         .chart-wrapper {
             position: relative;
             width: 100%;
             border: 2px solid #000;
-            /* 修正：下方邊框由按鈕列提供，視覺上融合 */
-            border-bottom: 1px solid #ccc; 
             background-color: #333;
-            margin: 0 !important;
+            /* 修正：增加 20px 的底部緩衝，防止按鈕騎上來 */
+            margin-bottom: 20px !important; 
             box-sizing: border-box;
-            z-index: 10; /* 確保在按鈕之上 */
+            display: block; 
         }
 
         .svg-overlay {
@@ -49,7 +40,8 @@ def apply_style():
         .zwds-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            grid-template-rows: repeat(4, 140px); /* 保持高度 */
+            /* 拉高格子，確保文字不會貼底 */
+            grid-template-rows: repeat(4, 140px); 
             gap: 1px;
             background-color: #999;
             width: 100%;
@@ -65,7 +57,7 @@ def apply_style():
             height: 100%;
         }
 
-        /* === 4. 星曜區 === */
+        /* === 3. 星曜區 === */
         .stars-box {
             display: flex; flex-direction: row; flex-wrap: wrap;
             align-content: flex-start; align-items: flex-start;
@@ -94,7 +86,7 @@ def apply_style():
         }
         .bg-ben { background-color: #d32f2f; } .bg-da { background-color: #808080; } .bg-liu { background-color: #0056b3; }
 
-        /* === 5. 角落資訊 === */
+        /* === 4. 角落資訊 === */
         .footer-left {
             position: absolute; bottom: 2px; left: 2px;
             display: flex; align-items: flex-end; gap: 4px; pointer-events: none;
@@ -119,25 +111,18 @@ def apply_style():
             writing-mode: vertical-rl; text-orientation: upright; line-height: 1; margin-left: 1px;
         }
 
-        /* === 6. 時間軸按鈕 (大限) === */
-        /* 移除所有 margin hack，讓它自然排列 */
+        /* === 5. 按鈕 (時間軸) === */
         .timeline-container {
             display: grid; grid-template-columns: repeat(12, 1fr);
-            background-color: #f8f8f8;
-            width: 100%;
-            margin: 0 !important; /* 緊貼上方 */
-            padding: 0 !important;
-            border-left: 1px solid #ccc;
-            border-right: 1px solid #ccc;
-            border-bottom: 1px solid #ccc;
+            background-color: #f8f8f8; 
+            width: 100%; 
+            margin-top: 10px !important; /* 確保與上方有距離 */
+            border: 1px solid #ccc;
         }
         
         div.stButton > button {
             width: 100% !important;
-            border: 1px solid #ccc !important;
-            /* 讓按鈕的邊框重疊，看起來像表格 */
-            margin-left: -1px !important; 
-            margin-top: -1px !important; 
+            border: 1px solid #ccc !important; /* 恢復完整邊框 */
             border-radius: 0 !important;
             background-color: #f8f8f8 !important;
             color: #333 !important;
@@ -145,20 +130,18 @@ def apply_style():
             padding: 2px 0 !important;
             min-height: 40px !important;
             line-height: 1.2 !important;
+            margin: 0 !important;
             box-shadow: none !important;
-            z-index: 1;
         }
         
         div.stButton > button:hover {
             background-color: #e0e0e0 !important;
-            z-index: 2;
         }
         
         div.stButton > button[kind="primary"] {
             background-color: #4B0082 !important;
             color: white !important;
             border-color: #4B0082 !important;
-            z-index: 3;
         }
 
         /* 高亮 */
