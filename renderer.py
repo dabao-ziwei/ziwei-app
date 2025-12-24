@@ -3,7 +3,6 @@ from logic import GAN, ZHI
 PALACE_NAMES = ["命宮", "兄弟", "夫妻", "子女", "財帛", "疾厄", "遷移", "僕役", "官祿", "田宅", "福德", "父母"]
 
 def clean_html(html_str):
-    """移除換行，防止 Markdown 誤判為程式碼區塊"""
     return html_str.replace("\n", "").strip()
 
 def get_relative_palace_name(ming_pos, current_cell_pos):
@@ -49,11 +48,9 @@ def get_palace_html(idx, branch, r, c, info, daxian_pos, liunian_pos, benming_po
         elif idx == (focus_idx+6)%12: cls.append("highlight-duigong")
 
     stars_list = []
-    # 主星
     for star in info['major_stars']:
         sihua = "".join([f"<span class='hua-badge { {'本':'bg-ben','大':'bg-da','流':'bg-liu'}.get(s['layer']) }'>{s['type']}</span>" for s in star['sihua'] if not is_pure_benming or s['layer']=='本'])
         stars_list.append(f"<div class='star-item'><span class='txt-major'>{star['name']}</span>{sihua}</div>")
-    # 副星
     for m in info['minor_stars']:
         style = "txt-med" if m[2] else "txt-sml"
         stars_list.append(f"<div class='star-item'><span class='{style}'>{m[0]}</span></div>")
