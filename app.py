@@ -47,38 +47,54 @@ with st.sidebar:
         with st.form("edit_form"):
             name = st.text_input("姓名", value=rec['name'] if rec else "")
             gender = st.radio("性別", ["男", "女"], index=0 if rec and rec['gender']=='男' else 1, horizontal=True)
-            # 補回分類
             cat = st.text_input("分類", value=rec.get('category', '') if rec else "")
             
             cal_type = st.radio("曆法", ["西元", "民國"], index=0, horizontal=True)
+            
             d_val = f"{rec['y']:04}{rec['m']:02}{rec['d']:02}" if rec else ""
             t_val = f"{rec['h']:02}{rec['min']:02}" if rec else ""
             
-            hint = "例如 19790926" if cal_type=="西元" else "例如 680926"
+            hint = "例如: 19790926" if cal_type=="西元" else "例如: 680926"
             date_str = st.text_input(f"日期 ({hint})", value=d_val)
             time_str = st.text_input("時間 (HHMM)", value=t_val)
             
             if st.form_submit_button("💾 儲存"):
                 try:
-                    d_str = date_str.strip()
-                    h = int(time_str[:2])
-                    mn = int(time_str[2:])
+                    # 寬容處理：移除分隔符
+                    d_str = date_str.replace("/", "").replace("-", "").strip()
+                    t_str = time_str.replace(":", "").strip()
                     
+                    # 時間解析
+                    if len(t_str) == 4:
+                        h = int(t_str[:2])
+                        mn = int(t_str[2:])
+                    elif len(t_str) == 3: # 支援 930 -> 0930
+                        h = int(t_str[:1])
+                        mn = int(t_str[1:])
+                    else:
+                        raise ValueError("時間格式錯誤 (請輸入 HHMM)")
+
+                    # 日期解析
                     if cal_type == "民國":
-                        # 手動解析民國年
-                        if len(d_str) == 6:
+                        if len(d_str) == 6: # 680926
                             y = int(d_str[:2]) + 1911
                             m = int(d_str[2:4])
                             d = int(d_str[4:])
-                        elif len(d_str) == 7:
+                        elif len(d_str) == 7: # 1000101
                             y = int(d_str[:3]) + 1911
                             m = int(d_str[3:5])
                             d = int(d_str[5:])
                         else:
-                            raise ValueError
+                            raise ValueError("民國日期格式錯誤 (請輸入 YYMMDD 或 YYYMMDD)")
                     else:
-                        # 西元直接用原來的解析
-                        y, m, d, _ = parse_date(d_str)
+                        # 西元
+                        if len(d_str) == 8:
+                            y = int(d_str[:4])
+                            m = int(d_str[4:6])
+                            d = int(d_str[6:])
+                        else:
+                            # 嘗試使用 logic 的 parse_date 作為備案 (如果有)
+                            y, m, d, _ = parse_date(d_str)
 
                     if name and y > 0:
                         calc = ZWDSCalculator(y, m, d, h, mn, gender)
@@ -97,8 +113,10 @@ with st.sidebar:
                         save_db(st.session_state.db)
                         st.session_state.current_id = new_rec['id']
                         st.rerun()
-                    else: st.error("資料不完整")
-                except: st.error("日期或時間格式錯誤")
+                    else:
+                        st.error("資料不完整")
+                except Exception as e:
+                    st.error(f"輸入錯誤: {e}")
 
 if st.session_state.current_id != 0:
     data = next((x for x in st.session_state.db if x['id'] == st.session_state.current_id), None)
@@ -118,7 +136,7 @@ if st.session_state.current_id != 0:
             parts = clicked.split("_")
             if len(parts) == 2:
                 type_code, idx = parts[0], int(parts[1])
-                if type_code == "p": 
+                if type_code == "p":
                     st.session_state.focus_palace_idx = -1 if st.session_state.focus_palace_idx == idx else idx
                     st.rerun()
                 elif type_code == "d":
