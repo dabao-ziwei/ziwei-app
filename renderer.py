@@ -50,7 +50,6 @@ def render_full_chart_html(calc, data, d_idx, l_off, focus_idx):
     for idx, r, c in layout:
         info = calc.palaces[idx]
         bg_cls = ""
-        # 這裡的樣式邏輯是正確的：根據選取狀態給背景色
         cell_style_extra = ""
         if focus_idx != -1:
             if idx == focus_idx: cell_style_extra = "background-color: rgba(230, 247, 255, 0.9);"
@@ -77,10 +76,10 @@ def render_full_chart_html(calc, data, d_idx, l_off, focus_idx):
             if d_pos != -1: p_html = f"<div style='color:#666;font-size:11px;font-weight:900'>大{get_relative_palace_name(d_pos, idx)[0]}</div>" + p_html
         ft_r = f"<div class='footer-right'><div class='info-box'>{'<span class=shen-tag>身</span>' if is_pure and idx==calc.shen_pos else ''}<span style='font-size:11px;color:#800080;font-weight:bold'>{info['life_stage']}</span>{p_html}</div><div class='ganzhi-txt'>{GAN[info['gan_idx']]}{ZHI[idx]}</div></div>"
         
-        # 修正：改回 href='#'，避免 javascript:void(0) 造成的訊號阻塞
+        # 修正：改回 javascript:void(0);
         cells_html += f"""
         <div class='zwds-cell {border_cls}' style='grid-row:{r};grid-column:{c}; {cell_style_extra}'>
-            <a href='#' id='p_{idx}' class='click-overlay'></a>
+            <a href='javascript:void(0);' id='p_{idx}' class='click-overlay'></a>
             <div class='cell-content'>
                 <div class='stars-box'>{stars}</div>{ft_l}{ft_r}
             </div>
@@ -94,8 +93,8 @@ def render_full_chart_html(calc, data, d_idx, l_off, focus_idx):
     for i in range(12):
         inf = limits[i][1]
         cls = "time-btn btn-on" if i == d_idx else "time-btn"
-        # 修正：改回 href='#'
-        d_html += f"<div class='{cls}'><a href='#' id='d_{i}' class='click-overlay'></a>{lnames[i]}<br>{GAN[inf['gan_idx']]}{ZHI[inf['zhi_idx']]}</div>"
+        # 修正：改回 javascript:void(0);
+        d_html += f"<div class='{cls}'><a href='javascript:void(0);' id='d_{i}' class='click-overlay'></a>{lnames[i]}<br>{GAN[inf['gan_idx']]}{ZHI[inf['zhi_idx']]}</div>"
     
     l_row = ""
     if not is_pure:
@@ -106,8 +105,8 @@ def render_full_chart_html(calc, data, d_idx, l_off, focus_idx):
             yr = data['y'] + age - 1
             gy, zy = get_ganzhi_for_year(yr)
             cls = "time-btn btn-on" if j == l_off else "time-btn"
-            # 修正：改回 href='#'
-            l_html += f"<div class='{cls}'><a href='#' id='l_{j}' class='click-overlay'></a>{yr}<br>{GAN[gy]}{ZHI[zy]}({age})</div>"
+            # 修正：改回 javascript:void(0);
+            l_html += f"<div class='{cls}'><a href='javascript:void(0);' id='l_{j}' class='click-overlay'></a>{yr}<br>{GAN[gy]}{ZHI[zy]}({age})</div>"
         l_row = f"<div class='timeline-container' style='grid-template-columns: repeat(10, 1fr); border-top:none;'>{l_html}</div>"
 
     full_html = f"""{get_css()}<div class="master-container">{clean(svg_html)}<div class="zwds-grid">{clean(cells_html)}{clean(center_html)}</div><div class="timeline-container">{clean(d_html)}</div>{clean(l_row)}</div>"""
