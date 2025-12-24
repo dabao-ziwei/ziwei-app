@@ -12,24 +12,26 @@ def apply_style():
             padding: 0.5rem !important;
             max-width: 100% !important;
         }
-        /* 縮小垂直間距，避免 Streamlit 自動塞入空白 */
         [data-testid="stVerticalBlock"] { gap: 0px !important; }
         
+        /* 側邊欄 */
         [data-testid="stSidebar"] {
             background-color: #f8f9fa;
             border-right: 1px solid #ddd;
             min-width: 280px !important;
         }
 
-        /* === 2. 命盤容器 === */
+        /* === 2. 命盤容器 (防止重疊的關鍵) === */
         .chart-wrapper {
             position: relative;
             width: 100%;
             border: 2px solid #000;
             background-color: #333;
-            /* 修正：底部與按鈕零距離，僅靠邊框區隔 */
-            margin-bottom: 0px !important; 
+            /* 修正：給予 5px 底部邊距，像一道牆擋住下方按鈕 */
+            margin-bottom: 5px !important; 
+            padding-bottom: 0px;
             box-sizing: border-box;
+            display: block; /* 確保佔據空間 */
         }
 
         .svg-overlay {
@@ -40,8 +42,7 @@ def apply_style():
         .zwds-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            /* 使用 minmax 確保格子有足夠高度，避免塌陷 */
-            grid-auto-rows: minmax(125px, auto); 
+            grid-template-rows: repeat(4, 130px); /* 固定高度確保空間 */
             gap: 1px;
             background-color: #999;
             width: 100%;
@@ -57,14 +58,7 @@ def apply_style():
             height: 100%;
         }
 
-        /* 高亮 */
-        .highlight-focus { background-color: #E6F7FF !important; }
-        .highlight-sanfang { background-color: #FFF7E6 !important; }
-        .highlight-duigong { background-color: #F6FFED !important; }
-        .active-daxian { box-shadow: inset 0 0 0 2px #666; }
-        .active-liunian { box-shadow: inset 0 0 0 2px #007bff; }
-
-        /* === 3. 星曜區 (零間隙 + 印章修正) === */
+        /* === 3. 星曜區 (修復印章遮擋) === */
         .stars-box {
             display: flex; flex-direction: row; flex-wrap: wrap;
             align-content: flex-start; align-items: flex-start;
@@ -83,8 +77,8 @@ def apply_style():
             font-size: 18px; font-weight: 900; color: #B71C1C;
             writing-mode: vertical-rl; text-orientation: upright;
             line-height: 1; letter-spacing: -2px; 
-            /* 修正：增加底部邊距，防止印章蓋上來 */
-            margin-bottom: 2px !important; 
+            /* 關鍵修正：增加底部邊距，把四化印章推開 */
+            margin-bottom: 4px !important; 
         }
         
         .txt-med { font-size: 14px; font-weight: 700; color: #000; writing-mode: vertical-rl; line-height: 1.1; }
@@ -95,7 +89,7 @@ def apply_style():
             font-size: 10px; color: #fff; padding: 0;
             border-radius: 2px; text-align: center; width: 14px; display: block;
             line-height: 1.1; 
-            margin-top: 0px !important; /* 緊接在 margin-bottom 之後 */
+            margin-top: 0px; 
         }
         .bg-ben { background-color: #d32f2f; } .bg-da { background-color: #808080; } .bg-liu { background-color: #0056b3; }
 
@@ -126,25 +120,33 @@ def apply_style():
         }
 
         /* === 5. 時間軸按鈕 (大限) === */
-        /* 修正：移除所有外邊距，緊貼命盤 */
+        /* 確保按鈕列有自己的空間，不往上鑽 */
         .timeline-bar {
             display: grid; grid-template-columns: repeat(12, 1fr);
             background-color: #f8f8f8; 
-            border: 2px solid #000; /* 與命盤同寬同風格的邊框 */
-            border-top: none; /* 上方邊框由命盤底部提供 */
+            border: 1px solid #ccc; 
             width: 100%; 
             margin-top: 0px !important;
+            position: relative; /* 確保層級正確 */
+            z-index: 5;
         }
         
         div.stButton > button {
             width: 100% !important; border: none !important; 
             border-right: 1px solid #ddd !important;
             border-radius: 0 !important; background-color: transparent !important; color: #333 !important;
-            font-size: 12px !important; padding: 4px 0 !important; min-height: 36px !important;
+            font-size: 12px !important; padding: 4px 0 !important; min-height: 40px !important;
             line-height: 1.2 !important; margin: 0 !important; box-shadow: none !important;
         }
         div.stButton > button:hover { background-color: #e0e0e0 !important; }
         div.stButton > button[kind="primary"] { background-color: #4B0082 !important; color: white !important; }
+
+        /* 高亮 */
+        .highlight-focus { background-color: #E6F7FF !important; }
+        .highlight-sanfang { background-color: #FFF7E6 !important; }
+        .highlight-duigong { background-color: #F6FFED !important; }
+        .active-daxian { box-shadow: inset 0 0 0 2px #666; }
+        .active-liunian { box-shadow: inset 0 0 0 2px #007bff; }
 
         .center-box {
             grid-column: 2 / 4; grid-row: 2 / 4; background-color: #fff;
