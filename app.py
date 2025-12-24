@@ -91,7 +91,6 @@ if st.session_state.current_id != 0:
         d_idx = st.session_state.sel_daxian_idx
         l_off = st.session_state.sel_liunian_offset
         is_pure = (d_idx == -1)
-        
         d_pos = int(limits[d_idx][0]) if not is_pure else -1
         l_pos = -1
         
@@ -116,16 +115,17 @@ if st.session_state.current_id != 0:
 
         grid_html = ""
         layout = [(5,"巳",1,1),(6,"午",1,2),(7,"未",1,3),(8,"申",1,4),(4,"辰",2,1),(9,"酉",2,4),(3,"卯",3,1),(10,"戌",3,4),(2,"寅",4,1),(1,"丑",4,2),(0,"子",4,3),(11,"亥",4,4)]
+        
         for idx, branch, r, c in layout:
             grid_html += get_palace_html(idx, branch, r, c, calc.palaces[idx], d_pos, l_pos, calc.ming_pos, is_pure, calc.shen_pos, st.session_state.focus_palace_idx)
         
         svg = render_triangles_svg(st.session_state.focus_palace_idx)
         final_chart = f'<div class="chart-wrapper">{svg}<div class="zwds-grid">{grid_html}{get_center_html(data, calc)}</div></div>'.replace('\n', '')
         
-        # 1. 命盤
+        # 顯示命盤
         st.markdown(final_chart, unsafe_allow_html=True)
 
-        # 2. 大限按鈕 (這裡不加額外的 st.write 或 container，直接渲染)
+        # 大限按鈕 (確保渲染順序)
         cols = st.columns(12)
         lnames = ["一限", "二限", "三限", "四限", "五限", "六限", "七限", "八限", "九限", "十限", "十一", "十二"]
         
