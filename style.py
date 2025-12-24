@@ -3,9 +3,7 @@ import streamlit as st
 def apply_style():
     st.markdown("""
     <style>
-        /* =================================================================
-           1. 基礎設定 (白底黑字)
-           ================================================================= */
+        /* (前略... 保持之前的設定) */
         :root {
             --primary-color: #4B0082;
             --background-color: #ffffff;
@@ -19,12 +17,9 @@ def apply_style():
         div[data-baseweb="select"] > div { background-color: #ffffff !important; color: #000000 !important; }
         label, .stMarkdown p { color: #333 !important; }
 
-        /* =================================================================
-           2. 命盤網格
-           ================================================================= */
         .block-container {
             padding-top: 6rem !important; 
-            padding-bottom: 2rem !important;
+            padding-bottom: 3rem !important;
             max-width: 1200px !important;
         }
         [data-testid="stVerticalBlock"] { gap: 0px !important; }
@@ -36,7 +31,7 @@ def apply_style():
             gap: 0;
             background-color: #000; 
             border: 2px solid #000;
-            margin-bottom: 10px;
+            margin-bottom: 20px;
             font-family: "Microsoft JhengHei", "Heiti TC", sans-serif;
             max-width: 1200px;
             margin-left: auto;
@@ -61,9 +56,6 @@ def apply_style():
         .active-daxian { background-color: #f9f9f9 !important; border: 2px solid #666 !important; }
         .active-liunian { border: 3px solid #007bff !important; z-index: 5; }
 
-        /* =================================================================
-           3. 星曜樣式
-           ================================================================= */
         .stars-box {
             display: flex;
             flex-direction: row; 
@@ -116,14 +108,9 @@ def apply_style():
 
         .star-medium { font-size: 14px; font-weight: bold; color: #000; writing-mode: vertical-rl; line-height: 1; }
         .star-small { font-size: 10px; color: #000; writing-mode: vertical-rl; line-height: 1; margin-top: 2px; }
-        
-        /* 修正：祿存也改為黑色 */
         .color-bad { color: #000 !important; } 
-        .color-good { color: #000 !important; } 
+        .color-good { color: #2e7d32 !important; } 
 
-        /* =================================================================
-           4. 底部資訊
-           ================================================================= */
         .cell-footer {
             margin-top: 0px; 
             border-top: 1px solid #eee;
@@ -143,6 +130,14 @@ def apply_style():
         .p-name-da { color: #666; font-size: 14px; font-weight: 900; }
         .p-name-ben { color: #d32f2f; font-size: 14px; font-weight: 900; }
         .limit-info { font-size: 11px; color: #333; font-weight: normal; margin-left: 2px; }
+        
+        /* 新增：長生十二神樣式 */
+        .life-stage {
+            font-size: 12px;
+            color: #555;
+            margin-bottom: 2px;
+            font-weight: bold;
+        }
 
         .center-info-box {
             grid-column: 2 / 4; grid-row: 2 / 4;
