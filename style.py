@@ -4,7 +4,14 @@ def get_css():
         :root { --primary: #4B0082; --border: #333; --grid-line: #999; }
         body { margin: 0; padding: 0; font-family: "Microsoft JhengHei", sans-serif; }
         
-        .block-container { padding: 0.5rem !important; max-width: 100% !important; }
+        /* 關鍵修正：補回被遺漏的頂部留白消除設定 */
+        .block-container { 
+            padding-top: 1rem !important; 
+            padding-bottom: 1rem !important;
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+            max-width: 100% !important; 
+        }
         [data-testid="stVerticalBlock"] { gap: 0 !important; }
         header { visibility: hidden; height: 0; }
 
@@ -13,14 +20,14 @@ def get_css():
             display: flex; flex-direction: column; width: 100%;
             border: 2px solid var(--border); box-sizing: border-box;
             position: relative; 
-            background-color: #ffffff; /* 關鍵：強制白底，避免 Streamlit 預設灰底吃掉線條 */
+            background-color: #ffffff; /* 強制白底 */
         }
 
         /* === Layer 1: SVG 線條 (畫在白紙上) === */
         .svg-container {
             position: absolute; top: 0; left: 0; width: 100%; height: 560px;
             pointer-events: none; 
-            z-index: 1; /* 比背景高，比文字低 */
+            z-index: 1; 
         }
         svg { width: 100%; height: 100%; }
         polygon { fill: none !important; }
@@ -33,7 +40,7 @@ def get_css():
 
         /* === Layer 2: 宮位格子 (透明玻璃) === */
         .zwds-cell {
-            background-color: transparent !important; /* 關鍵：透明，透出底下的線條 */
+            background-color: transparent !important; /* 透明，透出底下的線條 */
             position: relative; 
             overflow: hidden; display: flex; flex-direction: column;
         }
@@ -43,7 +50,7 @@ def get_css():
             flex: 1; padding: 2px; display: flex; flex-direction: column;
             background-color: rgba(255, 255, 255, 0.6); /* 半透明白 */
             z-index: 10; 
-            pointer-events: none; /* 文字不擋滑鼠 */
+            pointer-events: none; 
         }
 
         /* === Layer 50: 隱形觸控連結 (最頂層) === */
@@ -52,14 +59,14 @@ def get_css():
             position: absolute;
             top: 0; left: 0;
             width: 100%; height: 100%;
-            z-index: 50; /* 確保在最上面接收點擊 */
+            z-index: 50; 
             text-decoration: none;
             color: transparent;
             cursor: pointer;
         }
         a.click-overlay:hover { background-color: rgba(0,0,0,0.02); }
 
-        /* 動態背景色 (高亮時才給顏色) */
+        /* 動態背景色 */
         .focus-bg .cell-content { background-color: rgba(230, 247, 255, 0.85) !important; }
         .sanfang-bg .cell-content { background-color: rgba(255, 247, 230, 0.85) !important; }
         .duigong-bg .cell-content { background-color: rgba(246, 255, 237, 0.85) !important; }
