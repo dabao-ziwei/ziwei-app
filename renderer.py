@@ -74,7 +74,6 @@ def render_full_chart_html(calc, data, d_idx, l_off, focus_idx):
             if d_pos != -1: p_html = f"<div style='color:#666;font-size:11px;font-weight:900'>大{get_relative_palace_name(d_pos, idx)[0]}</div>" + p_html
         ft_r = f"<div class='footer-right'><div class='info-box'>{'<span class=shen-tag>身</span>' if is_pure and idx==calc.shen_pos else ''}<span style='font-size:11px;color:#800080;font-weight:bold'>{info['life_stage']}</span>{p_html}</div><div class='ganzhi-txt'>{GAN[info['gan_idx']]}{ZHI[idx]}</div></div>"
         
-        # 強制 style pointer-events: none
         cells_html += f"""
         <div id='p_{idx}' class='zwds-cell {border_cls}' style='grid-row:{r};grid-column:{c};'>
             <div class='cell-content {bg_cls}' style='pointer-events: none !important;'>
@@ -90,7 +89,6 @@ def render_full_chart_html(calc, data, d_idx, l_off, focus_idx):
     for i in range(12):
         inf = limits[i][1]
         cls = "time-btn btn-on" if i == d_idx else "time-btn"
-        # 按鈕內部文字強制穿透
         d_html += f"<div id='d_{i}' class='{cls}'><div style='pointer-events: none !important;'>{lnames[i]}<br>{GAN[inf['gan_idx']]}{ZHI[inf['zhi_idx']]}</div></div>"
     
     l_row = ""
