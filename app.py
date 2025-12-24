@@ -46,7 +46,7 @@ with st.sidebar:
 
     rec = next((x for x in st.session_state.db if x['id'] == st.session_state.current_id), None)
     
-    # 預設值永遠帶入資料庫的原始值 (西元)，若無資料則為空
+    # 預設值保持西元，讓使用者自行修改
     if rec:
         d_val = f"{rec['y']:04}{rec['m']:02}{rec['d']:02}"
         t_val = f"{rec['h']:02}{rec['min']:02}"
@@ -60,21 +60,18 @@ with st.sidebar:
             gender = st.radio("性別", ["男", "女"], index=0 if rec and rec['gender']=='男' else 1, horizontal=True)
             cat = st.text_input("分類", value=rec.get('category', '') if rec else "")
             
-            # UI位置修正：分類 -> 曆法 -> 日期
+            # 曆法選擇移入表單內
             cal_type = st.radio("曆法", ["西元", "民國"], index=0, horizontal=True)
             
-            # 提示文字動態改變，幫助使用者理解
             hint = "例如: 19790926" if cal_type=="西元" else "例如: 680926"
             date_str = st.text_input(f"日期 ({hint})", value=d_val)
             time_str = st.text_input("時間 (HHMM)", value=t_val)
             
             if st.form_submit_button("💾 儲存"):
                 try:
-                    # 1. 暴力清洗
                     d_pure = re.sub(r'\D', '', date_str) 
                     t_pure = re.sub(r'\D', '', time_str)
                     
-                    # 2. 時間解析
                     if len(t_pure) == 4:
                         h, mn = int(t_pure[:2]), int(t_pure[2:])
                     elif len(t_pure) == 3:
@@ -84,7 +81,6 @@ with st.sidebar:
                     else:
                         raise ValueError("時間格式錯誤")
 
-                    # 3. 日期解析
                     y, m, d = 0, 0, 0
                     
                     if cal_type == "民國":
@@ -104,7 +100,6 @@ with st.sidebar:
                             m = int(d_pure[4:6])
                             d = int(d_pure[6:])
                         else:
-                            # 備用方案
                             y, m, d, _ = parse_date(d_pure)
 
                     if name and y > 0:
