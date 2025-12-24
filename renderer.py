@@ -1,9 +1,11 @@
-# 修正：補上 get_ganzhi_for_year 引用
+# 確保引用正確
 from logic import GAN, ZHI, get_ganzhi_for_year
 
 PALACE_NAMES = ["命宮", "兄弟", "夫妻", "子女", "財帛", "疾厄", "遷移", "僕役", "官祿", "田宅", "福德", "父母"]
 
-def clean(s): return s.replace("\n", "").strip()
+def clean(s): 
+    # 移除換行，防止被 Streamlit 誤判為程式碼區塊
+    return s.replace("\n", "").strip()
 
 def get_relative_palace_name(ming_pos, current_cell_pos):
     return PALACE_NAMES[(ming_pos - current_cell_pos) % 12]
@@ -35,7 +37,7 @@ def render_full_chart_html(calc, data, d_idx, l_off, focus_idx):
         else: calc.calculate_sihua(d_gan, -1)
     else: calc.calculate_sihua(-1, -1)
 
-    # 2. 生成 SVG (連線層)
+    # 2. SVG 連線 (絕對不填色)
     svg_html = ""
     if focus_idx != -1:
         def get_pct(idx):
@@ -46,18 +48,17 @@ def render_full_chart_html(calc, data, d_idx, l_off, focus_idx):
         po = (focus_idx+6)%12
         x1, y1 = get_pct(p1); x2, y2 = get_pct(p2); x3, y3 = get_pct(p3); xo, yo = get_pct(po)
         
-        # 修正：強制 style="fill: none !important" 避免出現巨大色塊
         svg_html = f"""
-        <div style="position:absolute;top:0;left:0;width:100%;height:560px;pointer-events:none;z-index:1;">
+        <div style="position:absolute;top:0;left:0;width:100%;height:560px;pointer-events:none;z-index:0;">
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="width:100%;height:100%;">
-                <polygon points="{x1},{y1} {x2},{y2} {x3},{y3}" style="fill: none !important;" stroke="#008000" stroke-width="1.5" />
-                <line x1="{x1}" y1="{y1}" x2="{xo}" y2="{yo}" stroke="#008000" stroke-width="1.5" stroke-dasharray="4,2" />
-                <circle cx="{x1}" cy="{y1}" r="2" fill="#008000" />
+                <polygon points="{x1},{y1} {x2},{y2} {x3},{y3}" fill="none" stroke="#228B22" stroke-width="1.5" style="fill: none !important;" />
+                <line x1="{x1}" y1="{y1}" x2="{xo}" y2="{yo}" stroke="#228B22" stroke-width="1.5" stroke-dasharray="4,2" />
+                <circle cx="{x1}" cy="{y1}" r="2" fill="#228B22" />
             </svg>
         </div>
         """
 
-    # 3. 生成 Grid Cells
+    # 3. Grid Cells
     cells_html = ""
     layout = [(5,1,1),(6,1,2),(7,1,3),(8,1,4),(4,2,1),(9,2,4),(3,3,1),(10,3,4),(2,4,1),(1,4,2),(0,4,3),(11,4,4)]
     
@@ -66,7 +67,6 @@ def render_full_chart_html(calc, data, d_idx, l_off, focus_idx):
         classes = ["zwds-cell"]
         if idx == d_pos: classes.append("border-daxian")
         if idx == l_pos: classes.append("border-liunian")
-        
         if idx == focus_idx: classes.append("cell-focus")
         elif focus_idx!=-1 and idx in [(focus_idx+4)%12, (focus_idx+8)%12]: classes.append("cell-sanfang")
         elif focus_idx!=-1 and idx == (focus_idx+6)%12: classes.append("cell-duigong")
@@ -88,11 +88,12 @@ def render_full_chart_html(calc, data, d_idx, l_off, focus_idx):
             
         ft_r = f"<div class='footer-right'><div class='info-col'>{'<div class=badge-shen>身</div>' if is_pure and idx==calc.shen_pos else ''}<span class='life-stage'>{info['life_stage']}</span>{p_names}</div><div class='ganzhi-col'>{GAN[info['gan_idx']]}{ZHI[idx]}</div></div>"
         
+        # cell-content 提供背景色遮擋 SVG
         cells_html += f"<div id='p_{idx}' class='{' '.join(classes)}' style='grid-row:{r};grid-column:{c};'><div class='cell-content'><div class='stars-box'>{stars}</div>{ft_l}{ft_r}</div></div>"
 
     center_html = f"<div class='center-box'><h3 style='margin:0;color:#000;'>{data['name']}</h3><div style='font-size:13px;color:#555'>{data['gender']} | {calc.bureau_name} | {data.get('ming_star','')}坐命</div><div style='font-size:13px;font-weight:bold;color:#2E7D32'>國：{data['y']}/{data['m']}/{data['d']} {data['h']}:{data['min']:02d}</div><div style='font-size:13px;color:#555'>農：{calc.lunar.getYearInGanZhi()}年 {calc.lunar.getMonthInChinese()}月 {calc.lunar.getDayInChinese()}</div></div>"
 
-    # 4. 生成大限按鈕 (HTML)
+    # 4. 大限按鈕
     d_html = ""
     lnames = ["一限", "二限", "三限", "四限", "五限", "六限", "七限", "八限", "九限", "十限", "十一", "十二"]
     for i in range(12):
@@ -100,7 +101,7 @@ def render_full_chart_html(calc, data, d_idx, l_off, focus_idx):
         cls = "btn-limit btn-active" if i == d_idx else "btn-limit"
         d_html += f"<div id='d_{i}' class='{cls}'>{lnames[i]}<br>{GAN[inf['gan_idx']]}{ZHI[inf['zhi_idx']]}</div>"
     
-    # 5. 生成流年按鈕 (HTML)
+    # 5. 流年按鈕
     l_row = ""
     if not is_pure:
         l_html = ""
