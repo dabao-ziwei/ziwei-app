@@ -4,23 +4,13 @@ def get_css():
         :root { --primary: #4B0082; --border: #333; --grid-line: #999; }
         body { margin: 0; padding: 0; font-family: "Microsoft JhengHei", sans-serif; }
         
-        /* 關鍵修正：補回被遺漏的頂部留白消除設定 */
-        .block-container { 
-            padding-top: 1rem !important; 
-            padding-bottom: 1rem !important;
-            padding-left: 0.5rem !important;
-            padding-right: 0.5rem !important;
-            max-width: 100% !important; 
-        }
-        [data-testid="stVerticalBlock"] { gap: 0 !important; }
-        header { visibility: hidden; height: 0; }
-
         /* === Layer 0: 最底層畫布 (白色) === */
+        /* 強制白色背景，確保不透明，讓線條能畫在上面 */
         .master-container {
             display: flex; flex-direction: column; width: 100%;
             border: 2px solid var(--border); box-sizing: border-box;
             position: relative; 
-            background-color: #ffffff; /* 強制白底 */
+            background-color: #ffffff !important; 
         }
 
         /* === Layer 1: SVG 線條 (畫在白紙上) === */
@@ -40,7 +30,7 @@ def get_css():
 
         /* === Layer 2: 宮位格子 (透明玻璃) === */
         .zwds-cell {
-            background-color: transparent !important; /* 透明，透出底下的線條 */
+            background-color: transparent !important; /* 關鍵：透明，透出底下的線條 */
             position: relative; 
             overflow: hidden; display: flex; flex-direction: column;
         }
