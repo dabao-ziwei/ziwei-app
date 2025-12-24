@@ -6,6 +6,7 @@ def get_relative_palace_name(ming_pos, current_cell_pos):
     idx = (ming_pos - current_cell_pos) % 12
     return PALACE_NAMES[idx]
 
+# 取得 Grid 座標 (0-3, 0-3)
 def get_grid_coord(zhi_idx):
     coords = {
         5: (0, 0), 6: (0, 1), 7: (0, 2), 8: (0, 3),
@@ -16,99 +17,112 @@ def get_grid_coord(zhi_idx):
     return coords[zhi_idx]
 
 def render_triangles_svg(focus_idx):
+    """ 繪製虛線三角形與對宮連線 """
     if focus_idx == -1: return ""
-    p1 = focus_idx
-    p2 = (focus_idx + 4) % 12
-    p3 = (focus_idx + 8) % 12
+    
+    p1, p2, p3 = focus_idx, (focus_idx + 4) % 12, (focus_idx + 8) % 12
     p_opp = (focus_idx + 6) % 12
     
-    def get_center_pct(idx):
+    def get_pos(idx):
         r, c = get_grid_coord(idx)
-        return c * 25 + 12.5, r * 25 + 12.5
+        return c * 25 + 12.5, r * 25 + 12.5 # 中心點百分比
 
-    x1, y1 = get_center_pct(p1)
-    x2, y2 = get_center_pct(p2)
-    x3, y3 = get_center_pct(p3)
-    xo, yo = get_center_pct(p_opp)
+    x1, y1 = get_pos(p1)
+    x2, y2 = get_pos(p2)
+    x3, y3 = get_pos(p3)
+    xo, yo = get_pos(p_opp)
     
+    # style: stroke-dasharray="5,5" 做出虛線效果，像參考圖一樣
     svg = f"""
     <svg class="svg-overlay" viewBox="0 0 100 100" preserveAspectRatio="none">
-        <line x1="{x1}%" y1="{y1}%" x2="{x2}%" y2="{y2}%" stroke="rgba(255,0,0,0.6)" stroke-width="0.5" />
-        <line x2="{x2}%" y2="{y2}%" x1="{x3}%" y1="{y3}%" stroke="rgba(255,0,0,0.6)" stroke-width="0.5" />
-        <line x1="{x3}%" y1="{y3}%" x2="{x1}%" y2="{y1}%" stroke="rgba(255,0,0,0.6)" stroke-width="0.5" />
-        <line x1="{x1}%" y1="{y1}%" x2="{xo}%" y2="{yo}%" stroke="rgba(255,0,0,0.4)" stroke-width="0.5" stroke-dasharray="2" />
-        <circle cx="{x1}%" cy="{y1}%" r="1" fill="red" />
+        <polygon points="{x1},{y1} {x2},{y2} {x3},{y3}" fill="none" stroke="#666" stroke-width="0.3" stroke-dasharray="2,2" />
+        <line x1="{x1}" y1="{y1}" x2="{xo}" y2="{yo}" stroke="#666" stroke-width="0.3" stroke-dasharray="2,2" />
+        <circle cx="{x1}" cy="{y1}" r="0.8" fill="red" />
     </svg>
     """
     return svg
 
 def get_palace_html(idx, branch, r, c, info, daxian_pos, liunian_pos, benming_pos, is_pure_benming=False, shen_pos=-1, focus_idx=-1):
+    # 狀態判斷
     is_daxian = (idx == daxian_pos) and not is_pure_benming
     is_liunian = (idx == liunian_pos) and not is_pure_benming
-    is_focus = (idx == focus_idx)
-    is_sanfang = (focus_idx != -1) and (idx == (focus_idx+4)%12 or idx == (focus_idx+8)%12)
-    is_duigong = (focus_idx != -1) and (idx == (focus_idx+6)%12)
-
-    classes = ["zwds-cell"]
-    if is_daxian: classes.append("active-daxian")
-    if is_liunian: classes.append("active-liunian")
-    if is_focus: classes.append("highlight-focus")
-    if is_sanfang: classes.append("highlight-sanfang")
-    if is_duigong: classes.append("highlight-duigong")
-
-    class_str = " ".join(classes)
     
+    # 高亮判斷
+    cls = ["zwds-cell"]
+    if is_daxian: cls.append("active-daxian")
+    if is_liunian: cls.append("active-liunian")
+    
+    # 三方四正高亮
+    if focus_idx != -1:
+        if idx == focus_idx: cls.append("highlight-focus")
+        elif idx in [(focus_idx+4)%12, (focus_idx+8)%12]: cls.append("highlight-sanfang")
+        elif idx == (focus_idx+6)%12: cls.append("highlight-duigong")
+
+    # 1. 星曜區 (主星+副星 直接串接)
+    stars_html = ""
     # 主星
-    main_stars_html = ""
     for star in info['major_stars']:
-        sihua_html = ""
-        for sh in star['sihua']:
-            if is_pure_benming and sh['layer'] != '本': continue
-            bg_cls = {"本":"bg-ben", "大":"bg-da", "流":"bg-liu"}.get(sh['layer'], "")
-            sihua_html += f"<span class='hua-badge {bg_cls}'>{sh['type']}</span>"
-        main_stars_html += f"<div class='star-major-container'><div class='star-name'>{star['name']}</div>{sihua_html}</div>"
+        sihua = "".join([f"<span class='hua-badge { {'本':'bg-ben','大':'bg-da','流':'bg-liu'}.get(s['layer']) }'>{s['type']}</span>" for s in star['sihua'] if not is_pure_benming or s['layer']=='本'])
+        stars_html += f"<div class='star-major'><span class='star-name'>{star['name']}</span>{sihua}</div>"
     
-    # 副星
-    aux_stars = []
-    misc_stars = [] 
-    for m_name, is_bad, is_impt in info['minor_stars']:
-        if is_impt: aux_stars.append(m_name)
-        else: misc_stars.append(m_name)
-    
-    sub_stars_html = ""
-    for m_name in aux_stars:
-        sub_stars_html += f"<div class='star-medium'>{m_name}</div>"
-    for m_name in misc_stars:
-        sub_stars_html += f"<div class='star-small'>{m_name}</div>"
-    
-    # 左下
+    # 副星 (分類)
+    for m in info['minor_stars']:
+        # (name, is_bad, is_imp)
+        style = "star-med" if m[2] else "star-sml"
+        stars_html += f"<div class='{style}'>{m[0]}</div>"
+
+    # 2. 左下 (神煞+歲數)
     sui = info['sui_12'][0] if info['sui_12'] else ""
     jiang = info['jiang_12'][0] if info['jiang_12'] else ""
     boshi = info['boshi_12'][0] if info['boshi_12'] else ""
-    limit_text = f"{info['age_start']}/{info['age_end']}"
-    limit_info_html = f"<div class='limit-info'>{limit_text}</div>"
+    age_range = f"{info['age_start']}-{info['age_end']}" if is_pure_benming else f"{info['age_start']}/{info['age_end']}"
     
-    footer_left_html = f"<div class='footer-left'><div class='gods-col'><div class='god-star god-sui'>{sui}</div><div class='god-star god-jiang'>{jiang}</div><div class='god-star god-boshi'>{boshi}</div></div>{limit_info_html}</div>"
+    left_html = f"""
+    <div class='footer-left'>
+        <div class='gods-col'>
+            <span class='god-text' style='color:#008080'>{sui}</span>
+            <span class='god-text' style='color:#4682B4'>{jiang}</span>
+            <span class='god-text' style='color:#9370DB'>{boshi}</span>
+        </div>
+        <div class='limit-text'>{age_range}</div>
+    </div>
+    """
 
-    # 右下
-    name_liu_html = ""
-    name_da_html = ""
-    name_ben = get_relative_palace_name(benming_pos, idx)
-    shen_badge_html = ""
-    if is_pure_benming and idx == shen_pos: shen_badge_html = "<div class='shen-badge'>身</div>"
-
+    # 3. 右下 (宮位+干支)
+    # 身宮
+    shen_html = "<div class='badge-shen'>身</div>" if is_pure_benming and idx == shen_pos else ""
+    # 長生
+    life_html = f"<div class='life-stage'>{info['life_stage']}</div>"
+    # 宮名
+    ben_name = get_relative_palace_name(benming_pos, idx)
+    names_html = f"<div class='palace-name'>{ben_name}</div>"
     if not is_pure_benming:
-        if liunian_pos != -1: name_liu_html = f"<div class='p-name-liu'>流{get_relative_palace_name(liunian_pos, idx)[0]}</div>"
-        if daxian_pos != -1: name_da_html = f"<div class='p-name-da'>大{get_relative_palace_name(daxian_pos, idx)[0]}</div>"
-    
-    life_stage_html = f"<div class='life-stage'>{info['life_stage']}</div>"
-    palace_info_html = f"<div class='palace-info-col'>{shen_badge_html}{life_stage_html}{name_liu_html}{name_da_html}<div class='p-name-ben'>{name_ben}</div></div>"
-    ganzhi_html = f"<div class='ganzhi-col'>{GAN[info['gan_idx']]}{branch}</div>"
+        if liunian_pos != -1: 
+            ln_name = get_relative_palace_name(liunian_pos, idx)[0]
+            names_html = f"<div style='color:#0056b3;font-size:13px;font-weight:900'>流{ln_name}</div>" + names_html
+        if daxian_pos != -1:
+            dn_name = get_relative_palace_name(daxian_pos, idx)[0]
+            names_html = f"<div style='color:#666;font-size:13px;font-weight:900'>大{dn_name}</div>" + names_html
+            
+    right_html = f"""
+    <div class='footer-right'>
+        <div class='info-col'>
+            {shen_html}
+            {life_html}
+            {names_html}
+        </div>
+        <div class='ganzhi-label'>{GAN[info['gan_idx']]}{branch}</div>
+    </div>
+    """
 
-    footer_right_html = f"<div class='footer-right'>{palace_info_html}{ganzhi_html}</div>"
-
-    final_html = f"<div class='{class_str}' style='grid-row: {r}; grid-column: {c};'><div class='stars-box'>{main_stars_html}{sub_stars_html}</div>{footer_left_html}{footer_right_html}</div>"
-    return final_html
+    return f"<div class='{' '.join(cls)}' style='grid-row: {r}; grid-column: {c};'><div class='stars-box'>{stars_html}</div>{left_html}{right_html}</div>"
 
 def get_center_html(data, calc_obj):
-    return f"<div class='center-info-box'><h3 style='margin:0;color:#000;font-size:20px;'>{data['name']}</h3><div style='color:#666;font-size:12px;margin:2px 0;'>{data['gender']} | {calc_obj.bureau_name} | {data.get('ming_star','')}坐命</div><div style='color:#2e7d32;font-size:13px;font-weight:bold;'>國曆：{data['y']}/{data['m']}/{data['d']} {data['h']}:{data['min']:02d}</div><div style='color:#555;font-size:12px;'>農曆：{calc_obj.lunar.getYearInGanZhi()}年 {calc_obj.lunar.getMonthInChinese()}月 {calc_obj.lunar.getDayInChinese()}</div></div>"
+    return f"""
+    <div class='center-box'>
+        <h2 style='margin:0;font-size:24px;color:#000;'>{data['name']}</h2>
+        <div style='font-size:13px;color:#666;margin:5px 0;'>{data['gender']} | {calc_obj.bureau_name} | {data.get('ming_star','')}坐命</div>
+        <div style='font-size:14px;font-weight:bold;color:#2E7D32;'>國曆：{data['y']}/{data['m']}/{data['d']} {data['h']}:{data['min']:02d}</div>
+        <div style='font-size:13px;color:#555;'>農曆：{calc_obj.lunar.getYearInGanZhi()}年 {calc_obj.lunar.getMonthInChinese()}月 {calc_obj.lunar.getDayInChinese()}</div>
+    </div>
+    """
