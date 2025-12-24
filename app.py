@@ -8,12 +8,11 @@ from renderer import get_palace_html, get_center_html
 st.set_page_config(page_title="專業紫微斗數排盤系統", page_icon="🔮", layout="wide")
 apply_style()
 
-# 2. 初始化 Session State (增加 is_pure_benming 狀態)
+# 2. 初始化 Session State
 if 'db' not in st.session_state: st.session_state.db = [] 
 if 'current_id' not in st.session_state: st.session_state.current_id = 0
 if 'show_chart' not in st.session_state: st.session_state.show_chart = False
 if 'temp_preview_data' not in st.session_state: st.session_state.temp_preview_data = None
-# 預設選中第一大限 (命宮)，但我們可以設為 -1 代表未選
 if 'sel_daxian_idx' not in st.session_state: st.session_state.sel_daxian_idx = -1 
 if 'sel_liunian_offset' not in st.session_state: st.session_state.sel_liunian_offset = -1 
 
@@ -30,7 +29,6 @@ with st.container(border=True):
         sel = st.selectbox("選擇命主", options=list(opts.keys()), format_func=lambda x: opts[x], index=list(opts.keys()).index(curr))
         if sel != st.session_state.current_id:
             st.session_state.current_id = sel; st.session_state.show_chart = False; st.session_state.temp_preview_data = None; 
-            # 切換命主時重置為本命盤
             st.session_state.sel_daxian_idx = -1; st.session_state.sel_liunian_offset = -1; 
             st.rerun()
 
@@ -69,7 +67,6 @@ if btn_save or btn_calc:
                 for idx, x in enumerate(st.session_state.db):
                     if x['id']==st.session_state.current_id: st.session_state.db[idx]=pkt
             st.session_state.temp_preview_data = None; st.session_state.show_chart = True
-            # 新排盤預設回本命
             st.session_state.sel_daxian_idx = -1; st.session_state.sel_liunian_offset = -1;
             st.rerun()
         if btn_calc: 
@@ -84,7 +81,6 @@ if st.session_state.show_chart:
         
         sorted_limits = sorted(calc_obj.palaces.items(), key=lambda x: x[1]['age_start'])
         
-        # 判斷是否為「純本命模式」
         daxian_idx = st.session_state.sel_daxian_idx
         liunian_off = st.session_state.sel_liunian_offset
         is_pure_benming = (daxian_idx == -1)
@@ -93,11 +89,9 @@ if st.session_state.show_chart:
         liunian_pos = -1
         
         if not is_pure_benming:
-            # 計算大限與流年
             d_pos_idx, d_info = sorted_limits[daxian_idx]
             daxian_pos = int(d_pos_idx)
             
-            # 如果流年未選，預設選第一個流年(或不顯示流年，依需求，這裡先設為不顯示流年，只顯示大限)
             if liunian_off != -1:
                 curr_year = data['y'] + d_info['age_start'] + liunian_off - 1
                 daxian_gan = d_info['gan_idx']
@@ -107,11 +101,9 @@ if st.session_state.show_chart:
                 for pid, info in calc_obj.palaces.items():
                     if info['zhi_idx'] == ln_zhi: liunian_pos = int(pid); break
             else:
-                # 只選大限，未選流年 -> 只算大限四化
                 daxian_gan = d_info['gan_idx']
-                calc_obj.calculate_sihua(daxian_gan, -1) # -1 表示無流年
+                calc_obj.calculate_sihua(daxian_gan, -1) 
         else:
-            # 純本命 -> 只算本命四化
             calc_obj.calculate_sihua(-1, -1)
 
         benming_pos = calc_obj.ming_pos
@@ -132,10 +124,6 @@ if st.session_state.show_chart:
         # 運限控制區
         st.markdown("---")
         
-        # 回到本命盤按鈕
-        if st.button("↺ 重置 / 回到本命盤", use_container_width=True):
-            st.session_state.sel_daxian_idx = -1; st.session_state.sel_liunian_offset = -1; st.rerun()
-
         limit_names = ["一限", "二限", "三限", "四限", "五限", "六限", "七限", "八限", "九限", "十限", "十一", "十二"]
         cols_d = st.columns(12)
         for i, col in enumerate(cols_d):
@@ -144,10 +132,15 @@ if st.session_state.show_chart:
             label = f"{limit_names[i]}\n{gz}"
             is_selected = (i == daxian_idx)
             btn_type = "primary" if is_selected else "secondary"
+            
+            # 按鈕邏輯修正：再次點擊已選中的 -> 回到本命盤 (-1)
             if col.button(label, key=f"d_{i}", type=btn_type, use_container_width=True):
-                # 點擊已選中的大限 -> 取消選取 (回本命)
-                if is_selected: st.session_state.sel_daxian_idx = -1
-                else: st.session_state.sel_daxian_idx = i; st.session_state.sel_liunian_offset = -1; 
+                if is_selected: 
+                    st.session_state.sel_daxian_idx = -1
+                    st.session_state.sel_liunian_offset = -1
+                else: 
+                    st.session_state.sel_daxian_idx = i
+                    st.session_state.sel_liunian_offset = -1 # 切換大限時，流年先重置
                 st.rerun()
 
         # 只有在選了大限後，才顯示流年選項
@@ -160,9 +153,13 @@ if st.session_state.show_chart:
                 gy, zy = get_ganzhi_for_year(yr)
                 gz = f"{GAN[gy]}{ZHI[zy]}"
                 label = f"{yr}\n{gz}({age})"
-                is_selected = (j == liunian_offset)
+                is_selected = (j == liunian_off)
                 btn_type = "primary" if is_selected else "secondary"
+                
+                # 按鈕邏輯修正：再次點擊已選中的流年 -> 回到該大限 (取消流年)
                 if col.button(label, key=f"l_{j}", type=btn_type, use_container_width=True):
-                    if is_selected: st.session_state.sel_liunian_offset = -1
-                    else: st.session_state.sel_liunian_offset = j; 
+                    if is_selected: 
+                        st.session_state.sel_liunian_offset = -1
+                    else: 
+                        st.session_state.sel_liunian_offset = j
                     st.rerun()
