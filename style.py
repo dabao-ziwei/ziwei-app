@@ -40,7 +40,7 @@ def apply_style():
             background-color: #ffffff;
             border: 1px solid #ccc;
             padding: 2px;
-            position: relative;
+            position: relative; /* 絕對定位的基準點 */
             display: flex;
             flex-direction: column;
             height: 100%;
@@ -51,7 +51,7 @@ def apply_style():
         .active-liunian { border: 3px solid #007bff !important; z-index: 5; }
 
         /* =================================================================
-           3. 星曜區 (上半部)
+           3. 星曜區
            ================================================================= */
         .stars-box {
             display: flex;
@@ -72,14 +72,22 @@ def apply_style():
         .star-small { font-size: 11px; color: #4169E1; writing-mode: vertical-rl; line-height: 1; font-weight: normal; }
 
         /* =================================================================
-           4. 底部資訊 (絕對定位 & 修正版面)
+           4. 底部資訊 (絕對定位佈局)
            ================================================================= */
         
-        /* 左下角：神煞區 */
-        .gods-box {
+        /* [左下角區塊]：神煞 + 歲數 */
+        .footer-left {
             position: absolute;
             bottom: 2px;
             left: 2px;
+            display: flex;
+            flex-direction: row; /* 水平排列 */
+            align-items: flex-end; /* 底部對齊 */
+            gap: 4px;
+        }
+        
+        /* 神煞垂直欄 */
+        .gods-col {
             display: flex;
             flex-direction: column;
             align-items: flex-start;
@@ -90,44 +98,52 @@ def apply_style():
         .god-jiang { color: #4682B4; }
         .god-boshi { color: #9370DB; }
 
-        /* 右下角容器：改為 Row (水平排列) */
-        /* 左邊是直書的干支，右邊是堆疊的宮名資訊 */
+        /* 歲數 (在神煞右邊，底部) */
+        .limit-info { 
+            font-size: 14px; 
+            color: #333; 
+            font-weight: normal; 
+            line-height: 1;
+            margin-bottom: 0px;
+        }
+
+        /* [右下角區塊]：宮名堆疊 + 干支 */
         .footer-right {
             position: absolute;
             bottom: 2px;
             right: 2px;
             display: flex;
-            flex-direction: row; /* 關鍵：水平排列 */
+            flex-direction: row; /* 水平排列 */
             align-items: flex-end; /* 底部對齊 */
-            gap: 4px; /* 兩欄之間的間距 */
+            gap: 2px;
         }
 
-        /* 1. 干支：直書顯示 */
-        .ganzhi-text { 
-            color: #000; 
-            font-size: 16px; /* 字體加大 */
-            font-weight: 900; 
-            writing-mode: vertical-rl; /* 直書 */
-            text-orientation: upright;
-            line-height: 1;
-            margin-bottom: 2px; /* 微調底部對齊 */
-        }
-
-        /* 2. 宮名資訊欄：垂直堆疊 (靠右對齊) */
-        .footer-info-col {
+        /* 宮位資訊垂直欄 (長生 + 宮名) */
+        .palace-info-col {
             display: flex;
             flex-direction: column;
-            align-items: flex-end;
+            align-items: flex-end; /* 靠右對齊 (貼著干支) */
             line-height: 1.1;
         }
 
+        /* 干支垂直欄 (直書) */
+        .ganzhi-col {
+            writing-mode: vertical-rl;
+            text-orientation: upright;
+            font-size: 16px;
+            font-weight: 900;
+            line-height: 1;
+            color: #000;
+            margin-left: 2px;
+        }
+
+        /* 文字樣式 */
         .shen-badge { background-color: #1E90FF; color: #fff; font-size: 10px; padding: 1px 3px; border-radius: 2px; margin-bottom: 2px; font-weight: bold; }
         .life-stage { font-size: 12px; color: #800080; font-weight: bold; margin-bottom: 2px; }
         
         .p-name-liu { color: #0056b3; font-size: 14px; font-weight: 900; }
         .p-name-da { color: #666; font-size: 14px; font-weight: 900; }
         .p-name-ben { color: #d32f2f; font-size: 14px; font-weight: 900; }
-        .limit-info { font-size: 12px; color: #333; font-weight: normal; margin-top: 1px; }
 
         .center-info-box {
             grid-column: 2 / 4; grid-row: 2 / 4;
