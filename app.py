@@ -2,7 +2,7 @@ import streamlit as st
 import json
 import os
 import time
-import re # 引入正規表達式模組
+import re
 from st_click_detector import click_detector
 from logic import ZWDSCalculator, parse_date
 from renderer import render_full_chart_html
@@ -46,53 +46,48 @@ with st.sidebar:
 
     rec = next((x for x in st.session_state.db if x['id'] == st.session_state.current_id), None)
     
-    with st.expander("📝 編輯資料", expanded=(st.session_state.current_id == 0)):
-        # 1. 將曆法選擇移出 Form，以便切換時能即時刷新預設值
-        cal_type = st.radio("曆法", ["西元", "民國"], index=0, horizontal=True)
-        
-        # 2. 根據曆法計算預設值
-        if rec:
-            if cal_type == "民國":
-                roc_y = rec['y'] - 1911
-                # 補零，例如 680926
-                d_val = f"{roc_y:02}{rec['m']:02}{rec['d']:02}"
-            else:
-                d_val = f"{rec['y']:04}{rec['m']:02}{rec['d']:02}"
-            t_val = f"{rec['h']:02}{rec['min']:02}"
-        else:
-            d_val = ""
-            t_val = ""
+    # 預設值永遠帶入資料庫的原始值 (西元)，若無資料則為空
+    if rec:
+        d_val = f"{rec['y']:04}{rec['m']:02}{rec['d']:02}"
+        t_val = f"{rec['h']:02}{rec['min']:02}"
+    else:
+        d_val = ""
+        t_val = ""
 
+    with st.expander("📝 編輯資料", expanded=(st.session_state.current_id == 0)):
         with st.form("edit_form"):
             name = st.text_input("姓名", value=rec['name'] if rec else "")
             gender = st.radio("性別", ["男", "女"], index=0 if rec and rec['gender']=='男' else 1, horizontal=True)
             cat = st.text_input("分類", value=rec.get('category', '') if rec else "")
             
+            # UI位置修正：分類 -> 曆法 -> 日期
+            cal_type = st.radio("曆法", ["西元", "民國"], index=0, horizontal=True)
+            
+            # 提示文字動態改變，幫助使用者理解
             hint = "例如: 19790926" if cal_type=="西元" else "例如: 680926"
             date_str = st.text_input(f"日期 ({hint})", value=d_val)
             time_str = st.text_input("時間 (HHMM)", value=t_val)
             
             if st.form_submit_button("💾 儲存"):
                 try:
-                    # 3. 暴力清洗：移除所有非數字字符 (空白、斜線、橫線等)
+                    # 1. 暴力清洗
                     d_pure = re.sub(r'\D', '', date_str) 
                     t_pure = re.sub(r'\D', '', time_str)
                     
-                    # 4. 解析時間
+                    # 2. 時間解析
                     if len(t_pure) == 4:
                         h, mn = int(t_pure[:2]), int(t_pure[2:])
-                    elif len(t_pure) == 3: # 支援 930 -> 0930
+                    elif len(t_pure) == 3:
                         h, mn = int(t_pure[:1]), int(t_pure[1:])
                     elif len(t_pure) == 0:
                         h, mn = 0, 0
                     else:
-                        raise ValueError("時間格式錯誤，請輸入 4 碼數字 (如 1830)")
+                        raise ValueError("時間格式錯誤")
 
-                    # 5. 解析日期 (核心邏輯)
+                    # 3. 日期解析
                     y, m, d = 0, 0, 0
                     
                     if cal_type == "民國":
-                        # 支援 6 碼 (680926) 或 7 碼 (1000101)
                         if len(d_pure) == 6:
                             y = int(d_pure[:2]) + 1911
                             m = int(d_pure[2:4])
@@ -102,15 +97,15 @@ with st.sidebar:
                             m = int(d_pure[3:5])
                             d = int(d_pure[5:])
                         else:
-                            raise ValueError(f"民國日期長度錯誤 (您輸入了 {len(d_pure)} 碼數字，請輸入 6 或 7 碼)")
+                            raise ValueError(f"民國日期長度錯誤 ({len(d_pure)}碼)")
                     else:
-                        # 西元
                         if len(d_pure) == 8:
                             y = int(d_pure[:4])
                             m = int(d_pure[4:6])
                             d = int(d_pure[6:])
                         else:
-                            raise ValueError(f"西元日期需為 8 碼 (您輸入了 {len(d_pure)} 碼)")
+                            # 備用方案
+                            y, m, d, _ = parse_date(d_pure)
 
                     if name and y > 0:
                         calc = ZWDSCalculator(y, m, d, h, mn, gender)
@@ -130,7 +125,7 @@ with st.sidebar:
                         st.session_state.current_id = new_rec['id']
                         st.rerun()
                     else:
-                        st.error("姓名與日期為必填")
+                        st.error("資料不完整")
                 except Exception as e:
                     st.error(f"輸入錯誤: {str(e)}")
 
