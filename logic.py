@@ -34,6 +34,9 @@ class ZWDSCalculator:
             "name": "", 
             "major_stars": [],
             "minor_stars": [], 
+            "boshi_12": [], # 新增：博士十二神
+            "sui_12": [],   # 新增：歲前十二神
+            "jiang_12": [], # 新增：將前十二神
             "life_stage": "",
             "gan_idx": 0, 
             "zhi_idx": i, 
@@ -57,7 +60,7 @@ class ZWDSCalculator:
         for i in range(12):
             pos = (self.ming_pos - i) % 12
             self.palaces[pos]["name"] = names[i]
-            if pos == self.shen_pos: self.palaces[pos]["name"] += "(身宮)"
+            # 注意：這裡不在名字後加(身宮)，改由前端渲染判斷
         start_gan = (self.year_gan_idx % 5) * 2 + 2
         for i in range(12): self.palaces[i]["gan_idx"] = (start_gan + (i - 2) % 12) % 10
 
@@ -104,40 +107,39 @@ class ZWDSCalculator:
         m_num = self.lunar_month
         d_num = self.lunar_day
 
-        # 1. 祿存、擎羊、陀羅 (重要)
-        # 修正：變數名稱 lu -> lu_pos
+        # 祿存、擎羊、陀羅
         lu_pos = [2, 3, 5, 6, 5, 6, 8, 9, 11, 0][y_gan]
         add_minor(lu_pos, "祿存", False, True)
         add_minor(lu_pos + 1, "擎羊", True, True)
         add_minor(lu_pos - 1, "陀羅", True, True)
 
-        # 2. 魁鉞
+        # 魁鉞
         kui_yue = {0:(1,7), 1:(0,8), 2:(11,9), 3:(11,9), 4:(1,7), 5:(0,8), 6:(1,7), 7:(6,2), 8:(3,5), 9:(3,5)}
         k, y = kui_yue[y_gan]
         add_minor(k, "天魁", False, True)
         add_minor(y, "天鉞", False, True)
 
-        # 3. 輔弼
+        # 輔弼
         add_minor(4 + (m_num - 1), "左輔", False, True)
         add_minor(10 - (m_num - 1), "右弼", False, True)
 
-        # 4. 昌曲
+        # 昌曲
         pos_chang = (10 - h_zhi) % 12
         pos_qu = (4 + h_zhi) % 12
         add_minor(pos_chang, "文昌", False, True)
         add_minor(pos_qu, "文曲", False, True)
 
-        # 5. 火鈴
+        # 火鈴
         fire_bell_start = {2:(1,3), 6:(1,3), 10:(1,3), 8:(2,10), 0:(2,10), 4:(2,10), 5:(3,10), 9:(3,10), 1:(3,10), 11:(9,10), 3:(9,10), 7:(9,10)}
         st_fire, st_bell = fire_bell_start[y_zhi]
         add_minor(st_fire + h_zhi, "火星", True, True)
         add_minor(st_bell + h_zhi, "鈴星", True, True)
 
-        # 6. 空劫
+        # 空劫
         add_minor(11 - h_zhi, "地空", True, True)
         add_minor(11 + h_zhi, "地劫", True, True)
 
-        # === 雜曜 ===
+        # 雜曜
         add_minor(pos_chang + d_num - 1, "恩光")
         add_minor(pos_qu + d_num - 1, "天貴")
         pos_fu = (4 + m_num - 1) % 12
@@ -197,23 +199,24 @@ class ZWDSCalculator:
         add_minor(tian_yue[m_num-1], "天月", True)
 
     def _calc_shen_sha(self):
+        # 修正：將神煞存入專屬欄位，不放入 minor_stars
         lu_pos = [2, 3, 5, 6, 5, 6, 8, 9, 11, 0][self.year_gan_idx]
         boshi_names = ["博士","力士","青龍","小耗","將軍","奏書","飛廉","喜神","病符","大耗","伏兵","官府"]
         for i, name in enumerate(boshi_names):
             pos = (lu_pos + i * self.direction) % 12
-            self.palaces[pos]["minor_stars"].append((name, False, False))
+            self.palaces[pos]["boshi_12"].append(name)
 
         sui_names = ["歲建","晦氣","喪門","貫索","官符","小耗","大耗","龍德","白虎","天德","吊客","病符"]
         for i, name in enumerate(sui_names):
             pos = (self.year_zhi_idx + i) % 12
-            self.palaces[pos]["minor_stars"].append((name, False, False))
+            self.palaces[pos]["sui_12"].append(name)
 
         jiang_start = {2:6, 6:6, 10:6, 8:0, 0:0, 4:0, 5:9, 9:9, 1:9, 11:3, 3:3, 7:3}
         start = jiang_start[self.year_zhi_idx]
         jiang_names = ["將星","攀鞍","歲驛","息神","華蓋","劫煞","災煞","天煞","指背","咸池","月煞","亡神"]
         for i, name in enumerate(jiang_names):
             pos = (start + i) % 12
-            self.palaces[pos]["minor_stars"].append((name, False, False))
+            self.palaces[pos]["jiang_12"].append(name)
 
     def _calc_life_stages(self):
         start_map = {2:8, 5:8, 3:11, 4:5, 6:2}
