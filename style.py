@@ -4,7 +4,6 @@ def get_css():
         :root { --primary: #4B0082; --border: #333; --grid-line: #999; }
         body { margin: 0; padding: 0; font-family: "Microsoft JhengHei", sans-serif; }
         
-        /* 壓縮頂部空間 */
         .block-container { padding: 0.5rem !important; max-width: 100% !important; }
         [data-testid="stVerticalBlock"] { gap: 0 !important; }
         header { visibility: hidden; height: 0; }
@@ -30,11 +29,13 @@ def get_css():
         .zwds-cell {
             background-color: rgba(255,255,255,0.92);
             position: relative; overflow: hidden; display: flex; flex-direction: column;
+            
+            /* 讓容器接收點擊 */
             cursor: pointer; 
-            pointer-events: auto; /* 容器本身可點 */
+            pointer-events: auto; 
         }
         
-        /* === 關鍵修正：內部元素全部穿透，不擋滑鼠 === */
+        /* === 關鍵修正：所有內部元素都不准擋滑鼠 === */
         .zwds-cell * { pointer-events: none !important; }
 
         .cell-content {
