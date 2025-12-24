@@ -79,7 +79,6 @@ if st.session_state.current_id != 0:
     if data:
         calc = ZWDSCalculator(data['y'], data['m'], data['d'], data['h'], data['min'], data['gender'])
         
-        # 渲染 HTML (CSS 內嵌)
         html_content = render_full_chart_html(
             calc, data, 
             st.session_state.sel_daxian_idx, 
@@ -87,22 +86,20 @@ if st.session_state.current_id != 0:
             st.session_state.focus_palace_idx
         )
         
-        # 互動偵測
         clicked = click_detector(html_content, key="chart")
         
         if clicked:
             parts = clicked.split("_")
-            if len(parts) == 2:
-                type_code, idx = parts[0], int(parts[1])
-                if type_code == "p": # 宮位
-                    st.session_state.focus_palace_idx = -1 if st.session_state.focus_palace_idx == idx else idx
-                    st.rerun()
-                elif type_code == "d": # 大限
-                    st.session_state.sel_daxian_idx = -1 if st.session_state.sel_daxian_idx == idx else idx
-                    st.session_state.sel_liunian_offset = -1
-                    st.rerun()
-                elif type_code == "l": # 流年
-                    st.session_state.sel_liunian_offset = -1 if st.session_state.sel_liunian_offset == idx else idx
-                    st.rerun()
+            type_code, idx = parts[0], int(parts[1])
+            if type_code == "p":
+                st.session_state.focus_palace_idx = -1 if st.session_state.focus_palace_idx == idx else idx
+                st.rerun()
+            elif type_code == "d":
+                st.session_state.sel_daxian_idx = -1 if st.session_state.sel_daxian_idx == idx else idx
+                st.session_state.sel_liunian_offset = -1
+                st.rerun()
+            elif type_code == "l":
+                st.session_state.sel_liunian_offset = -1 if st.session_state.sel_liunian_offset == idx else idx
+                st.rerun()
 else:
     st.info("👈 請從左側選單「新增命盤」開始。")
