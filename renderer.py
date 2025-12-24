@@ -16,10 +16,11 @@ def get_grid_coord(zhi_idx):
     return coords[zhi_idx]
 
 def render_triangles_svg(focus_idx):
-    """ 繪製虛線三角形與對宮連線 """
     if focus_idx == -1: return ""
     
-    p1, p2, p3 = focus_idx, (focus_idx + 4) % 12, (focus_idx + 8) % 12
+    p1 = focus_idx
+    p2 = (focus_idx + 4) % 12
+    p3 = (focus_idx + 8) % 12
     p_opp = (focus_idx + 6) % 12
     
     def get_pos(idx):
@@ -31,7 +32,7 @@ def render_triangles_svg(focus_idx):
     x3, y3 = get_pos(p3)
     xo, yo = get_pos(p_opp)
     
-    # stroke-dasharray="4,2" 產生虛線
+    # 虛線樣式
     svg = f"""
     <svg class="svg-overlay" viewBox="0 0 100 100" preserveAspectRatio="none">
         <polygon points="{x1},{y1} {x2},{y2} {x3},{y3}" fill="none" stroke="#666" stroke-width="0.3" stroke-dasharray="4,2" />
@@ -42,6 +43,7 @@ def render_triangles_svg(focus_idx):
     return svg
 
 def get_palace_html(idx, branch, r, c, info, daxian_pos, liunian_pos, benming_pos, is_pure_benming=False, shen_pos=-1, focus_idx=-1):
+    # 狀態
     is_daxian = (idx == daxian_pos) and not is_pure_benming
     is_liunian = (idx == liunian_pos) and not is_pure_benming
     
@@ -54,17 +56,23 @@ def get_palace_html(idx, branch, r, c, info, daxian_pos, liunian_pos, benming_po
         elif idx in [(focus_idx+4)%12, (focus_idx+8)%12]: cls.append("highlight-sanfang")
         elif idx == (focus_idx+6)%12: cls.append("highlight-duigong")
 
-    # 1. 星曜 (全部串在一起)
+    # === 1. 星曜 (完全扁平化) ===
+    # 這裡我們不分主星副星的容器，直接把 HTML 串起來
+    
     stars_html = ""
+    
+    # (A) 主星
     for star in info['major_stars']:
         sihua = "".join([f"<span class='hua-badge { {'本':'bg-ben','大':'bg-da','流':'bg-liu'}.get(s['layer']) }'>{s['type']}</span>" for s in star['sihua'] if not is_pure_benming or s['layer']=='本'])
-        stars_html += f"<div class='star-major'><span class='star-name'>{star['name']}</span>{sihua}</div>"
+        stars_html += f"<div class='star-item'><span class='txt-major'>{star['name']}</span>{sihua}</div>"
     
+    # (B) 副星
     for m in info['minor_stars']:
-        style = "star-med" if m[2] else "star-sml"
-        stars_html += f"<div class='{style}'>{m[0]}</div>"
+        # m = (name, is_bad, is_imp)
+        style = "txt-med" if m[2] else "txt-sml"
+        stars_html += f"<div class='star-item'><span class='{style}'>{m[0]}</span></div>"
 
-    # 2. 左下
+    # === 2. 左下資訊 (神煞 + 歲數) ===
     sui = info['sui_12'][0] if info['sui_12'] else ""
     jiang = info['jiang_12'][0] if info['jiang_12'] else ""
     boshi = info['boshi_12'][0] if info['boshi_12'] else ""
@@ -73,15 +81,15 @@ def get_palace_html(idx, branch, r, c, info, daxian_pos, liunian_pos, benming_po
     left_html = f"""
     <div class='footer-left'>
         <div class='gods-col'>
-            <span class='god-text' style='color:#008080'>{sui}</span>
-            <span class='god-text' style='color:#4682B4'>{jiang}</span>
-            <span class='god-text' style='color:#9370DB'>{boshi}</span>
+            <span class='god-text god-sui'>{sui}</span>
+            <span class='god-text god-jiang'>{jiang}</span>
+            <span class='god-text god-boshi'>{boshi}</span>
         </div>
         <div class='limit-text'>{age_range}</div>
     </div>
     """
 
-    # 3. 右下
+    # === 3. 右下資訊 (宮位 + 干支) ===
     shen_html = "<div class='badge-shen'>身</div>" if is_pure_benming and idx == shen_pos else ""
     life_html = f"<div class='life-stage'>{info['life_stage']}</div>"
     
@@ -97,12 +105,23 @@ def get_palace_html(idx, branch, r, c, info, daxian_pos, liunian_pos, benming_po
             
     right_html = f"""
     <div class='footer-right'>
-        <div class='info-col'>{shen_html}{life_html}{names_html}</div>
-        <div class='ganzhi-label'>{GAN[info['gan_idx']]}{branch}</div>
+        <div class='info-col'>
+            {shen_html}
+            {life_html}
+            {names_html}
+        </div>
+        <div class='ganzhi-col'>{GAN[info['gan_idx']]}{branch}</div>
     </div>
     """
 
-    return f"<div class='{' '.join(cls)}' style='grid-row: {r}; grid-column: {c};'><div class='stars-box'>{stars_html}</div>{left_html}{right_html}</div>"
+    # 組合
+    return f"""
+    <div class='{' '.join(cls)}' style='grid-row: {r}; grid-column: {c};'>
+        <div class='stars-box'>{stars_html}</div>
+        {left_html}
+        {right_html}
+    </div>
+    """
 
 def get_center_html(data, calc_obj):
     return f"""
