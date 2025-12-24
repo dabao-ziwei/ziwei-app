@@ -33,9 +33,11 @@ with st.sidebar:
     st.header("功能選單")
     opts = {0: "➕ 新增命盤"}
     for p in st.session_state.db: opts[p['id']] = f"{p['name']} ({p['gender']})"
+    
     current_idx = 0
     if st.session_state.current_id in opts:
         current_idx = list(opts.keys()).index(st.session_state.current_id)
+        
     selected_id = st.selectbox("選擇命主", options=list(opts.keys()), format_func=lambda x: opts[x], index=current_idx)
 
     if selected_id != st.session_state.current_id:
@@ -82,7 +84,7 @@ if st.session_state.current_id != 0:
     if data:
         calc = ZWDSCalculator(data['y'], data['m'], data['d'], data['h'], data['min'], data['gender'])
         
-        # 產生一體化 HTML (包含點擊事件 ID)
+        # 產生一體化 HTML
         html_content = render_full_chart_html(
             calc, data, 
             st.session_state.sel_daxian_idx, 
@@ -90,7 +92,7 @@ if st.session_state.current_id != 0:
             st.session_state.focus_palace_idx
         )
         
-        # 渲染並偵測點擊
+        # 使用 click_detector
         clicked = click_detector(html_content, key="chart_interaction")
         
         if clicked:
