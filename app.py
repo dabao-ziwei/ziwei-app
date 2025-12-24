@@ -133,17 +133,15 @@ if st.session_state.show_chart:
             is_selected = (i == daxian_idx)
             btn_type = "primary" if is_selected else "secondary"
             
-            # 按鈕邏輯修正：再次點擊已選中的 -> 回到本命盤 (-1)
             if col.button(label, key=f"d_{i}", type=btn_type, use_container_width=True):
                 if is_selected: 
                     st.session_state.sel_daxian_idx = -1
                     st.session_state.sel_liunian_offset = -1
                 else: 
                     st.session_state.sel_daxian_idx = i
-                    st.session_state.sel_liunian_offset = -1 # 切換大限時，流年先重置
+                    st.session_state.sel_liunian_offset = -1 
                 st.rerun()
 
-        # 只有在選了大限後，才顯示流年選項
         if not is_pure_benming:
             cols_l = st.columns(10)
             d_info = sorted_limits[daxian_idx][1]
@@ -156,10 +154,10 @@ if st.session_state.show_chart:
                 is_selected = (j == liunian_off)
                 btn_type = "primary" if is_selected else "secondary"
                 
-                # 按鈕邏輯修正：再次點擊已選中的流年 -> 回到該大限 (取消流年)
                 if col.button(label, key=f"l_{j}", type=btn_type, use_container_width=True):
                     if is_selected: 
                         st.session_state.sel_liunian_offset = -1
                     else: 
+                        # 修正：使用正確的變數 j 而非 liunian_offset
                         st.session_state.sel_liunian_offset = j
                     st.rerun()
