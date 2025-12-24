@@ -1,4 +1,3 @@
-# logic.py
 from lunar_python import Lunar, Solar
 
 GAN = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸']
@@ -29,12 +28,14 @@ class ZWDSCalculator:
         
         is_yang_year = (self.year_gan_idx % 2 == 0)
         is_male = (self.gender == "男")
+        # 陽男陰女順行(1)，陰男陽女逆行(-1)
         self.direction = 1 if (is_yang_year and is_male) or (not is_yang_year and not is_male) else -1 
 
         self.palaces = {i: {
             "name": "", 
             "major_stars": [],
-            "minor_stars": [],
+            "minor_stars": [], # (名稱, 煞星?, 重要?)
+            "life_stage": "",  # 十二長生
             "gan_idx": 0, 
             "zhi_idx": i, 
             "age_start": 0, 
@@ -44,7 +45,9 @@ class ZWDSCalculator:
         self._calc_palaces()
         self._calc_bureau()
         self._calc_main_stars()
-        self._calc_minor_stars()
+        self._calc_minor_stars() # 大幅擴充
+        self._calc_shen_sha()    # 新增神煞
+        self._calc_life_stages() # 新增長生
         self._calc_daxian()
 
     def _calc_palaces(self):
@@ -65,6 +68,7 @@ class ZWDSCalculator:
                  2: [6,6,3,3,5,5,6,6,3,3,5,5], 3: [5,5,4,4,3,3,5,5,4,4,3,3], 
                  4: [3,3,4,4,2,2,3,3,4,4,2,2]}
         self.bureau_num = table[m_gan // 2][m_zhi]
+        # 局數名稱對映: 2水, 3木, 4金, 5土, 6火
         self.bureau_name = {2:"水二局", 3:"木三局", 4:"金四局", 5:"土五局", 6:"火六局"}[self.bureau_num]
 
     def _calc_daxian(self):
@@ -80,7 +84,7 @@ class ZWDSCalculator:
         else: rem = d % b; add = b - rem; q = (d + add) // b; zp = (2 + q - 1 - add) % 12 if add % 2 == 1 else (2 + q - 1 + add) % 12
         
         def add_star(idx, name):
-            bright = "廟" 
+            bright = "" # 簡化亮度
             self.palaces[idx]["major_stars"].append({'name': name, 'bright': bright, 'sihua': []})
 
         zw_map = {0:"紫微", -1:"天機", -3:"太陽", -4:"武曲", -5:"天同", -8:"廉貞"}
@@ -93,13 +97,233 @@ class ZWDSCalculator:
         self.ming_star = self.palaces[self.ming_pos]["major_stars"][0]['name'] if self.palaces[self.ming_pos]["major_stars"] else ""
 
     def _calc_minor_stars(self):
-        lu_pos = [2, 3, 5, 6, 5, 6, 8, 9, 11, 0] 
-        lu_idx = lu_pos[self.year_gan_idx]
+        # 輔助：加入雜曜 (名稱, 煞星?, 重要?)
+        def add_minor(idx, name, is_bad=False, is_imp=False):
+            self.palaces[idx % 12]["minor_stars"].append((name, is_bad, is_imp))
+
+        y_zhi = self.year_zhi_idx
+        y_gan = self.year_gan_idx
+        h_zhi = self.time_zhi_idx
+        m_num = self.lunar_month
+        d_num = self.lunar_day
+
+        # 1. 祿存、擎羊、陀羅 (依年干)
+        lu_pos = [2, 3, 5, 6, 5, 6, 8, 9, 11, 0] # 甲寅...癸子
+        lu = lu_pos[y_gan]
+        add_minor(lu, "祿存", False, True)
+        add_minor(lu + 1, "擎羊", True, True)
+        add_minor(lu - 1, "陀羅", True, True)
+
+        # 2. 天魁、天鉞 (依年干)
+        kui_yue = {
+            0: (1, 7), 1: (0, 8), 2: (11, 9), 3: (11, 9), 4: (1, 7), 
+            5: (0, 8), 6: (1, 7), 7: (6, 2), 8: (3, 5), 9: (3, 5)
+        } # 根據口訣：甲戊庚牛羊...
+        k, y = kui_yue[y_gan]
+        add_minor(k, "天魁", False, True)
+        add_minor(y, "天鉞", False, True)
+
+        # 3. 左輔、右弼 (依月分)
+        # 左輔：辰宮起正月，順數；右弼：戌宮起正月，逆數
+        add_minor(4 + (m_num - 1), "左輔", False, True)
+        add_minor(10 - (m_num - 1), "右弼", False, True)
+
+        # 4. 文昌、文曲 (依時支)
+        # 文昌：戌宮起子時，逆數；文曲：辰宮起子時，順數
+        pos_chang = (10 - h_zhi) % 12
+        pos_qu = (4 + h_zhi) % 12
+        add_minor(pos_chang, "文昌", False, True)
+        add_minor(pos_qu, "文曲", False, True)
+
+        # 5. 火星、鈴星 (依年支 + 時支)
+        # 寅午戌(2,6,10)起丑(1)卯(3); 申子辰(8,0,4)起寅(2)戌(10); 
+        # 巳酉丑(5,9,1)起卯(3)戌(10); 亥卯未(11,3,7)起酉(9)戌(10)
+        fire_bell_start = {
+            2: (1, 3), 6: (1, 3), 10: (1, 3), # 寅午戌
+            8: (2, 10), 0: (2, 10), 4: (2, 10), # 申子辰
+            5: (3, 10), 9: (3, 10), 1: (3, 10), # 巳酉丑
+            11: (9, 10), 3: (9, 10), 7: (9, 10) # 亥卯未
+        }
+        st_fire, st_bell = fire_bell_start[y_zhi]
+        add_minor(st_fire + h_zhi, "火星", True, True)
+        add_minor(st_bell + h_zhi, "鈴星", True, True)
+
+        # 6. 地空、地劫 (依時支)
+        # 亥宮起子時，空逆劫順
+        add_minor(11 - h_zhi, "地空", True, True)
+        add_minor(11 + h_zhi, "地劫", True, True)
+
+        # === 以下為丙級/雜曜 ===
+
+        # 恩光、天貴 (依昌曲 + 日)
+        # 恩光：文昌順數至日-1；天貴：文曲順數至日-1
+        add_minor(pos_chang + d_num - 1, "恩光")
+        add_minor(pos_qu + d_num - 1, "天貴")
+
+        # 三台、八座 (依輔弼 + 日)
+        # 三台：左輔順數至日；八座：右弼逆數至日
+        # 左輔位置: 4 + m_num - 1
+        pos_fu = (4 + m_num - 1) % 12
+        pos_bi = (10 - m_num + 1) % 12
+        add_minor(pos_fu + d_num - 1, "三台")
+        add_minor(pos_bi - (d_num - 1), "八座")
+
+        # 天刑、天姚 (依月)
+        # 天刑：酉上起正月順；天姚：丑上起正月順
+        add_minor(9 + m_num - 1, "天刑", True) # 雜曜煞
+        add_minor(1 + m_num - 1, "天姚")
+
+        # 紅鸞、天喜 (依年)
+        # 紅鸞：卯上起子年逆；天喜：紅鸞對宮
+        pos_luan = (3 - y_zhi) % 12
+        add_minor(pos_luan, "紅鸞")
+        add_minor(pos_luan + 6, "天喜")
+
+        # 孤辰、寡宿 (依年)
+        # 亥子丑(11,0,1) -> 寅(2)戌(10); 寅卯辰(2,3,4) -> 巳(5)丑(1); 
+        # 巳午未(5,6,7) -> 申(8)辰(4); 申酉戌(8,9,10) -> 亥(11)未(7)
+        if y_zhi in [11,0,1]: add_minor(2,"孤辰"); add_minor(10,"寡宿")
+        elif y_zhi in [2,3,4]: add_minor(5,"孤辰"); add_minor(1,"寡宿")
+        elif y_zhi in [5,6,7]: add_minor(8,"孤辰"); add_minor(4,"寡宿")
+        else: add_minor(11,"孤辰"); add_minor(7,"寡宿")
+
+        # 龍池、鳳閣 (依年)
+        # 龍：辰起子順；鳳：戌起子逆
+        add_minor(4 + y_zhi, "龍池")
+        add_minor(10 - y_zhi, "鳳閣")
+
+        # 天空 (依年) - 注意與地空區別，此為年系
+        # 丑起子順
+        add_minor(1 + y_zhi, "天空", True)
+
+        # 天哭、天虛 (依年)
+        # 哭：午起子逆；虛：午起子順
+        add_minor(6 - y_zhi, "天哭")
+        add_minor(6 + y_zhi, "天虛")
+
+        # 蜚廉 (依年)
+        # 子(2) 丑(3) 寅(4) ... 其實是順數 + 2
+        # 子在申? 查表: 子申,丑酉,寅戌,卯巳,辰午,巳未,午寅,未卯,申辰,酉亥,戌丑,亥子
+        feilian_map = {0:8, 1:9, 2:10, 3:5, 4:6, 5:7, 6:2, 7:3, 8:4, 9:11, 10:1, 11:0}
+        add_minor(feilian_map[y_zhi], "蜚廉")
+
+        # 破碎 (依年)
+        # 子午卯酉(巳), 寅申巳亥(酉), 辰戌丑未(丑)
+        if y_zhi in [0,6,3,9]: add_minor(5, "破碎")
+        elif y_zhi in [2,8,5,11]: add_minor(9, "破碎")
+        else: add_minor(1, "破碎")
+
+        # 天傷、天使 (依僕役宮)
+        # 陽順陰逆? 固定僕役宮? 
+        # 通則：天傷在仆役，天使在疾厄
+        # 註：有些流派依命宮陽陰順逆，這裡採通用：傷在僕役(命+8)，使在疾厄(命+6)
+        # 修正：通常天傷在命宮之「交友宮」，天使在「疾厄宮」。
+        # 命(0), 兄(11), 夫(10), 子(9), 財(8), 疾(7), 遷(6), 友(5)
+        # 這裡用我的順序：命=ming_pos, 逆時針排。
+        # 疾厄是 ming_pos - 5, 交友是 ming_pos - 7
+        add_minor(self.ming_pos - 7, "天傷", True)
+        add_minor(self.ming_pos - 5, "天使", True)
+
+        # 天官、天福 (依年干)
+        # 官: 甲未 乙辰 丙巳 丁寅 戊卯 己酉 庚亥 辛酉 壬戌 癸午
+        tian_guan = [7, 4, 5, 2, 3, 9, 11, 9, 10, 6]
+        # 福: 甲酉 乙申 丙子 丁亥 戊卯 己寅 庚午 辛巳 壬午 癸巳
+        tian_fu = [9, 8, 0, 11, 3, 2, 6, 5, 6, 5]
+        add_minor(tian_guan[y_gan], "天官")
+        add_minor(tian_fu[y_gan], "天福")
+
+        # 天廚 (依年干)
+        # 甲巳 乙午 丙子 丁巳 戊午 己申 庚寅 辛午 壬酉 癸亥
+        tian_chu = [5, 6, 0, 5, 6, 8, 2, 6, 9, 11]
+        add_minor(tian_chu[y_gan], "天廚")
+
+        # 天才、天壽 (依命宮 + 年支)
+        # 天才：命宮起子順至年支；天壽：身宮起子順至年支
+        add_minor(self.ming_pos + y_zhi, "天才")
+        add_minor(self.shen_pos + y_zhi, "天壽")
+
+        # 截空 (依年干)
+        # 甲己:申酉, 乙庚:午未, 丙辛:辰巳, 丁壬:寅卯, 戊癸:子丑
+        # 顯示正空與傍空? 通常顯示兩個
+        jie_kong = {0:(8,9), 5:(8,9), 1:(6,7), 6:(6,7), 2:(4,5), 7:(4,5), 3:(2,3), 8:(2,3), 4:(0,1), 9:(0,1)}
+        jk1, jk2 = jie_kong[y_gan]
+        add_minor(jk1, "截空", True)
+        add_minor(jk2, "截空", True)
+
+        # 旬空 (依年干支) - 旬中空亡
+        # 需計算六十甲子旬空
+        # 公式：(地支 - 天干 + 12) % 12 得到的數值對應的兩支
+        # 簡化查表太長，用公式算
+        # 旬空位置 = 10 - (支 - 干) ... 稍複雜，用對應法
+        # 甲子旬(干0支0) -> 空戌亥(10,11)
+        shift = (y_zhi - y_gan + 12) % 12
+        # shift=0(甲子旬) -> 10,11
+        # shift=10(甲戌) -> 8,9
+        # shift=8(甲申) -> 6,7
+        # shift=6(甲午) -> 4,5
+        # shift=4(甲辰) -> 2,3
+        # shift=2(甲寅) -> 0,1
+        # 歸納：空亡 = (shift - 2) & (shift - 1)
+        xk1 = (shift - 2 + 12) % 12
+        xk2 = (shift - 1 + 12) % 12
+        add_minor(xk1, "旬空", True)
+        add_minor(xk2, "旬空", True)
+
+        # 天月 (依月)
+        # 1戌 2巳 3辰 4寅 5未 6卯 7亥 8未 9寅 10午 11戌 12寅
+        tian_yue = [10, 5, 4, 2, 7, 3, 11, 7, 2, 6, 10, 2]
+        add_minor(tian_yue[m_num-1], "天月", True)
+
+    def _calc_shen_sha(self):
+        # 博士十二神 (依祿存 + 陰陽男女)
+        # 祿存位置
+        lu_pos = [2, 3, 5, 6, 5, 6, 8, 9, 11, 0][self.year_gan_idx]
+        boshi_names = ["博士","力士","青龍","小耗","將軍","奏書","飛廉","喜神","病符","大耗","伏兵","官府"]
+        direction = self.direction # 陽男陰女=1，陰男陽女=-1
+        for i, name in enumerate(boshi_names):
+            pos = (lu_pos + i * direction) % 12
+            self.palaces[pos]["minor_stars"].append((name, False, False)) # 標記為不重要以免太亂
+
+        # 歲前十二神 (依年支)
+        sui_names = ["歲建","晦氣","喪門","貫索","官符","小耗","大耗","龍德","白虎","天德","吊客","病符"]
+        # 歲建在年支
+        for i, name in enumerate(sui_names):
+            pos = (self.year_zhi_idx + i) % 12
+            # 這裡會有重複名稱(如病符)，前端可能顯示兩個，紫微斗數中常見
+            self.palaces[pos]["minor_stars"].append((name, False, False))
+
+        # 將前十二神 (依年支三合)
+        # 寅午戌(火)起午; 申子辰(水)起子; 巳酉丑(金)起酉; 亥卯未(木)起卯
+        # 也就是：將星在三合之帝旺位
+        jiang_start = {
+            2:6, 6:6, 10:6, # 火局 -> 午(6)
+            8:0, 0:0, 4:0,  # 水局 -> 子(0)
+            5:9, 9:9, 1:9,  # 金局 -> 酉(9)
+            11:3, 3:3, 7:3  # 木局 -> 卯(3)
+        }
+        jiang_names = ["將星","攀鞍","歲驛","息神","華蓋","劫煞","災煞","天煞","指背","咸池","月煞","亡神"]
+        start = jiang_start[self.year_zhi_idx]
+        for i, name in enumerate(jiang_names):
+            pos = (start + i) % 12
+            self.palaces[pos]["minor_stars"].append((name, False, False))
+
+    def _calc_life_stages(self):
+        # 五行局長生 (依五行局)
+        # 水二(2)土五(5) -> 申(8)
+        # 木三(3) -> 亥(11)
+        # 金四(4) -> 巳(5)
+        # 火六(6) -> 寅(2)
+        start_map = {2:8, 5:8, 3:11, 4:5, 6:2}
+        start_pos = start_map[self.bureau_num]
         
-        # 參數: (名稱, 是否為煞星, 是否為重要乙級星)
-        self.palaces[lu_idx]["minor_stars"].append(("祿存", False, True)) 
-        self.palaces[(lu_idx+1)%12]["minor_stars"].append(("擎羊", True, True)) 
-        self.palaces[(lu_idx-1)%12]["minor_stars"].append(("陀羅", True, True)) 
+        stages = ["長生","沐浴","冠帶","臨官","帝旺","衰","病","死","墓","絕","胎","養"]
+        
+        # 順逆依性別與年干陰陽
+        # 陽男陰女順，陰男陽女逆 -> self.direction
+        
+        for i, name in enumerate(stages):
+            pos = (start_pos + i * self.direction) % 12
+            self.palaces[pos]["life_stage"] = name
 
     def calculate_sihua(self, daxian_gan_idx, liunian_gan_idx):
         sihua_table = [
@@ -126,12 +350,11 @@ class ZWDSCalculator:
             for star in palace["major_stars"]:
                 star['sihua'] = [] # 重置
                 s_name = star['name']
-                # 遍歷每一層 (本、大、流)
                 for gan_idx, layer_name in layers:
+                    if gan_idx == -1: continue # 處理未選大限/流年的情況
                     stars_list = sihua_table[gan_idx]
                     if s_name in stars_list:
                         s_type = types[stars_list.index(s_name)]
-                        # 存入列表，後續會依照列表順序渲染
                         star['sihua'].append({'type': s_type, 'layer': layer_name})
 
     def get_result(self):
