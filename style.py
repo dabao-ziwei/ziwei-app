@@ -3,12 +3,11 @@ import streamlit as st
 def apply_style():
     st.markdown("""
     <style>
-        /* === 1. 全局設定 === */
+        /* === 1. 全局重置 === */
         :root { --primary-color: #4B0082; --bg-color: #fff; --text-color: #000; }
         .stApp { background-color: #ffffff !important; color: #000000 !important; }
         header[data-testid="stHeader"] { display: none !important; }
         
-        /* 滿版設定 */
         .block-container {
             padding: 1rem 0.5rem !important;
             max-width: 100% !important;
@@ -17,40 +16,45 @@ def apply_style():
         
         /* 側邊欄 */
         [data-testid="stSidebar"] {
-            background-color: #f4f4f4;
+            background-color: #f8f9fa;
             border-right: 1px solid #ddd;
             min-width: 300px !important;
         }
 
-        /* === 2. 命盤結構 === */
+        /* === 2. 命盤容器 (Chart Wrapper) === */
         .chart-wrapper {
             position: relative;
             width: 100%;
-            border: 2px solid #000;
-            background-color: #555; /* 格線顏色 */
-            margin: 0;
+            border: 2px solid #333;
+            background-color: #333; /* 格線顏色 */
+            margin-bottom: 0px;
+            box-sizing: border-box; /* 確保邊框不撐大 */
         }
 
+        /* SVG 疊加層 */
         .svg-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             pointer-events: none; z-index: 20;
         }
 
+        /* 網格系統 (強制高度與寬度) */
         .zwds-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            grid-template-rows: repeat(4, 130px); /* 固定高度 */
+            grid-template-rows: repeat(4, 130px); /* 固定每格高度 */
             gap: 1px;
             background-color: #999;
+            width: 100%;
         }
 
         .zwds-cell {
-            background-color: #fff;
+            background-color: #ffffff;
             position: relative;
             padding: 2px;
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            height: 100%; /* 確保填滿格子 */
         }
 
         /* 高亮 */
@@ -60,7 +64,7 @@ def apply_style():
         .active-daxian { box-shadow: inset 0 0 0 2px #666; }
         .active-liunian { box-shadow: inset 0 0 0 2px #007bff; }
 
-        /* === 3. 星曜區 (完全扁平化) === */
+        /* === 3. 星曜區 (流水線排列) === */
         .stars-box {
             display: flex;
             flex-direction: row;
@@ -71,50 +75,44 @@ def apply_style():
             width: 100%;
         }
 
-        /* 通用星星樣式 (讓主星副星平起平坐) */
+        /* 每一顆星星 (包含主星與副星) 的通用容器 */
         .star-item {
             display: inline-flex;
             flex-direction: column;
             align-items: center;
-            margin: 0 1px 1px 0 !important; /* 極小間距 */
-            line-height: 1;
+            margin: 0 1px 1px 0 !important; /* 每個星星右邊與下面留 1px */
             height: fit-content;
+            vertical-align: top;
         }
 
-        /* 主星文字 */
+        /* 字體樣式 */
         .txt-major {
             font-size: 18px; font-weight: 900; color: #B71C1C;
             writing-mode: vertical-rl; text-orientation: upright;
-            letter-spacing: -2px; 
+            line-height: 1; letter-spacing: -2px; 
         }
+        .txt-med { font-size: 14px; font-weight: 700; color: #000; writing-mode: vertical-rl; line-height: 1.1; }
+        .txt-sml { font-size: 11px; color: #4169E1; writing-mode: vertical-rl; line-height: 1.1; }
+
         /* 四化標籤 */
         .hua-badge {
             font-size: 10px; color: #fff; padding: 0;
             border-radius: 2px; text-align: center; width: 14px; display: block;
-            margin-top: 0px;
+            line-height: 1.1;
         }
         .bg-ben { background-color: #d32f2f; } 
         .bg-da { background-color: #808080; } 
         .bg-liu { background-color: #0056b3; }
 
-        /* 副星文字 */
-        .txt-med { font-size: 14px; font-weight: 700; color: #000; writing-mode: vertical-rl; }
-        .txt-sml { font-size: 11px; color: #4169E1; writing-mode: vertical-rl; }
-
-        /* === 4. 角落資訊 (絕對定位) === */
-        /* 左下：神煞 + 歲數 */
+        /* === 4. 角落資訊 === */
         .footer-left {
             position: absolute; bottom: 1px; left: 2px;
             display: flex; align-items: flex-end; gap: 4px;
             pointer-events: none;
         }
         .gods-col { display: flex; flex-direction: column; line-height: 1; }
-        .god-text { font-size: 10px; color: #333; writing-mode: horizontal-tb; margin-bottom: 1px; }
-        .god-sui { color: #008080; } .god-jiang { color: #4682B4; } .god-boshi { color: #9370DB; }
+        .god-text { font-size: 10px; color: #555; writing-mode: horizontal-tb; margin-bottom: 1px; }
         
-        .limit-text { font-size: 14px; font-weight: normal; color: #000; line-height: 1; margin-bottom: 0px; }
-
-        /* 右下：宮位 + 干支 */
         .footer-right {
             position: absolute; bottom: 1px; right: 1px;
             display: flex; align-items: flex-end; gap: 2px;
@@ -124,8 +122,8 @@ def apply_style():
         .badge-shen { background-color: #007bff; color: #fff; font-size: 9px; padding: 0 2px; border-radius: 2px; margin-bottom: 1px; }
         .life-stage { font-size: 11px; color: #800080; font-weight: bold; margin-bottom: 1px; }
         .palace-name { font-size: 13px; font-weight: 900; color: #d32f2f; margin-bottom: 0px; }
+        .limit-text { font-size: 14px; font-weight: normal; color: #000; line-height: 1; margin-bottom: 0px; }
         
-        /* 直書干支 */
         .ganzhi-col { 
             font-size: 16px; font-weight: 900; color: #000; 
             writing-mode: vertical-rl; text-orientation: upright; line-height: 1;
@@ -142,26 +140,15 @@ def apply_style():
             margin-top: 0px;
         }
         
-        /* 覆蓋 Button 樣式 */
         div.stButton > button {
-            width: 100% !important;
-            border: none !important;
-            border-right: 1px solid #ddd !important;
-            border-radius: 0 !important;
-            background-color: transparent !important;
-            color: #333 !important;
-            font-size: 12px !important;
-            padding: 4px 0 !important;
-            min-height: 36px !important;
-            height: auto !important;
-            line-height: 1.2 !important;
-            margin: 0 !important;
-            box-shadow: none !important;
+            width: 100% !important; border: none !important; border-right: 1px solid #ddd !important;
+            border-radius: 0 !important; background-color: transparent !important; color: #333 !important;
+            font-size: 12px !important; padding: 4px 0 !important; min-height: 36px !important; height: auto !important;
+            line-height: 1.2 !important; margin: 0 !important; box-shadow: none !important;
         }
         div.stButton > button:hover { background-color: #e0e0e0 !important; }
         div.stButton > button[kind="primary"] { background-color: #4B0082 !important; color: white !important; }
 
-        /* 中宮 */
         .center-box {
             grid-column: 2 / 4; grid-row: 2 / 4;
             background-color: #fff;
