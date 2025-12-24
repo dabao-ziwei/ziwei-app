@@ -2,7 +2,6 @@ import streamlit as st
 import json
 import os
 import time
-# 務必確保已在 requirements.txt 加入 st-click-detector
 from st_click_detector import click_detector
 from style import apply_style
 from logic import ZWDSCalculator, parse_date, get_ganzhi_for_year, GAN, ZHI
@@ -30,16 +29,13 @@ if 'sel_daxian_idx' not in st.session_state: st.session_state.sel_daxian_idx = -
 if 'sel_liunian_offset' not in st.session_state: st.session_state.sel_liunian_offset = -1 
 if 'focus_palace_idx' not in st.session_state: st.session_state.focus_palace_idx = -1
 
-# === Sidebar ===
 with st.sidebar:
     st.header("功能選單")
     opts = {0: "➕ 新增命盤"}
     for p in st.session_state.db: opts[p['id']] = f"{p['name']} ({p['gender']})"
-    
     current_idx = 0
     if st.session_state.current_id in opts:
         current_idx = list(opts.keys()).index(st.session_state.current_id)
-        
     selected_id = st.selectbox("選擇命主", options=list(opts.keys()), format_func=lambda x: opts[x], index=current_idx)
 
     if selected_id != st.session_state.current_id:
@@ -54,12 +50,10 @@ with st.sidebar:
         with st.form("edit_form"):
             name = st.text_input("姓名", value=rec['name'] if rec else "")
             gender = st.radio("性別", ["男", "女"], index=0 if rec and rec['gender']=='男' else 1, horizontal=True)
-            cat = st.text_input("分類", value=rec.get('category', '') if rec else "")
             d_val = f"{rec['y']:04}{rec['m']:02}{rec['d']:02}" if rec else ""
             t_val = f"{rec['h']:02}{rec['min']:02}" if rec else ""
             date_str = st.text_input("日期 (YYYYMMDD)", value=d_val)
             time_str = st.text_input("時間 (HHMM)", value=t_val)
-            
             if st.form_submit_button("💾 儲存"):
                 try:
                     y, m, d, _ = parse_date(date_str)
@@ -69,7 +63,7 @@ with st.sidebar:
                         p_data, m_star, bur, _, ming_pos = calc.get_result()
                         new_rec = {
                             "id": int(time.time()) if st.session_state.current_id==0 else st.session_state.current_id,
-                            "name": name, "gender": gender, "category": cat,
+                            "name": name, "gender": gender, "category": "",
                             "y": y, "m": m, "d": d, "h": h, "min": mn,
                             "ming_star": m_star, "bureau": bur, "ming_pos": ming_pos
                         }
@@ -83,13 +77,12 @@ with st.sidebar:
                         st.rerun()
                 except: st.error("輸入錯誤")
 
-# === Main Chart (一體成型版) ===
 if st.session_state.current_id != 0:
     data = next((x for x in st.session_state.db if x['id'] == st.session_state.current_id), None)
     if data:
         calc = ZWDSCalculator(data['y'], data['m'], data['d'], data['h'], data['min'], data['gender'])
         
-        # 產生所有 HTML (Grid + SVG + Buttons)
+        # 產生一體化 HTML (包含點擊事件 ID)
         html_content = render_full_chart_html(
             calc, data, 
             st.session_state.sel_daxian_idx, 
@@ -97,24 +90,21 @@ if st.session_state.current_id != 0:
             st.session_state.focus_palace_idx
         )
         
-        # 使用 click_detector 渲染並偵測點擊
+        # 渲染並偵測點擊
         clicked = click_detector(html_content, key="chart_interaction")
         
         if clicked:
-            # 解析點擊的 ID: "p_5", "d_0", "l_2"
             parts = clicked.split("_")
             type_code, idx = parts[0], int(parts[1])
             
-            if type_code == "p": # 點擊宮位 -> 觸發連線
+            if type_code == "p": # 宮位
                 st.session_state.focus_palace_idx = -1 if st.session_state.focus_palace_idx == idx else idx
                 st.rerun()
-                
-            elif type_code == "d": # 點擊大限 -> 切換大限
+            elif type_code == "d": # 大限
                 st.session_state.sel_daxian_idx = -1 if st.session_state.sel_daxian_idx == idx else idx
                 st.session_state.sel_liunian_offset = -1
                 st.rerun()
-                
-            elif type_code == "l": # 點擊流年 -> 切換流年
+            elif type_code == "l": # 流年
                 st.session_state.sel_liunian_offset = -1 if st.session_state.sel_liunian_offset == idx else idx
                 st.rerun()
 else:
