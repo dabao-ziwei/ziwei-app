@@ -47,30 +47,39 @@ with st.sidebar:
         with st.form("edit_form"):
             name = st.text_input("姓名", value=rec['name'] if rec else "")
             gender = st.radio("性別", ["男", "女"], index=0 if rec and rec['gender']=='男' else 1, horizontal=True)
+            # 補回分類
             cat = st.text_input("分類", value=rec.get('category', '') if rec else "")
             
-            # 曆法選擇 (新功能)
             cal_type = st.radio("曆法", ["西元", "民國"], index=0, horizontal=True)
-            
             d_val = f"{rec['y']:04}{rec['m']:02}{rec['d']:02}" if rec else ""
             t_val = f"{rec['h']:02}{rec['min']:02}" if rec else ""
             
-            # 提示使用者輸入格式
-            date_hint = "例如: 19790926" if cal_type == "西元" else "例如: 680926"
-            date_str = st.text_input(f"日期 ({date_hint})", value=d_val)
+            hint = "例如 19790926" if cal_type=="西元" else "例如 680926"
+            date_str = st.text_input(f"日期 ({hint})", value=d_val)
             time_str = st.text_input("時間 (HHMM)", value=t_val)
             
             if st.form_submit_button("💾 儲存"):
                 try:
-                    # 先解析數字
-                    y, m, d, _ = parse_date(date_str)
+                    d_str = date_str.strip()
+                    h = int(time_str[:2])
+                    mn = int(time_str[2:])
                     
-                    # 根據選擇的曆法調整年份
                     if cal_type == "民國":
-                        y += 1911
-                    
-                    h, mn = (int(time_str[:2]), int(time_str[2:])) if len(time_str)==4 else (0,0)
-                    
+                        # 手動解析民國年
+                        if len(d_str) == 6:
+                            y = int(d_str[:2]) + 1911
+                            m = int(d_str[2:4])
+                            d = int(d_str[4:])
+                        elif len(d_str) == 7:
+                            y = int(d_str[:3]) + 1911
+                            m = int(d_str[3:5])
+                            d = int(d_str[5:])
+                        else:
+                            raise ValueError
+                    else:
+                        # 西元直接用原來的解析
+                        y, m, d, _ = parse_date(d_str)
+
                     if name and y > 0:
                         calc = ZWDSCalculator(y, m, d, h, mn, gender)
                         p_data, m_star, bur, _, ming_pos = calc.get_result()
@@ -88,9 +97,8 @@ with st.sidebar:
                         save_db(st.session_state.db)
                         st.session_state.current_id = new_rec['id']
                         st.rerun()
-                    else:
-                        st.error("資料不完整")
-                except: st.error("輸入格式錯誤，請檢查日期與時間")
+                    else: st.error("資料不完整")
+                except: st.error("日期或時間格式錯誤")
 
 if st.session_state.current_id != 0:
     data = next((x for x in st.session_state.db if x['id'] == st.session_state.current_id), None)
