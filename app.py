@@ -103,8 +103,10 @@ if st.session_state.current_id != 0:
                 calc.calculate_sihua(d_gan, l_gan)
                 for pid, p in calc.palaces.items():
                     if p['zhi_idx'] == l_zhi: l_pos = int(pid)
-            else: calc.calculate_sihua(d_gan, -1)
-        else: calc.calculate_sihua(-1, -1)
+            else:
+                calc.calculate_sihua(d_gan, -1)
+        else:
+            calc.calculate_sihua(-1, -1)
 
         c_tool, _ = st.columns([2, 5])
         with c_tool:
@@ -122,8 +124,8 @@ if st.session_state.current_id != 0:
         
         svg = render_triangles_svg(st.session_state.focus_palace_idx)
         
-        # 顯示命盤
-        st.markdown(f"""<div class="chart-wrapper">{svg}<div class="zwds-grid">{grid_html}{get_center_html(data, calc)}</div></div>""", unsafe_allow_html=True)
+        # 關鍵修正：單行 HTML 避免縮排錯誤
+        st.markdown(f'<div class="chart-wrapper">{svg}<div class="zwds-grid">{grid_html}{get_center_html(data, calc)}</div></div>', unsafe_allow_html=True)
 
         cols = st.columns(12)
         lnames = ["一限", "二限", "三限", "四限", "五限", "六限", "七限", "八限", "九限", "十限", "十一", "十二"]
