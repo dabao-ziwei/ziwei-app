@@ -1,3 +1,4 @@
 streamlit
 lunar_python
 pandas
+st-click-detector
