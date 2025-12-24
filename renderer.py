@@ -18,7 +18,6 @@ def get_grid_coord(zhi_idx):
     return coords[zhi_idx]
 
 def render_full_chart_html(calc, data, d_idx, l_off, focus_idx):
-    # 1. 邏輯計算
     limits = sorted(calc.palaces.items(), key=lambda x: x[1]['age_start'])
     is_pure = (d_idx == -1)
     d_pos = int(limits[d_idx][0]) if not is_pure else -1
@@ -35,40 +34,26 @@ def render_full_chart_html(calc, data, d_idx, l_off, focus_idx):
         else: calc.calculate_sihua(d_gan, -1)
     else: calc.calculate_sihua(-1, -1)
 
-    # 2. SVG (綠色實線)
     svg_html = ""
     if focus_idx != -1:
         def get_pct(idx):
             r, c = get_grid_coord(idx)
             return c * 25 + 12.5, r * 25 + 12.5
-        
         p1, p2, p3 = focus_idx, (focus_idx+4)%12, (focus_idx+8)%12
         po = (focus_idx+6)%12
         x1, y1 = get_pct(p1); x2, y2 = get_pct(p2); x3, y3 = get_pct(p3); xo, yo = get_pct(po)
-        
-        svg_html = f"""
-        <div class="svg-container">
-            <svg viewBox="0 0 100 100" preserveAspectRatio="none">
-                <polygon points="{x1},{y1} {x2},{y2} {x3},{y3}" stroke="#008000" stroke-width="1.5" />
-                <line x1="{x1}" y1="{y1}" x2="{xo}" y2="{yo}" stroke="#008000" stroke-width="1.5" stroke-dasharray="4,4" />
-                <circle cx="{x1}" cy="{y1}" r="2" fill="#008000" />
-            </svg>
-        </div>
-        """
+        svg_html = f"""<div class="svg-container"><svg viewBox="0 0 100 100" preserveAspectRatio="none"><polygon points="{x1},{y1} {x2},{y2} {x3},{y3}" stroke="#008000" stroke-width="1.5" style="fill: none !important;" /><line x1="{x1}" y1="{y1}" x2="{xo}" y2="{yo}" stroke="#008000" stroke-width="1.5" stroke-dasharray="4,4" /><circle cx="{x1}" cy="{y1}" r="2" fill="#008000" /></svg></div>"""
 
-    # 3. Grid Cells
     cells_html = ""
     layout = [(5,1,1),(6,1,2),(7,1,3),(8,1,4),(4,2,1),(9,2,4),(3,3,1),(10,3,4),(2,4,1),(1,4,2),(0,4,3),(11,4,4)]
     
     for idx, r, c in layout:
         info = calc.palaces[idx]
-        
         bg_cls = ""
         if focus_idx != -1:
             if idx == focus_idx: bg_cls = "focus-bg"
             elif idx in [(focus_idx+4)%12, (focus_idx+8)%12]: bg_cls = "sanfang-bg"
             elif idx == (focus_idx+6)%12: bg_cls = "duigong-bg"
-            
         border_cls = ""
         if idx == d_pos: border_cls += " border-active"
         if idx == l_pos: border_cls += " border-liu"
@@ -81,7 +66,7 @@ def render_full_chart_html(calc, data, d_idx, l_off, focus_idx):
             cls_s = "txt-med" if m[2] else "txt-sml"
             stars += f"<div class='star-item'><span class='{cls_s}'>{m[0]}</span></div>"
             
-        ft_l = f"<div class='footer-left'><div class='god-box'><span class='god-txt' style='color:#008080'>{info['sui_12'][0]}</span><span class='god-txt' style='color:#4682B4'>{info['jiang_12'][0]}</span></div><div class='limit-txt'>{info['age_start']}-{info['age_end']}</div></div>"
+        ft_l = f"<div class='footer-left'><div class='god-box'><span class='god-text' style='color:#008080'>{info['sui_12'][0]}</span><span class='god-text' style='color:#4682B4'>{info['jiang_12'][0]}</span></div><div class='limit-txt'>{info['age_start']}-{info['age_end']}</div></div>"
         
         p_name = get_relative_palace_name(calc.ming_pos, idx)
         p_html = f"<div class='palace-txt'>{p_name}</div>"
@@ -91,26 +76,15 @@ def render_full_chart_html(calc, data, d_idx, l_off, focus_idx):
             
         ft_r = f"<div class='footer-right'><div class='info-box'>{'<span class=shen-tag>身</span>' if is_pure and idx==calc.shen_pos else ''}<span style='font-size:11px;color:#800080;font-weight:bold'>{info['life_stage']}</span>{p_html}</div><div class='ganzhi-txt'>{GAN[info['gan_idx']]}{ZHI[idx]}</div></div>"
         
-        # 關鍵：id 在最外層，內部 cell-content 負責顯示
-        cells_html += f"""
-        <div id='p_{idx}' class='zwds-cell {border_cls}' style='grid-row:{r};grid-column:{c};'>
-            <div class='cell-content {bg_cls}'>
-                <div class='stars-box'>{stars}</div>
-                {ft_l}{ft_r}
-            </div>
-        </div>
-        """
+        cells_html += f"<div id='p_{idx}' class='zwds-cell {border_cls}' style='grid-row:{r};grid-column:{c};'><div class='cell-content {bg_cls}'><div class='stars-box'>{stars}</div>{ft_l}{ft_r}</div></div>"
 
-    # 中宮
     center_html = f"<div class='center-cell'><h3 style='margin:0;color:#000'>{data['name']}</h3><div style='font-size:12px;color:#666'>{data['gender']} | {calc.bureau_name} | {data.get('ming_star','')}坐命</div><div style='font-size:12px;font-weight:bold;color:#2E7D32'>國：{data['y']}/{data['m']}/{data['d']} {data['h']}:{data['min']:02d}</div><div style='font-size:12px;color:#555'>農：{calc.lunar.getYearInGanZhi()}年 {calc.lunar.getMonthInChinese()}月 {calc.lunar.getDayInChinese()}</div></div>"
 
-    # 4. 按鈕列
     d_html = ""
     lnames = ["一限", "二限", "三限", "四限", "五限", "六限", "七限", "八限", "九限", "十限", "十一", "十二"]
     for i in range(12):
         inf = limits[i][1]
         cls = "time-btn btn-on" if i == d_idx else "time-btn"
-        # 確保 id 存在
         d_html += f"<div id='d_{i}' class='{cls}'>{lnames[i]}<br>{GAN[inf['gan_idx']]}{ZHI[inf['zhi_idx']]}</div>"
     
     l_row = ""
@@ -125,18 +99,5 @@ def render_full_chart_html(calc, data, d_idx, l_off, focus_idx):
             l_html += f"<div id='l_{j}' class='{cls}'>{yr}<br>{GAN[gy]}{ZHI[zy]}({age})</div>"
         l_row = f"<div class='timeline-container' style='grid-template-columns: repeat(10, 1fr); border-top:none;'>{l_html}</div>"
 
-    full_html = f"""
-    {get_css()}
-    <div class="master-container">
-        {clean(svg_html)}
-        <div class="zwds-grid">
-            {clean(cells_html)}
-            {clean(center_html)}
-        </div>
-        <div class="timeline-container">
-            {clean(d_html)}
-        </div>
-        {clean(l_row)}
-    </div>
-    """
+    full_html = f"""{get_css()}<div class="master-container">{clean(svg_html)}<div class="zwds-grid">{clean(cells_html)}{clean(center_html)}</div><div class="timeline-container">{clean(d_html)}</div>{clean(l_row)}</div>"""
     return clean(full_html)
