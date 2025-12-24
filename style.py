@@ -29,13 +29,11 @@ def get_css():
         .zwds-cell {
             background-color: rgba(255,255,255,0.92);
             position: relative; overflow: hidden; display: flex; flex-direction: column;
-            
-            /* 讓容器接收點擊 */
             cursor: pointer; 
-            pointer-events: auto; 
+            pointer-events: auto; /* 容器本身可點 */
         }
         
-        /* === 關鍵修正：所有內部元素都不准擋滑鼠 === */
+        /* 關鍵修正：格子內的所有東西都不准攔截滑鼠 */
         .zwds-cell * { pointer-events: none !important; }
 
         .cell-content {
