@@ -28,6 +28,9 @@ if 'sel_daxian_idx' not in st.session_state: st.session_state.sel_daxian_idx = -
 if 'sel_liunian_offset' not in st.session_state: st.session_state.sel_liunian_offset = -1 
 if 'focus_palace_idx' not in st.session_state: st.session_state.focus_palace_idx = -1
 
+# [哨兵變數] 用來防止無限迴圈
+if 'last_clicked' not in st.session_state: st.session_state.last_clicked = None
+
 with st.sidebar:
     st.header("功能選單")
     opts = {0: "➕ 新增命盤"}
@@ -42,6 +45,7 @@ with st.sidebar:
         st.session_state.sel_daxian_idx = -1
         st.session_state.sel_liunian_offset = -1
         st.session_state.focus_palace_idx = -1
+        st.session_state.last_clicked = None # 切換人名時重置哨兵
         st.rerun()
 
     rec = next((x for x in st.session_state.db if x['id'] == st.session_state.current_id), None)
@@ -116,6 +120,7 @@ with st.sidebar:
                             st.session_state.db[idx] = new_rec
                         save_db(st.session_state.db)
                         st.session_state.current_id = new_rec['id']
+                        st.session_state.last_clicked = None
                         st.rerun()
                     else:
                         st.error("資料不完整")
@@ -136,21 +141,23 @@ if st.session_state.current_id != 0:
         
         clicked = click_detector(html_content, key="chart")
         
-        if clicked:
+        # [哨兵機制核心]
+        # 只有當點擊內容改變時，才執行邏輯，防止無限迴圈
+        if clicked and clicked != st.session_state.last_clicked:
+            st.session_state.last_clicked = clicked # 更新哨兵
+            
             parts = clicked.split("_")
             if len(parts) == 2:
                 type_code, idx = parts[0], int(parts[1])
-                # 關鍵修正：這裡僅更新 session_state，不再呼叫 st.rerun()
-                # 讓 Streamlit 的自動更新機制來處理畫面重繪
+                
                 if type_code == "p": 
                     st.session_state.focus_palace_idx = -1 if st.session_state.focus_palace_idx == idx else idx
-                    # st.rerun()  <-- 移除
                 elif type_code == "d":
                     st.session_state.sel_daxian_idx = -1 if st.session_state.sel_daxian_idx == idx else idx
                     st.session_state.sel_liunian_offset = -1
-                    # st.rerun()  <-- 移除
                 elif type_code == "l":
                     st.session_state.sel_liunian_offset = -1 if st.session_state.sel_liunian_offset == idx else idx
-                    # st.rerun()  <-- 移除
+            
+            # 重要：不呼叫 st.rerun()，讓 session_state 的自然變更驅動下一次繪圖
 else:
     st.info("👈 請從左側選單「新增命盤」開始。")
