@@ -60,7 +60,7 @@ with st.sidebar:
             gender = st.radio("性別", ["男", "女"], index=0 if rec and rec['gender']=='男' else 1, horizontal=True)
             cat = st.text_input("分類", value=rec.get('category', '') if rec else "")
             
-            # 曆法選擇移入表單內
+            # 修正：曆法選擇已移入表單內
             cal_type = st.radio("曆法", ["西元", "民國"], index=0, horizontal=True)
             
             hint = "例如: 19790926" if cal_type=="西元" else "例如: 680926"
