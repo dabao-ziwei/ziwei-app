@@ -46,7 +46,6 @@ with st.sidebar:
 
     rec = next((x for x in st.session_state.db if x['id'] == st.session_state.current_id), None)
     
-    # 預設值保持西元，讓使用者自行修改
     if rec:
         d_val = f"{rec['y']:04}{rec['m']:02}{rec['d']:02}"
         t_val = f"{rec['h']:02}{rec['min']:02}"
@@ -60,7 +59,6 @@ with st.sidebar:
             gender = st.radio("性別", ["男", "女"], index=0 if rec and rec['gender']=='男' else 1, horizontal=True)
             cat = st.text_input("分類", value=rec.get('category', '') if rec else "")
             
-            # 修正：曆法選擇已移入表單內
             cal_type = st.radio("曆法", ["西元", "民國"], index=0, horizontal=True)
             
             hint = "例如: 19790926" if cal_type=="西元" else "例如: 680926"
@@ -142,15 +140,17 @@ if st.session_state.current_id != 0:
             parts = clicked.split("_")
             if len(parts) == 2:
                 type_code, idx = parts[0], int(parts[1])
+                # 關鍵修正：這裡僅更新 session_state，不再呼叫 st.rerun()
+                # 讓 Streamlit 的自動更新機制來處理畫面重繪
                 if type_code == "p": 
                     st.session_state.focus_palace_idx = -1 if st.session_state.focus_palace_idx == idx else idx
-                    st.rerun()
+                    # st.rerun()  <-- 移除
                 elif type_code == "d":
                     st.session_state.sel_daxian_idx = -1 if st.session_state.sel_daxian_idx == idx else idx
                     st.session_state.sel_liunian_offset = -1
-                    st.rerun()
+                    # st.rerun()  <-- 移除
                 elif type_code == "l":
                     st.session_state.sel_liunian_offset = -1 if st.session_state.sel_liunian_offset == idx else idx
-                    st.rerun()
+                    # st.rerun()  <-- 移除
 else:
     st.info("👈 請從左側選單「新增命盤」開始。")
