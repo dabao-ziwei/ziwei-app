@@ -22,11 +22,12 @@ def save_db(db_data):
 
 st.set_page_config(page_title="紫微排盤", page_icon="🔮", layout="wide")
 
-# === [關鍵修正：CSS 搬家] ===
-# 將版面控制直接寫在這裡，確保能控制 Streamlit 主視窗
+# 初始化哨兵變數，防止無限迴圈
+if 'last_clicked' not in st.session_state: st.session_state.last_clicked = None
+
+# === CSS 版面控制 ===
 st.markdown("""
     <style>
-        /* 強制移除 Streamlit 預設的頂部留白 */
         .block-container {
             padding-top: 1rem !important;
             padding-bottom: 1rem !important;
@@ -34,11 +35,8 @@ st.markdown("""
             padding-right: 0.5rem !important;
             max-width: 100% !important;
         }
-        /* 隱藏 header */
         header { visibility: hidden; }
         [data-testid="stVerticalBlock"] { gap: 0 !important; }
-        
-        /* 避免連結點擊後的藍色外框干擾視覺 */
         a:focus, a:active { outline: none !important; box-shadow: none !important; }
     </style>
 """, unsafe_allow_html=True)
@@ -63,6 +61,7 @@ with st.sidebar:
         st.session_state.sel_daxian_idx = -1
         st.session_state.sel_liunian_offset = -1
         st.session_state.focus_palace_idx = -1
+        st.session_state.last_clicked = None # 切換使用者時重置哨兵
         st.rerun()
 
     rec = next((x for x in st.session_state.db if x['id'] == st.session_state.current_id), None)
@@ -137,6 +136,7 @@ with st.sidebar:
                             st.session_state.db[idx] = new_rec
                         save_db(st.session_state.db)
                         st.session_state.current_id = new_rec['id']
+                        st.session_state.last_clicked = None
                         st.rerun()
                     else:
                         st.error("資料不完整")
@@ -157,10 +157,12 @@ if st.session_state.current_id != 0:
         
         clicked = click_detector(html_content, key="chart")
         
-        # === [關鍵修正：極簡化邏輯] ===
-        # 不檢查 last_clicked，不呼叫 st.rerun()
-        # 讓 Streamlit 的 state 機制自然運作
-        if clicked:
+        # === [關鍵修正邏輯] ===
+        # 1. 檢查 clicked 是否等於 last_clicked (防迴圈)
+        # 2. 如果是新的點擊 -> 更新狀態 -> 執行 rerun (讓畫面立刻更新)
+        if clicked and clicked != st.session_state.last_clicked:
+            st.session_state.last_clicked = clicked
+            
             parts = clicked.split("_")
             if len(parts) == 2:
                 type_code, idx = parts[0], int(parts[1])
@@ -172,5 +174,8 @@ if st.session_state.current_id != 0:
                     st.session_state.sel_liunian_offset = -1
                 elif type_code == "l":
                     st.session_state.sel_liunian_offset = -1 if st.session_state.sel_liunian_offset == idx else idx
+                
+                # 安全地觸發重繪，因為上面的 if 擋住了重複觸發
+                st.rerun()
 else:
     st.info("👈 請從左側選單「新增命盤」開始。")
