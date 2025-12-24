@@ -29,17 +29,13 @@ def get_css():
         .zwds-cell {
             background-color: rgba(255,255,255,0.92);
             position: relative; overflow: hidden; display: flex; flex-direction: column;
-            cursor: pointer; 
-            pointer-events: auto; /* 容器本身可點 */
+            cursor: pointer; pointer-events: auto;
         }
-        
-        /* 關鍵修正：格子內的所有東西都不准攔截滑鼠 */
         .zwds-cell * { pointer-events: none !important; }
 
         .cell-content {
             flex: 1; padding: 2px; display: flex; flex-direction: column;
-            background-color: rgba(255, 255, 255, 0.85); 
-            z-index: 2;
+            background-color: rgba(255, 255, 255, 0.85); z-index: 2;
         }
         
         .focus-bg .cell-content { background-color: rgba(230, 247, 255, 0.9) !important; }
@@ -50,7 +46,6 @@ def get_css():
 
         .stars-box { display: flex; flex-wrap: wrap; gap: 0; }
         .star-item { display: inline-flex; flex-direction: column; align-items: center; margin: 0 1px 1px 0; }
-        
         .txt-major { font-size: 18px; font-weight: 900; color: #B71C1C; writing-mode: vertical-rl; text-orientation: upright; letter-spacing: -2px; margin-bottom: 3px; }
         .txt-med { font-size: 13px; font-weight: 700; color: #000; writing-mode: vertical-rl; }
         .txt-sml { font-size: 11px; color: #4169E1; writing-mode: vertical-rl; }
@@ -74,9 +69,7 @@ def get_css():
             font-size: 12px; cursor: pointer; color: #333; 
             pointer-events: auto;
         }
-        /* 按鈕內部文字也不擋 */
         .time-btn * { pointer-events: none !important; }
-        
         .time-btn:hover { background-color: #e0e0e0; }
         .btn-on { background-color: #4B0082 !important; color: #fff !important; }
 
