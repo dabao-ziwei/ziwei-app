@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 import os
+import time  # 修正：補上這個遺漏的 import
 from st_click_detector import click_detector
 from logic import ZWDSCalculator, parse_date
 from renderer import render_full_chart_html
@@ -60,7 +61,7 @@ with st.sidebar:
             
             if st.form_submit_button("💾 儲存"):
                 try:
-                    # 寬容處理：移除分隔符
+                    # 移除分隔符
                     d_str = date_str.replace("/", "").replace("-", "").strip()
                     t_str = time_str.replace(":", "").strip()
                     
@@ -68,7 +69,7 @@ with st.sidebar:
                     if len(t_str) == 4:
                         h = int(t_str[:2])
                         mn = int(t_str[2:])
-                    elif len(t_str) == 3: # 支援 930 -> 0930
+                    elif len(t_str) == 3: 
                         h = int(t_str[:1])
                         mn = int(t_str[1:])
                     else:
@@ -85,15 +86,14 @@ with st.sidebar:
                             m = int(d_str[3:5])
                             d = int(d_str[5:])
                         else:
-                            raise ValueError("民國日期格式錯誤 (請輸入 YYMMDD 或 YYYMMDD)")
+                            raise ValueError("民國日期格式錯誤 (請輸入 YYMMDD)")
                     else:
-                        # 西元
                         if len(d_str) == 8:
                             y = int(d_str[:4])
                             m = int(d_str[4:6])
                             d = int(d_str[6:])
                         else:
-                            # 嘗試使用 logic 的 parse_date 作為備案 (如果有)
+                            # 備用解析
                             y, m, d, _ = parse_date(d_str)
 
                     if name and y > 0:
