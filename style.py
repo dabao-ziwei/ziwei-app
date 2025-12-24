@@ -51,39 +51,34 @@ def apply_style():
         .active-liunian { border: 3px solid #007bff !important; z-index: 5; }
 
         /* =================================================================
-           3. 星曜區 (關鍵修改：緊湊排列)
+           3. 星曜區 (打通主副星隔閡)
            ================================================================= */
         .stars-box {
             display: flex;
             flex-direction: row; 
-            flex-wrap: wrap;
+            flex-wrap: wrap; /* 允許換行 */
             align-content: flex-start;
+            align-items: flex-start;
             width: 100%;
             padding-top: 2px;
             padding-left: 2px;
-            /* 確保沒有額外的垂直間距 */
-            margin-bottom: 0;
+            gap: 2px; /* 所有星星之間的統一看間距 */
         }
-        .star-major-container { display: flex; flex-direction: column; align-items: center; margin-right: 3px; }
-        .star-name { font-size: 18px; font-weight: 900; color: #B71C1C; letter-spacing: 2px; margin-bottom: 1px; writing-mode: vertical-rl; text-orientation: upright; }
+
+        /* 主星容器 */
+        .star-major-container { 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            margin-right: 0px; /* 移除右邊距，讓副星緊貼 */
+        }
+        .star-name { font-size: 18px; font-weight: 900; color: #B71C1C; letter-spacing: 2px; margin-bottom: 2px; writing-mode: vertical-rl; text-orientation: upright; }
         .hua-badge { font-size: 11px; border-radius: 3px; padding: 1px 0px; color: #fff; text-align: center; font-weight: bold; margin-top: 1px; width: 16px; line-height: 1.2; display: block; }
         .bg-ben { background-color: #d32f2f; } .bg-da { background-color: #808080; } .bg-liu { background-color: #0056b3; }
         
-        /* 副星容器：修改 gap 與對齊方式 */
-        .sub-stars-col {
-            display: flex;
-            flex-direction: row;
-            flex-wrap: wrap;
-            /* 關鍵修正：只設水平間距，垂直間距設為 0 */
-            column-gap: 1px; 
-            row-gap: 0px;    
-            align-items: flex-start;
-            align-content: flex-start; /* 換行後緊貼上方 */
-            padding-top: 0px;
-        }
-        .star-medium { font-size: 14px; font-weight: bold; color: #000; writing-mode: vertical-rl; line-height: 1; }
-        /* 關鍵修正：移除雜曜的上方邊距 */
-        .star-small { font-size: 11px; color: #4169E1; writing-mode: vertical-rl; line-height: 1; font-weight: normal; margin-top: 0; }
+        /* 副星 (直接作為 stars-box 的子元素) */
+        .star-medium { font-size: 14px; font-weight: bold; color: #000000; writing-mode: vertical-rl; line-height: 1; }
+        .star-small { font-size: 11px; color: #4169E1; writing-mode: vertical-rl; line-height: 1; font-weight: normal; }
 
         /* =================================================================
            4. 底部資訊 (絕對定位佈局)
