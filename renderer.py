@@ -15,7 +15,7 @@ def get_palace_html(idx, branch, r, c, info, daxian_pos, liunian_pos, benming_po
     if is_liunian: classes.append("active-liunian")
     class_str = " ".join(classes)
     
-    # 1. 主星
+    # 1. 主星 (紅字粗體)
     main_stars_html = ""
     for star in info['major_stars']:
         sihua_html = ""
@@ -26,18 +26,28 @@ def get_palace_html(idx, branch, r, c, info, daxian_pos, liunian_pos, benming_po
         
         main_stars_html += f"<div class='star-major-container'><div class='star-name'>{star['name']}</div>{sihua_html}</div>"
     
-    # 2. 副星 (增加雜曜顯示)
-    sub_stars_html = ""
-    for m_name, is_bad, is_impt in info['minor_stars']:
-        style_cls = ""
-        if m_name == "祿存": style_cls = "color-good"
-        elif is_bad: style_cls = "color-bad"
-        
-        # 字體控制：重要的(甲乙級)用 bold，丙級神煞用 small
-        size_cls = "star-medium" if is_impt else "star-small"
-        sub_stars_html += f"<div class='{size_cls} {style_cls}'>{m_name}</div>"
+    # 2. 副星分類 (拆分為：重要輔星 & 雜曜)
+    aux_stars = [] # 輔星 (黑字粗體)
+    misc_stars = [] # 雜曜 (藍字)
     
-    # 3. 宮名
+    for m_name, is_bad, is_impt in info['minor_stars']:
+        if is_impt:
+            aux_stars.append(m_name)
+        else:
+            misc_stars.append(m_name)
+    
+    # 渲染副星區塊 (順序：先輔星，後雜曜)
+    sub_stars_html = ""
+    
+    # (A) 渲染輔星 (class: star-medium)
+    for m_name in aux_stars:
+        sub_stars_html += f"<div class='star-medium'>{m_name}</div>"
+        
+    # (B) 渲染雜曜 (class: star-small)
+    for m_name in misc_stars:
+        sub_stars_html += f"<div class='star-small'>{m_name}</div>"
+    
+    # 3. 宮名堆疊
     name_liu_html = ""
     name_da_html = ""
     name_ben = get_relative_palace_name(benming_pos, idx)
@@ -55,16 +65,15 @@ def get_palace_html(idx, branch, r, c, info, daxian_pos, liunian_pos, benming_po
     else:
         limit_info_html = f"<span class='limit-info'> {info['age_start']}/{info['age_end']}</span>"
 
-    # 4. 長生十二神 (新增)
-    # 放在 footer-right 的最上面
+    # 4. 長生十二神
     life_stage_html = f"<div class='life-stage'>{info['life_stage']}</div>"
 
-    # 5. 組合
+    # 5. 組合 HTML
     footer_html = (
         f"<div class='cell-footer'>"
         f"<div class='footer-left'><span class='ganzhi-label'>{GAN[info['gan_idx']]}</span><span class='zhi-label'>{branch}</span></div>"
         f"<div class='footer-right'>"
-        f"{life_stage_html}"  # 放在這裡
+        f"{life_stage_html}"
         f"{name_liu_html}"
         f"{name_da_html}"
         f"<div class='p-name-ben'>{name_ben}{limit_info_html}</div>"
