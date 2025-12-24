@@ -2,12 +2,10 @@ from logic import GAN, ZHI
 
 PALACE_NAMES = ["命宮", "兄弟", "夫妻", "子女", "財帛", "疾厄", "遷移", "僕役", "官祿", "田宅", "福德", "父母"]
 
-def clean_html(html_str):
-    return html_str.replace("\n", "").strip()
+def clean(s): return s.replace("\n", "").strip()
 
 def get_relative_palace_name(ming_pos, current_cell_pos):
-    idx = (ming_pos - current_cell_pos) % 12
-    return PALACE_NAMES[idx]
+    return PALACE_NAMES[(ming_pos - current_cell_pos) % 12]
 
 def get_grid_coord(zhi_idx):
     coords = {
@@ -18,84 +16,119 @@ def get_grid_coord(zhi_idx):
     }
     return coords[zhi_idx]
 
-def render_triangles_svg(focus_idx):
-    if focus_idx == -1: return ""
-    p1 = focus_idx
-    p2 = (focus_idx + 4) % 12
-    p3 = (focus_idx + 8) % 12
-    p_opp = (focus_idx + 6) % 12
+def render_full_chart_html(calc, data, d_idx, l_off, focus_idx):
+    # 1. 準備數據
+    limits = sorted(calc.palaces.items(), key=lambda x: x[1]['age_start'])
+    is_pure = (d_idx == -1)
+    d_pos = int(limits[d_idx][0]) if not is_pure else -1
+    l_pos = -1
     
-    def get_pos(idx):
-        r, c = get_grid_coord(idx)
-        return c * 25 + 12.5, r * 25 + 12.5
+    if not is_pure:
+        d_gan = limits[d_idx][1]['gan_idx']
+        if l_off != -1:
+            cy = data['y'] + limits[d_idx][1]['age_start'] + l_off - 1
+            l_gan, l_zhi = get_ganzhi_for_year(cy)
+            calc.calculate_sihua(d_gan, l_gan)
+            for pid, p in calc.palaces.items():
+                if p['zhi_idx'] == l_zhi: l_pos = int(pid)
+        else: calc.calculate_sihua(d_gan, -1)
+    else: calc.calculate_sihua(-1, -1)
 
-    x1, y1 = get_pos(p1)
-    x2, y2 = get_pos(p2)
-    x3, y3 = get_pos(p3)
-    xo, yo = get_pos(p_opp)
-    
-    # 修正：加粗線條，三角形改實線，對宮線維持虛線，加大紅點
-    svg = f"""<svg class="svg-overlay" viewBox="0 0 100 100" preserveAspectRatio="none">
-        <polygon points="{x1},{y1} {x2},{y2} {x3},{y3}" fill="none" stroke="#CC0000" stroke-width="1.5" stroke-dasharray="0" />
-        <line x1="{x1}" y1="{y1}" x2="{xo}" y2="{yo}" stroke="#FF4500" stroke-width="1.5" stroke-dasharray="4,4" />
-        <circle cx="{x1}" cy="{y1}" r="2.5" fill="red" />
-    </svg>"""
-    return clean_html(svg)
-
-def get_palace_html(idx, branch, r, c, info, daxian_pos, liunian_pos, benming_pos, is_pure_benming=False, shen_pos=-1, focus_idx=-1):
-    cls = ["zwds-cell"]
-    
-    # 高亮與邊框類別
+    # 2. 生成 SVG (只在命盤區域顯示)
+    # 這裡的 viewBox 設定為 100 100，這 100% 高度只會對應到 zwds-grid 的高度
+    svg_html = ""
     if focus_idx != -1:
-        if idx == focus_idx: cls.append("highlight-focus")
-        elif idx in [(focus_idx+4)%12, (focus_idx+8)%12]: cls.append("highlight-sanfang")
-        elif idx == (focus_idx+6)%12: cls.append("highlight-duigong")
-    
-    if idx == daxian_pos and not is_pure_benming: cls.append("active-daxian")
-    if idx == liunian_pos and not is_pure_benming: cls.append("active-liunian")
-
-    # 內容構建
-    stars_list = []
-    for star in info['major_stars']:
-        sihua = "".join([f"<span class='hua-badge { {'本':'bg-ben','大':'bg-da','流':'bg-liu'}.get(s['layer']) }'>{s['type']}</span>" for s in star['sihua'] if not is_pure_benming or s['layer']=='本'])
-        stars_list.append(f"<div class='star-item'><span class='txt-major'>{star['name']}</span>{sihua}</div>")
-    for m in info['minor_stars']:
-        style = "txt-med" if m[2] else "txt-sml"
-        stars_list.append(f"<div class='star-item'><span class='{style}'>{m[0]}</span></div>")
-    stars_html = "".join(stars_list)
-
-    sui = info['sui_12'][0] if info['sui_12'] else ""
-    jiang = info['jiang_12'][0] if info['jiang_12'] else ""
-    boshi = info['boshi_12'][0] if info['boshi_12'] else ""
-    age_range = f"{info['age_start']}-{info['age_end']}" if is_pure_benming else f"{info['age_start']}/{info['age_end']}"
-    left_html = f"<div class='footer-left'><div class='gods-col'><span class='god-text god-sui'>{sui}</span><span class='god-text god-jiang'>{jiang}</span><span class='god-text god-boshi'>{boshi}</span></div><div class='limit-text'>{age_range}</div></div>"
-
-    shen_html = "<div class='badge-shen'>身</div>" if is_pure_benming and idx == shen_pos else ""
-    life_html = f"<div class='life-stage'>{info['life_stage']}</div>"
-    ben_name = get_relative_palace_name(benming_pos, idx)
-    names_html = f"<div class='palace-name'>{ben_name}</div>"
-    if not is_pure_benming:
-        if liunian_pos != -1: 
-            ln_name = get_relative_palace_name(liunian_pos, idx)[0]
-            names_html = f"<div class='p-liu'>流{ln_name}</div>" + names_html
-        if daxian_pos != -1:
-            dn_name = get_relative_palace_name(daxian_pos, idx)[0]
-            names_html = f"<div class='p-da'>大{dn_name}</div>" + names_html
-    right_html = f"<div class='footer-right'><div class='info-col'>{shen_html}{life_html}{names_html}</div><div class='ganzhi-col'>{GAN[info['gan_idx']]}{branch}</div></div>"
-
-    # 關鍵修正：使用 .cell-content 包裹內容，實現層級分離
-    final_html = f"""
-    <div class='{' '.join(cls)}' style='grid-row: {r}; grid-column: {c};'>
-        <div class='cell-content'>
-            <div class='stars-box'>{stars_html}</div>
-            {left_html}
-            {right_html}
+        def get_pct(idx):
+            r, c = get_grid_coord(idx)
+            return c * 25 + 12.5, r * 25 + 12.5
+        
+        p1, p2, p3 = focus_idx, (focus_idx+4)%12, (focus_idx+8)%12
+        po = (focus_idx+6)%12
+        x1, y1 = get_pct(p1); x2, y2 = get_pct(p2); x3, y3 = get_pct(p3); xo, yo = get_pct(po)
+        
+        # 綠色實線，fill="none" 確保不變成色塊
+        svg_html = f"""
+        <div style="position:absolute;top:0;left:0;width:100%;height:560px;pointer-events:none;z-index:1;">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="width:100%;height:100%;">
+                <polygon points="{x1},{y1} {x2},{y2} {x3},{y3}" fill="none" stroke="#008000" stroke-width="1.2" />
+                <line x1="{x1}" y1="{y1}" x2="{xo}" y2="{yo}" stroke="#008000" stroke-width="1.2" stroke-dasharray="4,2" />
+                <circle cx="{x1}" cy="{y1}" r="1.5" fill="#008000" />
+            </svg>
         </div>
+        """
+
+    # 3. 生成 Grid Cells
+    cells_html = ""
+    layout = [(5,1,1),(6,1,2),(7,1,3),(8,1,4),(4,2,1),(9,2,4),(3,3,1),(10,3,4),(2,4,1),(1,4,2),(0,4,3),(11,4,4)]
+    
+    for idx, r, c in layout:
+        info = calc.palaces[idx]
+        classes = ["zwds-cell"]
+        if idx == d_pos: classes.append("border-daxian")
+        if idx == l_pos: classes.append("border-liunian")
+        
+        # 高亮邏輯
+        if idx == focus_idx: classes.append("cell-focus")
+        elif focus_idx!=-1 and idx in [(focus_idx+4)%12, (focus_idx+8)%12]: classes.append("cell-sanfang")
+        elif focus_idx!=-1 and idx == (focus_idx+6)%12: classes.append("cell-duigong")
+        
+        # 內容
+        stars = ""
+        for s in info['major_stars']:
+            sh = "".join([f"<span class='hua-badge { {'本':'bg-ben','大':'bg-da','流':'bg-liu'}.get(h['layer']) }'>{h['type']}</span>" for h in s['sihua'] if not is_pure or h['layer']=='本'])
+            stars += f"<div class='star-item'><span class='txt-major'>{s['name']}</span>{sh}</div>"
+        for m in info['minor_stars']:
+            cls_s = "txt-med" if m[2] else "txt-sml"
+            stars += f"<div class='star-item'><span class='{cls_s}'>{m[0]}</span></div>"
+            
+        ft_l = f"<div class='footer-left'><div class='gods-col'><span class='god-text' style='color:#008080'>{info['sui_12'][0]}</span><span class='god-text' style='color:#4682B4'>{info['jiang_12'][0]}</span></div><div class='limit-text'>{info['age_start']}-{info['age_end']}</div></div>"
+        
+        p_names = f"<div class='palace-name'>{get_relative_palace_name(calc.ming_pos, idx)}</div>"
+        if not is_pure:
+            if l_pos != -1: p_names = f"<div style='color:#0056b3;font-size:12px;font-weight:900'>流{get_relative_palace_name(l_pos, idx)[0]}</div>" + p_names
+            if d_pos != -1: p_names = f"<div style='color:#666;font-size:12px;font-weight:900'>大{get_relative_palace_name(d_pos, idx)[0]}</div>" + p_names
+            
+        ft_r = f"<div class='footer-right'><div class='info-col'>{'<div class=badge-shen>身</div>' if is_pure and idx==calc.shen_pos else ''}<span class='life-stage'>{info['life_stage']}</span>{p_names}</div><div class='ganzhi-col'>{GAN[info['gan_idx']]}{ZHI[idx]}</div></div>"
+        
+        # id 用於點擊，cell-content 確保文字層級高
+        cells_html += f"<div id='p_{idx}' class='{' '.join(classes)}' style='grid-row:{r};grid-column:{c};'><div class='cell-content'><div class='stars-box'>{stars}</div>{ft_l}{ft_r}</div></div>"
+
+    # 中宮
+    center_html = f"<div class='center-box'><h3 style='margin:0;color:#000;'>{data['name']}</h3><div style='font-size:13px;color:#555'>{data['gender']} | {calc.bureau_name} | {data.get('ming_star','')}坐命</div><div style='font-size:13px;font-weight:bold;color:#2E7D32'>國：{data['y']}/{data['m']}/{data['d']} {data['h']}:{data['min']:02d}</div><div style='font-size:13px;color:#555'>農：{calc.lunar.getYearInGanZhi()}年 {calc.lunar.getMonthInChinese()}月 {calc.lunar.getDayInChinese()}</div></div>"
+
+    # 4. 大限按鈕列
+    d_html = ""
+    lnames = ["一限", "二限", "三限", "四限", "五限", "六限", "七限", "八限", "九限", "十限", "十一", "十二"]
+    for i in range(12):
+        inf = limits[i][1]
+        cls = "btn-limit btn-active" if i == d_idx else "btn-limit"
+        d_html += f"<div id='d_{i}' class='{cls}'>{lnames[i]}<br>{GAN[inf['gan_idx']]}{ZHI[inf['zhi_idx']]}</div>"
+    
+    # 5. 流年按鈕列
+    l_row = ""
+    if not is_pure:
+        l_html = ""
+        d_start = limits[d_idx][1]['age_start']
+        for j in range(10):
+            age = d_start + j
+            yr = data['y'] + age - 1
+            gy, zy = get_ganzhi_for_year(yr)
+            cls = "btn-limit btn-active" if j == l_off else "btn-limit"
+            l_html += f"<div id='l_{j}' class='{cls}'>{yr}<br>{GAN[gy]}{ZHI[zy]}({age})</div>"
+        l_row = f"<div class='timeline-row' style='grid-template-columns: repeat(10, 1fr);'>{l_html}</div>"
+
+    # 最終組合：Container 包裹 SVG + Grid + Timelines
+    full_html = f"""
+    <div class="master-container">
+        {clean(svg_html)}
+        <div class="zwds-grid">
+            {clean(cells_html)}
+            {clean(center_html)}
+        </div>
+        <div class="timeline-row">
+            {clean(d_html)}
+        </div>
+        {clean(l_row)}
     </div>
     """
-    return clean_html(final_html)
-
-def get_center_html(data, calc_obj):
-    # 中宮也使用 cell-content 保持一致性
-    html = f"<div class='center-box'><div class='cell-content' style='justify-content:center;align-items:center;'><h2 style='margin:0;font-size:24px;color:#000;'>{data['name']}</h2><div style='font-size:13px;color:#666;margin:5px 0;'>{data['gender']} | {calc_obj.bureau_name} | {data.get('ming_star','')}坐命</div><div style='font-size:14px;font-weight:bold;color:#2E7D32;'>國曆：{data['y']}/{data['m']}/{data['d']} {data['h']}:{data['min']:02d}</div><div style='font-size:13px;color:#555;'>農曆：{calc_obj.lunar.getYearInGanZhi()}年 {calc_obj.lunar.getMonthInChinese()}月 {calc_obj.lunar.getDayInChinese()}</div></div></div>"
-    return clean_html(html)
+    return clean(full_html)
