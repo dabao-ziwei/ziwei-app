@@ -3,6 +3,7 @@ import streamlit as st
 def apply_style():
     st.markdown("""
     <style>
+        /* === 1. 基礎設定 === */
         :root { --primary-color: #4B0082; --bg-color: #fff; }
         .stApp { background-color: #ffffff !important; color: #000 !important; }
         header[data-testid="stHeader"] { display: none !important; }
@@ -10,7 +11,7 @@ def apply_style():
         [data-testid="stVerticalBlock"] { gap: 0 !important; }
         [data-testid="stSidebar"] { background-color: #f8f9fa; border-right: 1px solid #ddd; }
 
-        /* === 總容器 === */
+        /* === 2. 總容器 (垂直排列) === */
         .master-container {
             width: 100%;
             border: 2px solid #000;
@@ -18,50 +19,58 @@ def apply_style():
             position: relative;
             box-sizing: border-box;
             display: flex;
-            flex-direction: column; /* 垂直排列：命盤 -> 大限 -> 流年 */
+            flex-direction: column;
         }
 
-        /* === SVG 連線層 === */
+        /* === 3. SVG 連線層 (最底層，不填色) === */
         .svg-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 560px; /* 140px * 4 rows */
-            pointer-events: none; z-index: 1;
+            pointer-events: none; 
+            z-index: 0; /* 放在最底層 */
         }
-        /* 強制 SVG 不填色 */
-        .svg-overlay polygon { fill: none !important; }
+        .svg-overlay polygon { fill: none !important; } /* 關鍵：絕對不填色 */
 
-        /* === 命盤 Grid === */
+        /* === 4. 命盤網格 (Grid) === */
         .zwds-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            grid-template-rows: repeat(4, 140px);
+            grid-template-rows: repeat(4, 140px); /* 固定高度 */
             gap: 1px;
             background-color: #999;
             width: 100%;
             position: relative;
-            z-index: 2;
+            z-index: 1;
         }
 
         .zwds-cell {
-            background-color: rgba(255,255,255,0.92); 
+            background-color: rgba(255,255,255,0.92); /* 預設微透白底 */
             position: relative;
-            padding: 2px;
+            padding: 0; /* 內距交給內容層 */
             display: flex;
             flex-direction: column;
             overflow: hidden;
             height: 100%;
             cursor: pointer;
-            transition: background-color 0.2s;
         }
-        .zwds-cell:hover { background-color: #f0f8ff; }
+        
+        /* 內容層：確保文字在 SVG 之上，且有背景色襯托文字 */
+        .cell-content {
+            width: 100%; height: 100%;
+            padding: 2px;
+            display: flex; flex-direction: column;
+            z-index: 2; /* 文字在最上層 */
+            background-color: rgba(255,255,255,0.85); /* 讓文字底色半透明遮住一點線條 */
+        }
 
-        /* === 高亮 === */
-        .cell-focus { background-color: #E6F7FF !important; }
-        .cell-sanfang { background-color: #FFF7E6 !important; }
-        .cell-duigong { background-color: #F6FFED !important; }
+        /* 高亮狀態 */
+        .cell-focus .cell-content { background-color: rgba(230, 247, 255, 0.9) !important; }
+        .cell-sanfang .cell-content { background-color: rgba(255, 247, 230, 0.9) !important; }
+        .cell-duigong .cell-content { background-color: rgba(246, 255, 237, 0.9) !important; }
+        
         .border-daxian { box-shadow: inset 0 0 0 3px #666 !important; }
         .border-liunian { box-shadow: inset 0 0 0 3px #007bff !important; }
 
-        /* === 星曜與文字 === */
+        /* === 5. 星曜與文字 === */
         .stars-box { display: flex; flex-wrap: wrap; gap: 0; width: 100%; pointer-events: none; }
         .star-item { display: inline-flex; flex-direction: column; align-items: center; margin: 0 1px 1px 0; }
         
@@ -73,9 +82,7 @@ def apply_style():
         .txt-med { font-size: 14px; font-weight: 700; color: #000; writing-mode: vertical-rl; }
         .txt-sml { font-size: 11px; color: #4169E1; writing-mode: vertical-rl; }
         
-        .hua-badge {
-            font-size: 10px; color: #fff; border-radius: 2px; text-align: center; width: 14px;
-        }
+        .hua-badge { font-size: 10px; color: #fff; border-radius: 2px; text-align: center; width: 14px; }
         .bg-ben { background-color: #d32f2f; } .bg-da { background-color: #808080; } .bg-liu { background-color: #0056b3; }
 
         .footer-left { position: absolute; bottom: 2px; left: 2px; display: flex; align-items: flex-end; gap: 4px; pointer-events: none; }
@@ -87,24 +94,18 @@ def apply_style():
         .palace-name { font-size: 13px; font-weight: 900; color: #d32f2f; }
         .ganzhi-col { font-size: 16px; font-weight: 900; color: #000; writing-mode: vertical-rl; text-orientation: upright; margin-left: 1px; }
 
-        /* === 按鈕列 (HTML Grid) === */
+        /* === 6. 按鈕列 === */
         .timeline-row {
-            display: grid;
-            grid-template-columns: repeat(12, 1fr);
+            display: grid; grid-template-columns: repeat(12, 1fr);
             border-top: 1px solid #999;
             background-color: #f8f8f8;
-            /* 讓它自然排在 Grid 下方，不需要任何 margin hack */
+            width: 100%;
         }
         .btn-limit {
-            border-right: 1px solid #ccc;
-            padding: 6px 2px;
-            text-align: center;
-            font-size: 12px;
-            cursor: pointer;
-            line-height: 1.3;
-            color: #333; /* 強制黑色文字 */
+            border-right: 1px solid #ccc; padding: 6px 2px; text-align: center;
+            font-size: 12px; cursor: pointer; line-height: 1.3; color: #333;
         }
-        .btn-limit:hover { background-color: #ddd; }
+        .btn-limit:hover { background-color: #e0e0e0; }
         .btn-active { background-color: #4B0082 !important; color: #fff !important; }
         
         .center-box {
