@@ -3,14 +3,28 @@ import streamlit as st
 def apply_style():
     st.markdown("""
     <style>
-        /* === 全局設定 === */
+        /* === 1. 全局重置與滿版修正 === */
         :root { --primary-color: #4B0082; --bg-color: #fff; --text-color: #000; }
         .stApp { background-color: #ffffff !important; color: #000000 !important; }
         header[data-testid="stHeader"] { display: none !important; }
-        .block-container { padding: 1rem 1rem !important; max-width: 1200px !important; }
+        
+        /* 關鍵修正：強制滿版，消除右側空白 */
+        .block-container {
+            padding-top: 1rem !important; 
+            padding-bottom: 1rem !important;
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+            max-width: 100% !important;
+        }
         [data-testid="stVerticalBlock"] { gap: 0px !important; }
+        
+        /* 側邊欄樣式微調 */
+        [data-testid="stSidebar"] {
+            background-color: #f8f9fa;
+            border-right: 1px solid #ddd;
+        }
 
-        /* === 命盤容器 (Chart Container) === */
+        /* === 2. 命盤容器 === */
         .chart-wrapper {
             position: relative;
             width: 100%;
@@ -23,20 +37,19 @@ def apply_style():
         .svg-overlay {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; /* 讓點擊穿透 */
-            z-index: 20; /* 最上層 */
+            pointer-events: none;
+            z-index: 20;
         }
 
         /* 網格系統 */
         .zwds-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            grid-template-rows: repeat(4, 120px); /* 高度 */
-            gap: 1px; /* 格線寬度 */
+            grid-template-rows: repeat(4, 120px); /* 固定高度確保整齊 */
+            gap: 1px;
             background-color: #999; 
         }
 
-        /* 單一宮位格子 */
         .zwds-cell {
             background-color: #ffffff;
             position: relative;
@@ -46,18 +59,18 @@ def apply_style():
             overflow: hidden;
         }
 
-        /* 高亮背景顏色 */
-        .highlight-focus { background-color: #F0F8FF !important; } /* 淺藍 */
-        .highlight-sanfang { background-color: #FFF8F0 !important; } /* 淺橘 */
-        .highlight-duigong { background-color: #F0FFF0 !important; } /* 淺綠 */
+        /* 高亮背景 */
+        .highlight-focus { background-color: #F0F8FF !important; }
+        .highlight-sanfang { background-color: #FFF8F0 !important; }
+        .highlight-duigong { background-color: #F0FFF0 !important; }
 
-        /* === 星曜區 (零間隙) === */
+        /* === 3. 星曜排版 (零間隙) === */
         .stars-box {
             display: flex;
             flex-direction: row;
             flex-wrap: wrap;
             align-content: flex-start;
-            gap: 0px; /* 關鍵：無間隙 */
+            gap: 0px; /* 無間隙 */
             margin-bottom: auto;
         }
 
@@ -67,7 +80,7 @@ def apply_style():
             width: fit-content; margin-right: 2px;
         }
         .star-name {
-            font-size: 18px; font-weight: 900; color: #B71C1C; /* 深紅 */
+            font-size: 18px; font-weight: 900; color: #B71C1C;
             writing-mode: vertical-rl; text-orientation: upright;
             line-height: 1; letter-spacing: -2px; margin-bottom: 2px;
         }
@@ -80,11 +93,10 @@ def apply_style():
         .bg-liu { background-color: #0056b3; }
 
         /* 副星 */
-        .star-med { font-size: 14px; font-weight: 700; color: #000; writing-mode: vertical-rl; line-height: 1.1; }
-        .star-sml { font-size: 11px; color: #4169E1; writing-mode: vertical-rl; line-height: 1.1; }
+        .star-med { font-size: 14px; font-weight: 700; color: #000; writing-mode: vertical-rl; line-height: 1.1; margin-right: 1px; }
+        .star-sml { font-size: 11px; color: #4169E1; writing-mode: vertical-rl; line-height: 1.1; margin-right: 1px; }
 
-        /* === 底部資訊 (參照圖片佈局) === */
-        /* 左下：神煞堆疊 + 歲數 */
+        /* === 4. 底部資訊 (仿照圖片) === */
         .footer-left {
             position: absolute; bottom: 1px; left: 1px;
             display: flex; align-items: flex-end; gap: 4px;
@@ -93,7 +105,6 @@ def apply_style():
         .god-text { font-size: 10px; color: #555; writing-mode: horizontal-tb; }
         .limit-text { font-size: 14px; font-weight: normal; color: #000; line-height: 1; }
 
-        /* 右下：宮位資訊 + 干支 */
         .footer-right {
             position: absolute; bottom: 1px; right: 1px;
             display: flex; align-items: flex-end; gap: 2px;
@@ -101,33 +112,47 @@ def apply_style():
         .info-col { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
         .badge-shen { background-color: #007bff; color: #fff; font-size: 9px; padding: 0 2px; border-radius: 2px; }
         .life-stage { font-size: 11px; color: #800080; }
-        .palace-name { font-size: 13px; font-weight: 900; color: #d32f2f; } /* 本命紅 */
+        .palace-name { font-size: 13px; font-weight: 900; color: #d32f2f; }
         .ganzhi-label { 
             font-size: 16px; font-weight: 900; color: #000; 
             writing-mode: vertical-rl; text-orientation: upright; line-height: 1;
         }
 
-        /* === 大限時間軸 (仿照圖片下方) === */
+        /* === 5. 大限時間軸 (按鈕樣式) === */
         .timeline-container {
             display: grid;
             grid-template-columns: repeat(12, 1fr);
-            background-color: #eee;
+            background-color: #f0f0f0;
             border: 1px solid #ccc;
             border-top: none;
-            margin-bottom: 5px;
+            width: 100%;
         }
-        .timeline-cell {
-            text-align: center;
-            padding: 4px 0;
+        /* 覆蓋 Streamlit 按鈕樣式，使其像時間軸格子 */
+        div.stButton > button {
+            width: 100%;
+            border: none;
+            border-right: 1px solid #ccc;
+            border-radius: 0;
+            background-color: transparent;
+            color: #333;
             font-size: 12px;
-            cursor: pointer;
-            border-right: 1px solid #ddd;
-            transition: background 0.2s;
+            padding: 4px 0;
+            height: auto;
+            min-height: 40px;
         }
-        .timeline-cell:hover { background-color: #ddd; }
-        .timeline-cell.active { background-color: #4B0082; color: white; }
-        .timeline-top { font-weight: bold; font-size: 13px; display: block; }
-        .timeline-btm { font-size: 11px; display: block; }
+        div.stButton > button:hover {
+            background-color: #ddd;
+            color: #000;
+        }
+        div.stButton > button:focus {
+            outline: none;
+            box-shadow: none;
+        }
+        /* 選中狀態 (需要透過 app.py 動態 class 比較難，這裡用 primary 顏色覆蓋) */
+        div.stButton > button[kind="primary"] {
+            background-color: #4B0082 !important;
+            color: white !important;
+        }
 
         /* 中宮 */
         .center-box {
@@ -137,8 +162,5 @@ def apply_style():
             justify-content: center; align-items: center;
             padding: 10px;
         }
-        
-        /* 隱藏 Streamlit 預設按鈕樣式，我們用自定義 HTML */
-        .stButton { display: none; } 
     </style>
     """, unsafe_allow_html=True)
