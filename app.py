@@ -1,7 +1,8 @@
 import streamlit as st
 import json
 import os
-import time  # 修正：補上關鍵的 import
+import time
+import re # 引入正規表達式模組
 from st_click_detector import click_detector
 from logic import ZWDSCalculator, parse_date
 from renderer import render_full_chart_html
@@ -44,17 +45,28 @@ with st.sidebar:
         st.rerun()
 
     rec = next((x for x in st.session_state.db if x['id'] == st.session_state.current_id), None)
+    
     with st.expander("📝 編輯資料", expanded=(st.session_state.current_id == 0)):
+        # 1. 將曆法選擇移出 Form，以便切換時能即時刷新預設值
+        cal_type = st.radio("曆法", ["西元", "民國"], index=0, horizontal=True)
+        
+        # 2. 根據曆法計算預設值
+        if rec:
+            if cal_type == "民國":
+                roc_y = rec['y'] - 1911
+                # 補零，例如 680926
+                d_val = f"{roc_y:02}{rec['m']:02}{rec['d']:02}"
+            else:
+                d_val = f"{rec['y']:04}{rec['m']:02}{rec['d']:02}"
+            t_val = f"{rec['h']:02}{rec['min']:02}"
+        else:
+            d_val = ""
+            t_val = ""
+
         with st.form("edit_form"):
             name = st.text_input("姓名", value=rec['name'] if rec else "")
             gender = st.radio("性別", ["男", "女"], index=0 if rec and rec['gender']=='男' else 1, horizontal=True)
             cat = st.text_input("分類", value=rec.get('category', '') if rec else "")
-            
-            # 單選按鈕：讓使用者明確選擇
-            cal_type = st.radio("曆法", ["西元", "民國"], index=0, horizontal=True)
-            
-            d_val = f"{rec['y']:04}{rec['m']:02}{rec['d']:02}" if rec else ""
-            t_val = f"{rec['h']:02}{rec['min']:02}" if rec else ""
             
             hint = "例如: 19790926" if cal_type=="西元" else "例如: 680926"
             date_str = st.text_input(f"日期 ({hint})", value=d_val)
@@ -62,46 +74,43 @@ with st.sidebar:
             
             if st.form_submit_button("💾 儲存"):
                 try:
-                    # 1. 移除所有干擾符號，只留數字
-                    d_pure = date_str.replace("/", "").replace("-", "").replace(".", "").replace(" ", "")
-                    t_pure = time_str.replace(":", "").replace(" ", "")
+                    # 3. 暴力清洗：移除所有非數字字符 (空白、斜線、橫線等)
+                    d_pure = re.sub(r'\D', '', date_str) 
+                    t_pure = re.sub(r'\D', '', time_str)
                     
-                    # 2. 解析時間
+                    # 4. 解析時間
                     if len(t_pure) == 4:
-                        h = int(t_pure[:2])
-                        mn = int(t_pure[2:])
-                    elif len(t_pure) == 3: # 允許 930 -> 0930
-                        h = int(t_pure[:1])
-                        mn = int(t_pure[1:])
-                    elif len(t_pure) == 0: # 沒填預設 00:00
+                        h, mn = int(t_pure[:2]), int(t_pure[2:])
+                    elif len(t_pure) == 3: # 支援 930 -> 0930
+                        h, mn = int(t_pure[:1]), int(t_pure[1:])
+                    elif len(t_pure) == 0:
                         h, mn = 0, 0
                     else:
-                        raise ValueError("時間格式錯誤")
+                        raise ValueError("時間格式錯誤，請輸入 4 碼數字 (如 1830)")
 
-                    # 3. 解析日期
+                    # 5. 解析日期 (核心邏輯)
                     y, m, d = 0, 0, 0
                     
                     if cal_type == "民國":
-                        # 民國年邏輯：直接切字串，最穩
-                        if len(d_pure) == 6: # 680926
+                        # 支援 6 碼 (680926) 或 7 碼 (1000101)
+                        if len(d_pure) == 6:
                             y = int(d_pure[:2]) + 1911
                             m = int(d_pure[2:4])
                             d = int(d_pure[4:])
-                        elif len(d_pure) == 7: # 1000101
+                        elif len(d_pure) == 7:
                             y = int(d_pure[:3]) + 1911
                             m = int(d_pure[3:5])
                             d = int(d_pure[5:])
                         else:
-                            raise ValueError("民國日期請輸入 6 碼或 7 碼 (如 680926)")
+                            raise ValueError(f"民國日期長度錯誤 (您輸入了 {len(d_pure)} 碼數字，請輸入 6 或 7 碼)")
                     else:
-                        # 西元邏輯
+                        # 西元
                         if len(d_pure) == 8:
                             y = int(d_pure[:4])
                             m = int(d_pure[4:6])
                             d = int(d_pure[6:])
                         else:
-                            # 嘗試 fallback 到原邏輯
-                            y, m, d, _ = parse_date(d_pure)
+                            raise ValueError(f"西元日期需為 8 碼 (您輸入了 {len(d_pure)} 碼)")
 
                     if name and y > 0:
                         calc = ZWDSCalculator(y, m, d, h, mn, gender)
