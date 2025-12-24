@@ -1,153 +1,213 @@
 import streamlit as st
-import time
-from style import apply_style
-from logic import ZWDSCalculator, parse_date, get_ganzhi_for_year, GAN, ZHI
-from renderer import get_palace_html, get_center_html
 
-st.set_page_config(page_title="專業紫微斗數排盤系統", page_icon="🔮", layout="wide")
-apply_style()
+def apply_style():
+    st.markdown("""
+    <style>
+        /* =================================================================
+           1. 基礎設定
+           ================================================================= */
+        :root {
+            --primary-color: #4B0082;
+            --background-color: #ffffff;
+            --text-color: #000000;
+        }
+        .stApp { background-color: #ffffff !important; color: #000000 !important; }
+        header[data-testid="stHeader"] { background-color: #ffffff !important; border-bottom: 1px solid #f0f0f0 !important; }
+        div[data-baseweb="input"] { background-color: #ffffff !important; border: 1px solid #ccc !important; }
+        div[data-baseweb="input"] input { color: #000000 !important; caret-color: #000000 !important; }
+        button[kind="secondary"] { background-color: #ffffff !important; color: #000000 !important; border: 1px solid #ccc !important; }
+        div[data-baseweb="select"] > div { background-color: #ffffff !important; color: #000000 !important; }
+        label, .stMarkdown p { color: #333 !important; }
 
-if 'db' not in st.session_state: st.session_state.db = [] 
-if 'current_id' not in st.session_state: st.session_state.current_id = 0
-if 'show_chart' not in st.session_state: st.session_state.show_chart = False
-if 'temp_preview_data' not in st.session_state: st.session_state.temp_preview_data = None
-if 'sel_daxian_idx' not in st.session_state: st.session_state.sel_daxian_idx = -1 
-if 'sel_liunian_offset' not in st.session_state: st.session_state.sel_liunian_offset = -1 
+        .block-container {
+            padding-top: 6rem !important; 
+            padding-bottom: 3rem !important;
+            max-width: 1200px !important;
+        }
+        [data-testid="stVerticalBlock"] { gap: 0px !important; }
 
-st.title("🔮 專業紫微斗數排盤")
+        /* =================================================================
+           2. 命盤網格
+           ================================================================= */
+        .zwds-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: repeat(4, 160px); 
+            gap: 0;
+            background-color: #000; 
+            border: 2px solid #000;
+            margin-bottom: 20px;
+            font-family: "Microsoft JhengHei", "Heiti TC", sans-serif;
+            max-width: 1200px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        @media (max-width: 800px) {
+            .zwds-grid { grid-template-columns: repeat(2, 1fr); grid-template-rows: auto; }
+        }
 
-with st.container(border=True):
-    c1, c2 = st.columns([1, 1.5])
-    with c1: search = st.text_input("🔍 搜尋", placeholder="姓名/年份")
-    with c2:
-        opts = {0: "➕ 新增命盤"}
-        for p in st.session_state.db: opts[p['id']] = f"[{p['category']}] {p['name']}"
-        curr = st.session_state.current_id if st.session_state.current_id in opts else 0
-        sel = st.selectbox("選擇命主", options=list(opts.keys()), format_func=lambda x: opts[x], index=list(opts.keys()).index(curr))
-        if sel != st.session_state.current_id:
-            st.session_state.current_id = sel; st.session_state.show_chart = False; st.session_state.temp_preview_data = None; 
-            st.session_state.sel_daxian_idx = -1; st.session_state.sel_liunian_offset = -1; 
-            st.rerun()
+        .zwds-cell {
+            background-color: #ffffff;
+            border: 1px solid #ccc;
+            padding: 2px;
+            position: relative; /* 關鍵：讓內部的 absolute 元素以這裡為基準 */
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow: hidden;
+        }
 
-if st.session_state.current_id != 0:
-    rec = next((x for x in st.session_state.db if x['id']==st.session_state.current_id), None)
-    v_name, v_gen, v_cat = rec['name'], rec['gender'], rec['category']
-    v_date = f"{rec['y']:04d}{rec['m']:02d}{rec['d']:02d}" if rec['cal_type']=="西元" else f"{rec['y']-1911}{rec['m']:02d}{rec['d']:02d}"
-    v_time = f"{rec['h']:02d}{rec['min']:02d}"
-else: v_name, v_gen, v_cat, v_date, v_time = "", "女", "", "", ""
+        .active-daxian { background-color: #f9f9f9 !important; border: 2px solid #666 !important; }
+        .active-liunian { border: 3px solid #007bff !important; z-index: 5; }
 
-with st.expander("📝 資料輸入 / 修改", expanded=(not st.session_state.show_chart)):
-    with st.form("main_form"):
-        c1, c2, c3 = st.columns([1.5, 1, 1.5])
-        with c1: i_name = st.text_input("姓名", value=v_name)
-        with c2: i_gen = st.radio("性別", ["男", "女"], index=0 if v_gen=="男" else 1, horizontal=True)
-        with c3: i_cat = st.text_input("分類", value=v_cat)
-        c4, c5 = st.columns(2)
-        with c4: i_date = st.text_input("出生年月日", value=v_date, help="如 19790926")
-        with c5: i_time = st.text_input("出生時間", value=v_time, help="如 1830")
-        b1, b2 = st.columns(2)
-        with b1: btn_save = st.form_submit_button("💾 儲存並排盤", type="primary", use_container_width=True)
-        with b2: btn_calc = st.form_submit_button("🧪 僅試算", use_container_width=True)
+        /* =================================================================
+           3. 星曜區 (上方)
+           ================================================================= */
+        .stars-box {
+            display: flex;
+            flex-direction: row; 
+            flex-wrap: wrap;
+            align-content: flex-start;
+            width: 100%;
+            padding-top: 2px;
+            padding-left: 2px;
+        }
 
-if btn_save or btn_calc:
-    y, m, d, cal = parse_date(i_date)
-    h, mn = int(i_time[:2]) if len(i_time)==4 else 0, int(i_time[2:]) if len(i_time)==4 else 0
-    if not i_name or y==0: st.error("資料不完整")
-    else:
-        calc = ZWDSCalculator(y, m, d, h, mn, i_gen); p_data, m_star, bur, b_yr, ming_pos = calc.get_result()
-        pkt = {"name": i_name, "gender": i_gen, "category": i_cat, "y": y, "m": m, "d": d, "h": h, "min": mn, "cal_type": cal, "ming_star": m_star, "bureau": bur, "palace_data": p_data, "ming_pos": ming_pos}
-        if btn_save:
-            pkt['id'] = int(time.time()) if st.session_state.current_id==0 else st.session_state.current_id
-            if st.session_state.current_id==0: st.session_state.db.append(pkt); st.session_state.current_id = pkt['id']
-            else: 
-                for idx, x in enumerate(st.session_state.db):
-                    if x['id']==st.session_state.current_id: st.session_state.db[idx]=pkt
-            st.session_state.temp_preview_data = None; st.session_state.show_chart = True
-            st.session_state.sel_daxian_idx = -1; st.session_state.sel_liunian_offset = -1;
-            st.rerun()
-        if btn_calc: 
-            st.session_state.temp_preview_data = pkt; st.session_state.show_chart = True
-            st.session_state.sel_daxian_idx = -1; st.session_state.sel_liunian_offset = -1;
+        /* 主星 (垂直列) */
+        .star-major-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-right: 4px;
+        }
+        .star-name {
+            font-size: 18px; 
+            font-weight: 900;
+            color: #B71C1C; /* 深紅 */
+            letter-spacing: 2px;
+            margin-bottom: 2px;
+            writing-mode: vertical-rl;
+            text-orientation: upright;
+        }
+        .hua-badge {
+            font-size: 11px;
+            border-radius: 3px;
+            padding: 1px 0px;
+            color: #fff;
+            text-align: center;
+            font-weight: bold;
+            margin-top: 1px;
+            width: 16px;
+            line-height: 1.2;
+            display: block;
+        }
+        .bg-ben { background-color: #d32f2f; }
+        .bg-da  { background-color: #808080; }
+        .bg-liu { background-color: #0056b3; }
 
-if st.session_state.show_chart:
-    data = st.session_state.temp_preview_data or next((x for x in st.session_state.db if x['id']==st.session_state.current_id), None)
-    if data:
-        calc_obj = ZWDSCalculator(data['y'], data['m'], data['d'], data['h'], data['min'], data['gender'])
-        sorted_limits = sorted(calc_obj.palaces.items(), key=lambda x: x[1]['age_start'])
-        daxian_idx = st.session_state.sel_daxian_idx
-        liunian_off = st.session_state.sel_liunian_offset
-        is_pure_benming = (daxian_idx == -1)
+        /* 副星 (左至右排列) */
+        .sub-stars-col {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            gap: 2px;
+            align-items: flex-start;
+            padding-top: 2px;
+        }
+        .star-medium {
+            font-size: 14px;
+            font-weight: bold;
+            color: #000000;
+            writing-mode: vertical-rl;
+            line-height: 1;
+        }
+        .star-small {
+            font-size: 11px;
+            color: #4169E1; /* 藍色 */
+            writing-mode: vertical-rl;
+            line-height: 1;
+            font-weight: normal;
+        }
 
-        daxian_pos = -1
-        liunian_pos = -1
+        /* =================================================================
+           4. 底部資訊 (絕對定位)
+           ================================================================= */
         
-        if not is_pure_benming:
-            d_pos_idx, d_info = sorted_limits[daxian_idx]
-            daxian_pos = int(d_pos_idx)
-            if liunian_off != -1:
-                curr_year = data['y'] + d_info['age_start'] + liunian_off - 1
-                daxian_gan = d_info['gan_idx']
-                ln_gan, ln_zhi = get_ganzhi_for_year(curr_year)
-                calc_obj.calculate_sihua(daxian_gan, ln_gan)
-                for pid, info in calc_obj.palaces.items():
-                    if info['zhi_idx'] == ln_zhi: liunian_pos = int(pid); break
-            else:
-                daxian_gan = d_info['gan_idx']
-                calc_obj.calculate_sihua(daxian_gan, -1) 
-        else:
-            calc_obj.calculate_sihua(-1, -1)
+        /* 左下角：神煞區 */
+        .gods-box {
+            position: absolute;
+            bottom: 2px;
+            left: 2px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            line-height: 1.1;
+        }
+        .god-star { font-size: 11px; writing-mode: horizontal-tb; }
+        .god-sui { color: #008080; }   /* 歲前-青 */
+        .god-jiang { color: #4682B4; } /* 將前-藍 */
+        .god-boshi { color: #9370DB; } /* 博士-紫 */
 
-        benming_pos = calc_obj.ming_pos
-        shen_pos = calc_obj.shen_pos # 取得身宮位置
+        /* 右下角：宮位資訊區 */
+        .footer-right {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            line-height: 1.1;
+            text-align: right;
+        }
 
-        layout = [(5,"巳",1,1),(6,"午",1,2),(7,"未",1,3),(8,"申",1,4),
-                  (4,"辰",2,1),                    (9,"酉",2,4),
-                  (3,"卯",3,1),                    (10,"戌",3,4),
-                  (2,"寅",4,1),(1,"丑",4,2),(0,"子",4,3),(11,"亥",4,4)]
+        /* 身宮標記 (藍底白字) */
+        .shen-badge {
+            background-color: #1E90FF;
+            color: #fff;
+            font-size: 10px;
+            padding: 1px 3px;
+            border-radius: 2px;
+            margin-bottom: 2px;
+            font-weight: bold;
+        }
+
+        /* 長生十二神 (紫色) */
+        .life-stage {
+            font-size: 12px;
+            color: #800080;
+            font-weight: bold;
+            margin-bottom: 2px;
+        }
+
+        .p-name-liu { color: #0056b3; font-size: 14px; font-weight: 900; }
+        .p-name-da { color: #666; font-size: 14px; font-weight: 900; }
+        .p-name-ben { color: #d32f2f; font-size: 14px; font-weight: 900; }
         
-        cells_html = ""
-        for idx, branch, r, c in layout:
-            info = calc_obj.palaces[idx]
-            # 修正：renderer.py 中我把 shen_badge_html 留空了，請記得在 renderer.py 中補上
-            # 為了讓代碼完整，請在 renderer.py 第 53 行左右加入 shen_pos 參數
-            # 這裡我們傳入 shen_pos
-            # **注意**：您需要再次打開 renderer.py 修改 get_palace_html 函式定義，增加 shen_pos 參數
-            # 為了避免您困惑，我會在下一次回覆或請您先確認 renderer.py。
-            # 實際上，我在上面的 renderer.py 區塊中漏了把 shen_pos 加進 def get_palace_html(...)
-            # 沒關係，我這裡直接寫死邏輯，或者您再檢查 renderer.py
-            # 為了確保一次成功，請您**務必**檢查 renderer.py 的函式定義是否包含 shen_pos
-            # 我會在下面的 app.py 中假設您已經更新了 renderer.py
-            cells_html += get_palace_html(idx, branch, r, c, info, daxian_pos, liunian_pos, benming_pos, is_pure_benming, shen_pos)
-            
-        center_html = get_center_html(data, calc_obj)
-        st.markdown(f'<div class="zwds-grid">{cells_html}{center_html}</div>', unsafe_allow_html=True)
+        /* 地支天干 */
+        .ganzhi-text { 
+            color: #000; 
+            font-size: 14px; 
+            font-weight: 900; 
+            margin-left: 2px;
+        }
         
-        st.markdown("---")
-        limit_names = ["一限", "二限", "三限", "四限", "五限", "六限", "七限", "八限", "九限", "十限", "十一", "十二"]
-        cols_d = st.columns(12)
-        for i, col in enumerate(cols_d):
-            pos_idx, info = sorted_limits[i]
-            gz = f"{GAN[info['gan_idx']]}{ZHI[info['zhi_idx']]}"
-            label = f"{limit_names[i]}\n{gz}"
-            is_selected = (i == daxian_idx)
-            btn_type = "primary" if is_selected else "secondary"
-            if col.button(label, key=f"d_{i}", type=btn_type, use_container_width=True):
-                if is_selected: st.session_state.sel_daxian_idx = -1; st.session_state.sel_liunian_offset = -1
-                else: st.session_state.sel_daxian_idx = i; st.session_state.sel_liunian_offset = -1 
-                st.rerun()
+        /* 歲數 */
+        .limit-info {
+            font-size: 12px;
+            color: #333;
+            font-weight: normal;
+            display: block; /* 強制換行，在宮名下方 */
+        }
 
-        if not is_pure_benming:
-            cols_l = st.columns(10)
-            d_info = sorted_limits[daxian_idx][1]
-            for j, col in enumerate(cols_l):
-                age = d_info['age_start'] + j
-                yr = calc_obj.birth_year + age - 1
-                gy, zy = get_ganzhi_for_year(yr)
-                gz = f"{GAN[gy]}{ZHI[zy]}"
-                label = f"{yr}\n{gz}({age})"
-                is_selected = (j == liunian_off)
-                btn_type = "primary" if is_selected else "secondary"
-                if col.button(label, key=f"l_{j}", type=btn_type, use_container_width=True):
-                    if is_selected: st.session_state.sel_liunian_offset = -1
-                    else: st.session_state.sel_liunian_offset = j
-                    st.rerun()
+        /* 中宮 */
+        .center-info-box {
+            grid-column: 2 / 4; grid-row: 2 / 4;
+            background-color: #fff;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center; text-align: center;
+            border: 1px solid #ccc;
+            color: #000;
+            height: 100%;
+        }
+    </style>
+    """, unsafe_allow_html=True)
