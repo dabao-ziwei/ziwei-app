@@ -91,6 +91,7 @@ if st.session_state.current_id != 0:
         d_idx = st.session_state.sel_daxian_idx
         l_off = st.session_state.sel_liunian_offset
         is_pure = (d_idx == -1)
+        
         d_pos = int(limits[d_idx][0]) if not is_pure else -1
         l_pos = -1
         
@@ -115,21 +116,19 @@ if st.session_state.current_id != 0:
 
         grid_html = ""
         layout = [(5,"巳",1,1),(6,"午",1,2),(7,"未",1,3),(8,"申",1,4),(4,"辰",2,1),(9,"酉",2,4),(3,"卯",3,1),(10,"戌",3,4),(2,"寅",4,1),(1,"丑",4,2),(0,"子",4,3),(11,"亥",4,4)]
-        
         for idx, branch, r, c in layout:
             grid_html += get_palace_html(idx, branch, r, c, calc.palaces[idx], d_pos, l_pos, calc.ming_pos, is_pure, calc.shen_pos, st.session_state.focus_palace_idx)
         
         svg = render_triangles_svg(st.session_state.focus_palace_idx)
         final_chart = f'<div class="chart-wrapper">{svg}<div class="zwds-grid">{grid_html}{get_center_html(data, calc)}</div></div>'.replace('\n', '')
         
-        # 顯示命盤
+        # 1. 命盤
         st.markdown(final_chart, unsafe_allow_html=True)
 
-        # 大限按鈕 (確保渲染順序)
+        # 2. 大限按鈕 (不再使用 HTML 容器包覆，直接用 CSS 全域控制)
         cols = st.columns(12)
         lnames = ["一限", "二限", "三限", "四限", "五限", "六限", "七限", "八限", "九限", "十限", "十一", "十二"]
         
-        st.markdown('<div class="timeline-bar">', unsafe_allow_html=True)
         for i, col in enumerate(cols):
             info = limits[i][1]
             txt = f"{lnames[i]}\n{GAN[info['gan_idx']]}{ZHI[info['zhi_idx']]}"
@@ -137,10 +136,9 @@ if st.session_state.current_id != 0:
                 st.session_state.sel_daxian_idx = -1 if i==d_idx else i
                 st.session_state.sel_liunian_offset = -1
                 st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
         
+        # 3. 流年按鈕
         if not is_pure:
-            st.markdown('<div class="timeline-bar" style="border-top:none;">', unsafe_allow_html=True)
             l_cols = st.columns(10)
             d_start = limits[d_idx][1]['age_start']
             for j, col in enumerate(l_cols):
@@ -151,6 +149,5 @@ if st.session_state.current_id != 0:
                 if col.button(txt, key=f"l_{j}", type="primary" if j==l_off else "secondary", use_container_width=True):
                     st.session_state.sel_liunian_offset = -1 if j==l_off else j
                     st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
 else:
     st.info("👈 請從左側選單「新增命盤」開始。")
