@@ -40,7 +40,7 @@ def apply_style():
             background-color: #ffffff;
             border: 1px solid #ccc;
             padding: 2px;
-            position: relative; /* 絕對定位的基準點 */
+            position: relative;
             display: flex;
             flex-direction: column;
             height: 100%;
@@ -51,7 +51,7 @@ def apply_style():
         .active-liunian { border: 3px solid #007bff !important; z-index: 5; }
 
         /* =================================================================
-           3. 星曜區
+           3. 星曜區 (關鍵修改：緊湊排列)
            ================================================================= */
         .stars-box {
             display: flex;
@@ -61,86 +61,52 @@ def apply_style():
             width: 100%;
             padding-top: 2px;
             padding-left: 2px;
+            /* 確保沒有額外的垂直間距 */
+            margin-bottom: 0;
         }
-        .star-major-container { display: flex; flex-direction: column; align-items: center; margin-right: 4px; }
-        .star-name { font-size: 18px; font-weight: 900; color: #B71C1C; letter-spacing: 2px; margin-bottom: 2px; writing-mode: vertical-rl; text-orientation: upright; }
+        .star-major-container { display: flex; flex-direction: column; align-items: center; margin-right: 3px; }
+        .star-name { font-size: 18px; font-weight: 900; color: #B71C1C; letter-spacing: 2px; margin-bottom: 1px; writing-mode: vertical-rl; text-orientation: upright; }
         .hua-badge { font-size: 11px; border-radius: 3px; padding: 1px 0px; color: #fff; text-align: center; font-weight: bold; margin-top: 1px; width: 16px; line-height: 1.2; display: block; }
         .bg-ben { background-color: #d32f2f; } .bg-da { background-color: #808080; } .bg-liu { background-color: #0056b3; }
         
-        .sub-stars-col { display: flex; flex-direction: row; flex-wrap: wrap; gap: 2px; align-items: flex-start; padding-top: 2px; }
+        /* 副星容器：修改 gap 與對齊方式 */
+        .sub-stars-col {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            /* 關鍵修正：只設水平間距，垂直間距設為 0 */
+            column-gap: 1px; 
+            row-gap: 0px;    
+            align-items: flex-start;
+            align-content: flex-start; /* 換行後緊貼上方 */
+            padding-top: 0px;
+        }
         .star-medium { font-size: 14px; font-weight: bold; color: #000; writing-mode: vertical-rl; line-height: 1; }
-        .star-small { font-size: 11px; color: #4169E1; writing-mode: vertical-rl; line-height: 1; font-weight: normal; }
+        /* 關鍵修正：移除雜曜的上方邊距 */
+        .star-small { font-size: 11px; color: #4169E1; writing-mode: vertical-rl; line-height: 1; font-weight: normal; margin-top: 0; }
 
         /* =================================================================
            4. 底部資訊 (絕對定位佈局)
            ================================================================= */
         
-        /* [左下角區塊]：神煞 + 歲數 */
         .footer-left {
-            position: absolute;
-            bottom: 2px;
-            left: 2px;
-            display: flex;
-            flex-direction: row; /* 水平排列 */
-            align-items: flex-end; /* 底部對齊 */
-            gap: 4px;
+            position: absolute; bottom: 2px; left: 2px;
+            display: flex; flex-direction: row; align-items: flex-end; gap: 4px;
         }
-        
-        /* 神煞垂直欄 */
-        .gods-col {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-            line-height: 1.1;
-        }
+        .gods-col { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.1; }
         .god-star { font-size: 11px; writing-mode: horizontal-tb; }
-        .god-sui { color: #008080; }
-        .god-jiang { color: #4682B4; }
-        .god-boshi { color: #9370DB; }
+        .god-sui { color: #008080; } .god-jiang { color: #4682B4; } .god-boshi { color: #9370DB; }
+        .limit-info { font-size: 14px; color: #333; font-weight: normal; line-height: 1; margin-bottom: 0px; }
 
-        /* 歲數 (在神煞右邊，底部) */
-        .limit-info { 
-            font-size: 14px; 
-            color: #333; 
-            font-weight: normal; 
-            line-height: 1;
-            margin-bottom: 0px;
-        }
-
-        /* [右下角區塊]：宮名堆疊 + 干支 */
         .footer-right {
-            position: absolute;
-            bottom: 2px;
-            right: 2px;
-            display: flex;
-            flex-direction: row; /* 水平排列 */
-            align-items: flex-end; /* 底部對齊 */
-            gap: 2px;
+            position: absolute; bottom: 2px; right: 2px;
+            display: flex; flex-direction: row; align-items: flex-end; gap: 2px;
         }
+        .palace-info-col { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
+        .ganzhi-col { writing-mode: vertical-rl; text-orientation: upright; font-size: 16px; font-weight: 900; line-height: 1; color: #000; margin-left: 2px; }
 
-        /* 宮位資訊垂直欄 (長生 + 宮名) */
-        .palace-info-col {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-end; /* 靠右對齊 (貼著干支) */
-            line-height: 1.1;
-        }
-
-        /* 干支垂直欄 (直書) */
-        .ganzhi-col {
-            writing-mode: vertical-rl;
-            text-orientation: upright;
-            font-size: 16px;
-            font-weight: 900;
-            line-height: 1;
-            color: #000;
-            margin-left: 2px;
-        }
-
-        /* 文字樣式 */
         .shen-badge { background-color: #1E90FF; color: #fff; font-size: 10px; padding: 1px 3px; border-radius: 2px; margin-bottom: 2px; font-weight: bold; }
         .life-stage { font-size: 12px; color: #800080; font-weight: bold; margin-bottom: 2px; }
-        
         .p-name-liu { color: #0056b3; font-size: 14px; font-weight: 900; }
         .p-name-da { color: #666; font-size: 14px; font-weight: 900; }
         .p-name-ben { color: #d32f2f; font-size: 14px; font-weight: 900; }
