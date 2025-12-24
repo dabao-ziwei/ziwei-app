@@ -1,7 +1,6 @@
 def get_css():
     return """
     <style>
-        /* === 1. 基礎設定 === */
         :root { --primary: #4B0082; --border: #333; --grid-line: #999; }
         body { margin: 0; padding: 0; font-family: "Microsoft JhengHei", sans-serif; }
         
@@ -9,24 +8,12 @@ def get_css():
         [data-testid="stVerticalBlock"] { gap: 0 !important; }
         header { visibility: hidden; height: 0; }
 
-        /* === 2. 主容器 === */
         .master-container {
             display: flex; flex-direction: column; width: 100%;
             border: 2px solid var(--border); box-sizing: border-box;
             position: relative; background-color: #fff;
         }
 
-        /* === 3. 關鍵：隱形觸控板 (解決點擊問題的終極方案) === */
-        .click-overlay {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            z-index: 50; /* 確保在最上層，蓋住文字和星星 */
-            background-color: rgba(0,0,0,0); /* 透明 */
-            cursor: pointer;
-        }
-
-        /* === 4. SVG 連線層 (底層) === */
         .svg-container {
             position: absolute; top: 0; left: 0; width: 100%; height: 560px;
             pointer-events: none; z-index: 0;
@@ -34,7 +21,6 @@ def get_css():
         svg { width: 100%; height: 100%; }
         polygon { fill: none !important; }
 
-        /* === 5. 命盤網格 === */
         .zwds-grid {
             display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(4, 140px);
             gap: 1px; background-color: var(--grid-line); position: relative; z-index: 1;
@@ -42,36 +28,48 @@ def get_css():
 
         .zwds-cell {
             background-color: rgba(255,255,255,0.92);
-            /* 關鍵：設定 relative 讓內部的 overlay 可以絕對定位撐滿它 */
+            /* 設定 relative，讓內部的 a 連結可以絕對定位撐滿它 */
             position: relative; 
             overflow: hidden; display: flex; flex-direction: column;
         }
 
-        /* 內容層 (文字與星曜) */
+        /* === 關鍵修正：這是隱形連結層 === */
+        a.click-overlay {
+            display: block;          /* 變成區塊元素 */
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 50;             /* 蓋在最上面 */
+            text-decoration: none;   /* 去除底線 */
+            color: transparent;      /* 文字透明 (如果有) */
+            cursor: pointer;
+        }
+        a.click-overlay:hover {
+            background-color: rgba(0,0,0,0.02); /* 滑鼠滑過給一點點極淡的反應，確認感應區存在 */
+        }
+
         .cell-content {
             flex: 1; padding: 2px; display: flex; flex-direction: column;
             background-color: rgba(255, 255, 255, 0.85); 
-            z-index: 2; /* 在 SVG 之上，但在 Overlay 之下 */
-            pointer-events: none; /* 讓視覺層不干擾，雖然有 Overlay 擋著，加這行雙保險 */
+            z-index: 2;
+            pointer-events: none; /* 讓文字層完全不擋滑鼠 */
         }
         
-        /* 高亮樣式 */
         .focus-bg .cell-content { background-color: rgba(230, 247, 255, 0.9) !important; }
         .sanfang-bg .cell-content { background-color: rgba(255, 247, 230, 0.9) !important; }
         .duigong-bg .cell-content { background-color: rgba(246, 255, 237, 0.9) !important; }
         .border-active { box-shadow: inset 0 0 0 3px #666 !important; }
         .border-liu { box-shadow: inset 0 0 0 3px #007bff !important; }
 
-        /* 星曜排版 */
         .stars-box { display: flex; flex-wrap: wrap; gap: 0; }
         .star-item { display: inline-flex; flex-direction: column; align-items: center; margin: 0 1px 1px 0; }
+        
         .txt-major { font-size: 18px; font-weight: 900; color: #B71C1C; writing-mode: vertical-rl; text-orientation: upright; letter-spacing: -2px; margin-bottom: 3px; }
         .txt-med { font-size: 13px; font-weight: 700; color: #000; writing-mode: vertical-rl; }
         .txt-sml { font-size: 11px; color: #4169E1; writing-mode: vertical-rl; }
         .hua-badge { font-size: 10px; color: #fff; border-radius: 2px; text-align: center; width: 14px; margin-top: 0; }
         .bg-ben { background-color: #d32f2f; } .bg-da { background-color: #808080; } .bg-liu { background-color: #0056b3; }
 
-        /* 角落資訊 */
         .footer-left { position: absolute; bottom: 2px; left: 2px; }
         .god-text { font-size: 10px; color: #555; writing-mode: horizontal-tb; }
         .limit-text { font-size: 12px; font-weight: bold; color: #000; }
@@ -80,7 +78,7 @@ def get_css():
         .ganzhi-txt { font-size: 15px; font-weight: 900; color: #000; writing-mode: vertical-rl; text-orientation: upright; margin-left: 2px; }
         .shen-tag { background-color: #007bff; color: #fff; font-size: 9px; padding: 0 2px; border-radius: 2px; }
 
-        /* === 6. 按鈕列 === */
+        /* 按鈕 */
         .timeline-container {
             display: grid; grid-template-columns: repeat(12, 1fr);
             border-top: 1px solid #999; background-color: #f4f4f4; width: 100%;
@@ -88,13 +86,14 @@ def get_css():
         .time-btn {
             border-right: 1px solid #ccc; padding: 6px 0; text-align: center;
             font-size: 12px; color: #333; 
-            /* 關鍵：設定 relative 讓內部的 overlay 可以絕對定位 */
+            /* 設定 relative，讓內部的 a 連結可以定位 */
             position: relative;
         }
+        .time-btn * { pointer-events: none; } /* 內部文字不擋 */
+        
         .time-btn:hover { background-color: #e0e0e0; }
         .btn-on { background-color: #4B0082 !important; color: #fff !important; }
 
-        /* 中宮 (不給點) */
         .center-cell {
             grid-column: 2 / 4; grid-row: 2 / 4; background-color: #fff;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
