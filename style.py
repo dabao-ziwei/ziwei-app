@@ -13,7 +13,7 @@ def get_css():
             display: flex; flex-direction: column; width: 100%;
             border: 2px solid var(--border); box-sizing: border-box;
             position: relative; 
-            background-color: #ffffff; /* 這是唯一的底色 */
+            background-color: #ffffff; /* 關鍵：強制白底，避免 Streamlit 預設灰底吃掉線條 */
         }
 
         /* === Layer 1: SVG 線條 (畫在白紙上) === */
@@ -33,7 +33,7 @@ def get_css():
 
         /* === Layer 2: 宮位格子 (透明玻璃) === */
         .zwds-cell {
-            background-color: transparent !important; /* 關鍵修正：改成透明，才看得到底下的線 */
+            background-color: transparent !important; /* 關鍵：透明，透出底下的線條 */
             position: relative; 
             overflow: hidden; display: flex; flex-direction: column;
         }
@@ -41,7 +41,7 @@ def get_css():
         /* === Layer 3: 文字內容 (浮在線條上) === */
         .cell-content {
             flex: 1; padding: 2px; display: flex; flex-direction: column;
-            background-color: rgba(255, 255, 255, 0.6); /* 半透明白，讓文字清楚但隱約看得到線 */
+            background-color: rgba(255, 255, 255, 0.6); /* 半透明白 */
             z-index: 10; 
             pointer-events: none; /* 文字不擋滑鼠 */
         }
