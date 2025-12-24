@@ -1,11 +1,25 @@
 def get_css():
     return """
     <style>
-        /* === Reset === */
+        /* === 1. 基礎重置與頂部空間壓縮 === */
         :root { --primary: #4B0082; --border: #333; --grid-line: #999; }
         body { margin: 0; padding: 0; font-family: sans-serif; }
 
-        /* === 主容器 === */
+        /* 關鍵：壓縮 Streamlit 頂部預設的巨大留白 */
+        .block-container {
+            padding-top: 1rem !important; 
+            padding-bottom: 1rem !important;
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+            max-width: 100% !important;
+        }
+        /* 移除元素間距 */
+        [data-testid="stVerticalBlock"] { gap: 0 !important; }
+        
+        /* 隱藏預設 Header (如果還有的話) */
+        header { visibility: hidden; height: 0; }
+
+        /* === 2. 主容器 === */
         .master-container {
             display: flex;
             flex-direction: column;
@@ -14,21 +28,21 @@ def get_css():
             box-sizing: border-box;
             position: relative;
             background-color: #fff;
+            margin-top: 0px;
         }
 
-        /* === SVG 連線層 (最底層) === */
+        /* === 3. SVG 連線層 === */
         .svg-container {
             position: absolute;
             top: 0; left: 0;
             width: 100%; height: 560px; /* 140px * 4 */
             pointer-events: none;
-            z-index: 0; /* 在最底層 */
+            z-index: 0;
         }
         svg { width: 100%; height: 100%; }
-        /* 關鍵：強制不填色，避免變成色塊 */
         polygon { fill: none !important; }
 
-        /* === 命盤 Grid (中間層) === */
+        /* === 4. 命盤 Grid === */
         .zwds-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
@@ -40,27 +54,34 @@ def get_css():
         }
 
         .zwds-cell {
-            background-color: transparent; /* 透明，讓下面的 SVG 顯示 */
+            background-color: rgba(255,255,255,0.92);
             position: relative;
             overflow: hidden;
-            cursor: pointer;
             display: flex;
             flex-direction: column;
+            
+            /* 關鍵互動設定：容器本身可以被點擊 */
+            cursor: pointer;
+            pointer-events: auto; 
+        }
+        
+        /* 關鍵修正：讓宮位內的所有內容 (文字、星曜) 都不攔截滑鼠點擊 */
+        .zwds-cell > * {
+            pointer-events: none !important;
         }
 
-        /* === 內容層 (最上層文字) === */
+        /* === 內容層 === */
         .cell-content {
             flex: 1;
             padding: 2px;
             display: flex;
             flex-direction: column;
-            /* 關鍵：半透明白底，讓文字清楚，但線條穿過時會被這層半透明遮住，不會干擾閱讀 */
             background-color: rgba(255, 255, 255, 0.85);
             z-index: 2; 
             transition: background-color 0.2s;
         }
         
-        .cell-content:hover { background-color: rgba(240, 248, 255, 0.9); }
+        .zwds-cell:hover .cell-content { background-color: rgba(240, 248, 255, 0.9); }
 
         /* 高亮效果 */
         .focus-bg { background-color: rgba(230, 247, 255, 0.9) !important; }
@@ -92,12 +113,12 @@ def get_css():
         .bg-ben { background-color: #d32f2f; } .bg-da { background-color: #808080; } .bg-liu { background-color: #0056b3; }
 
         /* === 角落資訊 === */
-        .footer-left { position: absolute; bottom: 2px; left: 2px; pointer-events: none; }
+        .footer-left { position: absolute; bottom: 2px; left: 2px; }
         .god-box { display: flex; flex-direction: column; }
         .god-txt { font-size: 10px; writing-mode: horizontal-tb; line-height: 1; margin-bottom: 1px; color: #555; }
         .limit-txt { font-size: 12px; font-weight: bold; color: #000; }
 
-        .footer-right { position: absolute; bottom: 2px; right: 2px; text-align: right; pointer-events: none; }
+        .footer-right { position: absolute; bottom: 2px; right: 2px; text-align: right; }
         .info-box { display: flex; flex-direction: column; align-items: flex-end; }
         .palace-txt { font-size: 12px; font-weight: 900; color: #d32f2f; }
         .ganzhi-txt { font-size: 15px; font-weight: 900; color: #000; writing-mode: vertical-rl; text-orientation: upright; margin-left: 2px; }
@@ -117,7 +138,11 @@ def get_css():
             cursor: pointer;
             color: #333;
             transition: background 0.2s;
+            /* 確保按鈕本身可點，但內部文字不擋點擊 */
+            pointer-events: auto; 
         }
+        .time-btn > * { pointer-events: none !important; }
+        
         .time-btn:hover { background-color: #ddd; }
         .btn-on { background-color: #4B0082 !important; color: #fff !important; }
 
@@ -128,6 +153,7 @@ def get_css():
             display: flex; flex-direction: column; justify-content: center; align-items: center;
             border: 1px solid #ccc;
             z-index: 5;
+            cursor: default; /* 中宮不給點 */
         }
     </style>
     """
