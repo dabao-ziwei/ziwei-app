@@ -2,6 +2,9 @@ from logic import GAN, ZHI
 
 PALACE_NAMES = ["命宮", "兄弟", "夫妻", "子女", "財帛", "疾厄", "遷移", "僕役", "官祿", "田宅", "福德", "父母"]
 
+def clean_html(html_str):
+    return html_str.replace("\n", "").strip()
+
 def get_relative_palace_name(ming_pos, current_cell_pos):
     idx = (ming_pos - current_cell_pos) % 12
     return PALACE_NAMES[idx]
@@ -31,43 +34,40 @@ def render_triangles_svg(focus_idx):
     x3, y3 = get_pos(p3)
     xo, yo = get_pos(p_opp)
     
-    # SVG 必須是單行或無縮排，避免被 markdown 解析為 code block
-    return f'<svg class="svg-overlay" viewBox="0 0 100 100" preserveAspectRatio="none"><polygon points="{x1},{y1} {x2},{y2} {x3},{y3}" fill="none" stroke="#666" stroke-width="0.3" stroke-dasharray="4,2" /><line x1="{x1}" y1="{y1}" x2="{xo}" y2="{yo}" stroke="#666" stroke-width="0.3" stroke-dasharray="4,2" /><circle cx="{x1}" cy="{y1}" r="0.8" fill="red" /></svg>'
+    svg = f"""<svg class="svg-overlay" viewBox="0 0 100 100" preserveAspectRatio="none"><polygon points="{x1},{y1} {x2},{y2} {x3},{y3}" fill="none" stroke="#666" stroke-width="0.3" stroke-dasharray="4,2" /><line x1="{x1}" y1="{y1}" x2="{xo}" y2="{yo}" stroke="#666" stroke-width="0.3" stroke-dasharray="4,2" /><circle cx="{x1}" cy="{y1}" r="0.8" fill="red" /></svg>"""
+    return clean_html(svg)
 
 def get_palace_html(idx, branch, r, c, info, daxian_pos, liunian_pos, benming_pos, is_pure_benming=False, shen_pos=-1, focus_idx=-1):
-    is_daxian = (idx == daxian_pos) and not is_pure_benming
-    is_liunian = (idx == liunian_pos) and not is_pure_benming
-    
     cls = ["zwds-cell"]
-    if is_daxian: cls.append("active-daxian")
-    if is_liunian: cls.append("active-liunian")
+    if idx == daxian_pos and not is_pure_benming: cls.append("active-daxian")
+    if idx == liunian_pos and not is_pure_benming: cls.append("active-liunian")
+    
     if focus_idx != -1:
         if idx == focus_idx: cls.append("highlight-focus")
         elif idx in [(focus_idx+4)%12, (focus_idx+8)%12]: cls.append("highlight-sanfang")
         elif idx == (focus_idx+6)%12: cls.append("highlight-duigong")
 
-    stars_html = ""
+    stars_list = []
     for star in info['major_stars']:
         sihua = "".join([f"<span class='hua-badge { {'本':'bg-ben','大':'bg-da','流':'bg-liu'}.get(s['layer']) }'>{s['type']}</span>" for s in star['sihua'] if not is_pure_benming or s['layer']=='本'])
-        stars_html += f"<div class='star-item'><span class='txt-major'>{star['name']}</span>{sihua}</div>"
-    
+        stars_list.append(f"<div class='star-item'><span class='txt-major'>{star['name']}</span>{sihua}</div>")
     for m in info['minor_stars']:
         style = "txt-med" if m[2] else "txt-sml"
-        stars_html += f"<div class='star-item'><span class='{style}'>{m[0]}</span></div>"
+        stars_list.append(f"<div class='star-item'><span class='{style}'>{m[0]}</span></div>")
+    
+    stars_html = "".join(stars_list)
 
     sui = info['sui_12'][0] if info['sui_12'] else ""
     jiang = info['jiang_12'][0] if info['jiang_12'] else ""
     boshi = info['boshi_12'][0] if info['boshi_12'] else ""
     age_range = f"{info['age_start']}-{info['age_end']}" if is_pure_benming else f"{info['age_start']}/{info['age_end']}"
     
-    # 關鍵：單行 HTML，避免 Markdown 縮排錯誤
     left_html = f"<div class='footer-left'><div class='gods-col'><span class='god-text god-sui'>{sui}</span><span class='god-text god-jiang'>{jiang}</span><span class='god-text god-boshi'>{boshi}</span></div><div class='limit-text'>{age_range}</div></div>"
 
     shen_html = "<div class='badge-shen'>身</div>" if is_pure_benming and idx == shen_pos else ""
     life_html = f"<div class='life-stage'>{info['life_stage']}</div>"
     ben_name = get_relative_palace_name(benming_pos, idx)
     names_html = f"<div class='palace-name'>{ben_name}</div>"
-    
     if not is_pure_benming:
         if liunian_pos != -1: 
             ln_name = get_relative_palace_name(liunian_pos, idx)[0]
@@ -78,7 +78,10 @@ def get_palace_html(idx, branch, r, c, info, daxian_pos, liunian_pos, benming_po
             
     right_html = f"<div class='footer-right'><div class='info-col'>{shen_html}{life_html}{names_html}</div><div class='ganzhi-col'>{GAN[info['gan_idx']]}{branch}</div></div>"
 
-    return f"<div class='{' '.join(cls)}' style='grid-row: {r}; grid-column: {c};'><div class='stars-box'>{stars_html}</div>{left_html}{right_html}</div>"
+    final_html = f"<div class='{' '.join(cls)}' style='grid-row: {r}; grid-column: {c};'><div class='stars-box'>{stars_html}</div>{left_html}{right_html}</div>"
+    
+    return clean_html(final_html)
 
 def get_center_html(data, calc_obj):
-    return f"<div class='center-box'><h2 style='margin:0;font-size:24px;color:#000;'>{data['name']}</h2><div style='font-size:13px;color:#666;margin:5px 0;'>{data['gender']} | {calc_obj.bureau_name} | {data.get('ming_star','')}坐命</div><div style='font-size:14px;font-weight:bold;color:#2E7D32;'>國曆：{data['y']}/{data['m']}/{data['d']} {data['h']}:{data['min']:02d}</div><div style='font-size:13px;color:#555;'>農曆：{calc_obj.lunar.getYearInGanZhi()}年 {calc_obj.lunar.getMonthInChinese()}月 {calc_obj.lunar.getDayInChinese()}</div></div>"
+    html = f"<div class='center-box'><h2 style='margin:0;font-size:24px;color:#000;'>{data['name']}</h2><div style='font-size:13px;color:#666;margin:5px 0;'>{data['gender']} | {calc_obj.bureau_name} | {data.get('ming_star','')}坐命</div><div style='font-size:14px;font-weight:bold;color:#2E7D32;'>國曆：{data['y']}/{data['m']}/{data['d']} {data['h']}:{data['min']:02d}</div><div style='font-size:13px;color:#555;'>農曆：{calc_obj.lunar.getYearInGanZhi()}年 {calc_obj.lunar.getMonthInChinese()}月 {calc_obj.lunar.getDayInChinese()}</div></div>"
+    return clean_html(html)
