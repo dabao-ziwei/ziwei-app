@@ -1,15 +1,35 @@
 import streamlit as st
 import time
+import json
+import os
 from style import apply_style
 from logic import ZWDSCalculator, parse_date, get_ganzhi_for_year, GAN, ZHI
 from renderer import get_palace_html, get_center_html
+
+# 設定檔路徑
+DB_FILE = 'zwds_db.json'
+
+# === 資料庫函式 ===
+def load_db():
+    if os.path.exists(DB_FILE):
+        with open(DB_FILE, 'r', encoding='utf-8') as f:
+            try:
+                return json.load(f)
+            except:
+                return []
+    return []
+
+def save_db(db_data):
+    with open(DB_FILE, 'w', encoding='utf-8') as f:
+        json.dump(db_data, f, ensure_ascii=False, indent=4)
 
 # 1. 套用樣式
 st.set_page_config(page_title="專業紫微斗數排盤系統", page_icon="🔮", layout="wide")
 apply_style()
 
 # 2. 初始化 Session State
-if 'db' not in st.session_state: st.session_state.db = [] 
+if 'db' not in st.session_state: 
+    st.session_state.db = load_db() # 啟動時載入檔案
 if 'current_id' not in st.session_state: st.session_state.current_id = 0
 if 'show_chart' not in st.session_state: st.session_state.show_chart = False
 if 'temp_preview_data' not in st.session_state: st.session_state.temp_preview_data = None
@@ -62,10 +82,18 @@ if btn_save or btn_calc:
         pkt = {"name": i_name, "gender": i_gen, "category": i_cat, "y": y, "m": m, "d": d, "h": h, "min": mn, "cal_type": cal, "ming_star": m_star, "bureau": bur, "palace_data": p_data, "ming_pos": ming_pos}
         if btn_save:
             pkt['id'] = int(time.time()) if st.session_state.current_id==0 else st.session_state.current_id
-            if st.session_state.current_id==0: st.session_state.db.append(pkt); st.session_state.current_id = pkt['id']
+            
+            # 更新或新增資料
+            if st.session_state.current_id not in [x['id'] for x in st.session_state.db]:
+                st.session_state.db.append(pkt)
+                st.session_state.current_id = pkt['id']
             else: 
                 for idx, x in enumerate(st.session_state.db):
                     if x['id']==st.session_state.current_id: st.session_state.db[idx]=pkt
+            
+            # 寫入檔案
+            save_db(st.session_state.db)
+            
             st.session_state.temp_preview_data = None; st.session_state.show_chart = True
             st.session_state.sel_daxian_idx = -1; st.session_state.sel_liunian_offset = -1;
             st.rerun()
@@ -90,13 +118,11 @@ if st.session_state.show_chart:
         if not is_pure_benming:
             d_pos_idx, d_info = sorted_limits[daxian_idx]
             daxian_pos = int(d_pos_idx)
-            
             if liunian_off != -1:
                 curr_year = data['y'] + d_info['age_start'] + liunian_off - 1
                 daxian_gan = d_info['gan_idx']
                 ln_gan, ln_zhi = get_ganzhi_for_year(curr_year)
                 calc_obj.calculate_sihua(daxian_gan, ln_gan)
-                
                 for pid, info in calc_obj.palaces.items():
                     if info['zhi_idx'] == ln_zhi: liunian_pos = int(pid); break
             else:
@@ -130,14 +156,9 @@ if st.session_state.show_chart:
             label = f"{limit_names[i]}\n{gz}"
             is_selected = (i == daxian_idx)
             btn_type = "primary" if is_selected else "secondary"
-            
             if col.button(label, key=f"d_{i}", type=btn_type, use_container_width=True):
-                if is_selected: 
-                    st.session_state.sel_daxian_idx = -1
-                    st.session_state.sel_liunian_offset = -1
-                else: 
-                    st.session_state.sel_daxian_idx = i
-                    st.session_state.sel_liunian_offset = -1 
+                if is_selected: st.session_state.sel_daxian_idx = -1; st.session_state.sel_liunian_offset = -1
+                else: st.session_state.sel_daxian_idx = i; st.session_state.sel_liunian_offset = -1 
                 st.rerun()
 
         if not is_pure_benming:
@@ -151,10 +172,7 @@ if st.session_state.show_chart:
                 label = f"{yr}\n{gz}({age})"
                 is_selected = (j == liunian_off)
                 btn_type = "primary" if is_selected else "secondary"
-                
                 if col.button(label, key=f"l_{j}", type=btn_type, use_container_width=True):
-                    if is_selected: 
-                        st.session_state.sel_liunian_offset = -1
-                    else: 
-                        st.session_state.sel_liunian_offset = j
+                    if is_selected: st.session_state.sel_liunian_offset = -1
+                    else: st.session_state.sel_liunian_offset = j
                     st.rerun()
