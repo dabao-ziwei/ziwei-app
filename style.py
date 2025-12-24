@@ -14,13 +14,13 @@ def apply_style():
         .stApp { background-color: #ffffff !important; color: #000000 !important; }
         header[data-testid="stHeader"] { background-color: #ffffff !important; border-bottom: 1px solid #f0f0f0 !important; }
         div[data-baseweb="input"] { background-color: #ffffff !important; border: 1px solid #ccc !important; }
-        div[data-baseweb="input"] input { color: #000000 !important; }
+        div[data-baseweb="input"] input { color: #000000 !important; caret-color: #000000 !important; }
         button[kind="secondary"] { background-color: #ffffff !important; color: #000000 !important; border: 1px solid #ccc !important; }
         div[data-baseweb="select"] > div { background-color: #ffffff !important; color: #000000 !important; }
         label, .stMarkdown p { color: #333 !important; }
 
         /* =================================================================
-           2. 命盤網格 (緊湊佈局)
+           2. 命盤網格
            ================================================================= */
         .block-container {
             padding-top: 6rem !important; 
@@ -49,7 +49,7 @@ def apply_style():
         .zwds-cell {
             background-color: #ffffff;
             border: 1px solid #ccc;
-            padding: 2px 4px; /* 減少內距 */
+            padding: 2px 4px;
             position: relative;
             display: flex;
             flex-direction: column;
@@ -62,23 +62,22 @@ def apply_style():
         .active-liunian { border: 3px solid #007bff !important; z-index: 5; }
 
         /* =================================================================
-           3. 星曜樣式 (修正重點：緊鄰、無空隙)
+           3. 星曜樣式
            ================================================================= */
-        /* 星曜區塊：佔滿上半部，內容靠左對齊 */
         .stars-box {
             display: flex;
             flex-direction: row; 
-            flex: 1; /* 佔滿剩餘空間 */
+            flex: 1; 
             min-height: 0;
             align-items: flex-start;
-            margin-bottom: auto; /* 將底部資訊推到最下面 */
+            margin-bottom: auto; 
         }
 
         .star-major-container {
             display: flex;
             flex-direction: column;
             align-items: center;
-            margin-right: 2px; /* 主星右邊留一點點縫隙 */
+            margin-right: 2px;
         }
 
         .star-name {
@@ -107,32 +106,32 @@ def apply_style():
         .bg-da  { background-color: #808080; }
         .bg-liu { background-color: #0056b3; }
 
-        /* 副星欄：修正為緊貼主星，且從左往右排 (原本是 row-reverse 導致靠右) */
         .sub-stars-col {
             display: flex;
-            flex-direction: row-reverse; /* 讓星星從右向左排列 */
+            flex-direction: row-reverse;
             flex-wrap: wrap-reverse;
             align-content: flex-start;
             gap: 2px;
-            /* 移除 margin-left: auto，讓它自然緊貼左邊的主星 */
         }
 
         .star-medium { font-size: 14px; font-weight: bold; color: #000; writing-mode: vertical-rl; line-height: 1; }
         .star-small { font-size: 10px; color: #000; writing-mode: vertical-rl; line-height: 1; margin-top: 2px; }
+        
+        /* 修正：祿存也改為黑色 */
         .color-bad { color: #000 !important; } 
-        .color-good { color: #2e7d32 !important; } 
+        .color-good { color: #000 !important; } 
 
         /* =================================================================
-           4. 底部資訊 (修正空隙)
+           4. 底部資訊
            ================================================================= */
         .cell-footer {
-            margin-top: 0px; /* 移除上方間距 */
+            margin-top: 0px; 
             border-top: 1px solid #eee;
             padding-top: 2px;
             display: flex;
             justify-content: space-between;
             align-items: flex-end;
-            background-color: #fff; /* 確保背景白，蓋過可能溢出的內容 */
+            background-color: #fff;
         }
 
         .footer-left { display: flex; flex-direction: column; line-height: 1; align-items: center; }
