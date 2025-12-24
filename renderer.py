@@ -15,7 +15,7 @@ def get_palace_html(idx, branch, r, c, info, daxian_pos, liunian_pos, benming_po
     if is_liunian: classes.append("active-liunian")
     class_str = " ".join(classes)
     
-    # 1. 主星
+    # 1. 星曜區
     main_stars_html = ""
     for star in info['major_stars']:
         sihua_html = ""
@@ -25,7 +25,6 @@ def get_palace_html(idx, branch, r, c, info, daxian_pos, liunian_pos, benming_po
             sihua_html += f"<span class='hua-badge {bg_cls}'>{sh['type']}</span>"
         main_stars_html += f"<div class='star-major-container'><div class='star-name'>{star['name']}</div>{sihua_html}</div>"
     
-    # 2. 副星
     aux_stars = []
     misc_stars = [] 
     for m_name, is_bad, is_impt in info['minor_stars']:
@@ -38,20 +37,29 @@ def get_palace_html(idx, branch, r, c, info, daxian_pos, liunian_pos, benming_po
     for m_name in misc_stars:
         sub_stars_html += f"<div class='star-small'>{m_name}</div>"
     
-    # 3. 左下角：神煞
+    # 2. 左下角：神煞 + 歲數
     sui = info['sui_12'][0] if info['sui_12'] else ""
     jiang = info['jiang_12'][0] if info['jiang_12'] else ""
     boshi = info['boshi_12'][0] if info['boshi_12'] else ""
     
-    gods_html = (
-        f"<div class='gods-box'>"
+    # 歲數顯示邏輯：純本命顯示 72/81
+    # 若依您的圖片，即使在大限流年盤，基礎的歲數資訊放在左下角也是合理的
+    # 這裡將連接號改為 /
+    limit_text = f"{info['age_start']}/{info['age_end']}"
+    limit_info_html = f"<div class='limit-info'>{limit_text}</div>"
+    
+    footer_left_html = (
+        f"<div class='footer-left'>"
+        f"<div class='gods-col'>"
         f"<div class='god-star god-sui'>{sui}</div>"
         f"<div class='god-star god-jiang'>{jiang}</div>"
         f"<div class='god-star god-boshi'>{boshi}</div>"
         f"</div>"
+        f"{limit_info_html}"
+        f"</div>"
     )
 
-    # 4. 右下角資訊 (分為：干支欄 + 資訊欄)
+    # 3. 右下角：長生 + 宮名 + 干支
     name_liu_html = ""
     name_da_html = ""
     name_ben = get_relative_palace_name(benming_pos, idx)
@@ -60,7 +68,6 @@ def get_palace_html(idx, branch, r, c, info, daxian_pos, liunian_pos, benming_po
     if is_pure_benming and idx == shen_pos:
         shen_badge_html = "<div class='shen-badge'>身</div>"
 
-    limit_info_html = "" 
     if not is_pure_benming:
         if liunian_pos != -1:
             name_liu = "流" + get_relative_palace_name(liunian_pos, idx)[0]
@@ -68,42 +75,38 @@ def get_palace_html(idx, branch, r, c, info, daxian_pos, liunian_pos, benming_po
         if daxian_pos != -1:
             name_da = "大" + get_relative_palace_name(daxian_pos, idx)[0]
             name_da_html = f"<div class='p-name-da'>{name_da}</div>"
-    else:
-        limit_info_html = f"<div class='limit-info'>{info['age_start']}-{info['age_end']}</div>"
-        
+    
     life_stage_html = f"<div class='life-stage'>{info['life_stage']}</div>"
 
-    # [左側] 干支 (直書)
-    ganzhi_html = f"<div class='ganzhi-text'>{GAN[info['gan_idx']]}{branch}</div>"
-
-    # [右側] 堆疊資訊
-    info_stack_html = (
-        f"<div class='footer-info-col'>"
+    # 宮位資訊欄 (靠左貼著干支)
+    palace_info_html = (
+        f"<div class='palace-info-col'>"
         f"{shen_badge_html}"
         f"{life_stage_html}"
         f"{name_liu_html}"
         f"{name_da_html}"
         f"<div class='p-name-ben'>{name_ben}</div>"
-        f"{limit_info_html}"
         f"</div>"
     )
 
-    # 組合 Footer Right
+    # 干支欄 (直書，最右)
+    ganzhi_html = f"<div class='ganzhi-col'>{GAN[info['gan_idx']]}{branch}</div>"
+
     footer_right_html = (
         f"<div class='footer-right'>"
+        f"{palace_info_html}"
         f"{ganzhi_html}"
-        f"{info_stack_html}"
         f"</div>"
     )
 
-    # 5. 組合整體 HTML
+    # 4. 組合整體
     final_html = (
         f"<div class='{class_str}' style='grid-row: {r}; grid-column: {c};'>"
         f"<div class='stars-box'>"
         f"{main_stars_html}"  
         f"<div class='sub-stars-col'>{sub_stars_html}</div>"
         f"</div>"
-        f"{gods_html}"
+        f"{footer_left_html}"
         f"{footer_right_html}"
         f"</div>"
     )
