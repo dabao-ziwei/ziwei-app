@@ -106,7 +106,7 @@ if st.session_state.show_chart:
             calc_obj.calculate_sihua(-1, -1)
 
         benming_pos = calc_obj.ming_pos
-        shen_pos = calc_obj.shen_pos # 取得身宮
+        shen_pos = calc_obj.shen_pos 
 
         layout = [(5,"巳",1,1),(6,"午",1,2),(7,"未",1,3),(8,"申",1,4),
                   (4,"辰",2,1),                    (9,"酉",2,4),
@@ -116,7 +116,6 @@ if st.session_state.show_chart:
         cells_html = ""
         for idx, branch, r, c in layout:
             info = calc_obj.palaces[idx]
-            # 這裡傳入 shen_pos，renderer 已經準備好接收了
             cells_html += get_palace_html(idx, branch, r, c, info, daxian_pos, liunian_pos, benming_pos, is_pure_benming, shen_pos)
             
         center_html = get_center_html(data, calc_obj)
