@@ -47,20 +47,36 @@ with st.sidebar:
         with st.form("edit_form"):
             name = st.text_input("姓名", value=rec['name'] if rec else "")
             gender = st.radio("性別", ["男", "女"], index=0 if rec and rec['gender']=='男' else 1, horizontal=True)
+            cat = st.text_input("分類", value=rec.get('category', '') if rec else "")
+            
+            # 曆法選擇 (新功能)
+            cal_type = st.radio("曆法", ["西元", "民國"], index=0, horizontal=True)
+            
             d_val = f"{rec['y']:04}{rec['m']:02}{rec['d']:02}" if rec else ""
             t_val = f"{rec['h']:02}{rec['min']:02}" if rec else ""
-            date_str = st.text_input("日期 (YYYYMMDD)", value=d_val)
+            
+            # 提示使用者輸入格式
+            date_hint = "例如: 19790926" if cal_type == "西元" else "例如: 680926"
+            date_str = st.text_input(f"日期 ({date_hint})", value=d_val)
             time_str = st.text_input("時間 (HHMM)", value=t_val)
+            
             if st.form_submit_button("💾 儲存"):
                 try:
+                    # 先解析數字
                     y, m, d, _ = parse_date(date_str)
+                    
+                    # 根據選擇的曆法調整年份
+                    if cal_type == "民國":
+                        y += 1911
+                    
                     h, mn = (int(time_str[:2]), int(time_str[2:])) if len(time_str)==4 else (0,0)
+                    
                     if name and y > 0:
                         calc = ZWDSCalculator(y, m, d, h, mn, gender)
                         p_data, m_star, bur, _, ming_pos = calc.get_result()
                         new_rec = {
                             "id": int(time.time()) if st.session_state.current_id==0 else st.session_state.current_id,
-                            "name": name, "gender": gender, "category": "",
+                            "name": name, "gender": gender, "category": cat,
                             "y": y, "m": m, "d": d, "h": h, "min": mn,
                             "ming_star": m_star, "bureau": bur, "ming_pos": ming_pos
                         }
@@ -72,7 +88,9 @@ with st.sidebar:
                         save_db(st.session_state.db)
                         st.session_state.current_id = new_rec['id']
                         st.rerun()
-                except: st.error("輸入錯誤")
+                    else:
+                        st.error("資料不完整")
+                except: st.error("輸入格式錯誤，請檢查日期與時間")
 
 if st.session_state.current_id != 0:
     data = next((x for x in st.session_state.db if x['id'] == st.session_state.current_id), None)
@@ -90,16 +108,17 @@ if st.session_state.current_id != 0:
         
         if clicked:
             parts = clicked.split("_")
-            type_code, idx = parts[0], int(parts[1])
-            if type_code == "p":
-                st.session_state.focus_palace_idx = -1 if st.session_state.focus_palace_idx == idx else idx
-                st.rerun()
-            elif type_code == "d":
-                st.session_state.sel_daxian_idx = -1 if st.session_state.sel_daxian_idx == idx else idx
-                st.session_state.sel_liunian_offset = -1
-                st.rerun()
-            elif type_code == "l":
-                st.session_state.sel_liunian_offset = -1 if st.session_state.sel_liunian_offset == idx else idx
-                st.rerun()
+            if len(parts) == 2:
+                type_code, idx = parts[0], int(parts[1])
+                if type_code == "p": 
+                    st.session_state.focus_palace_idx = -1 if st.session_state.focus_palace_idx == idx else idx
+                    st.rerun()
+                elif type_code == "d":
+                    st.session_state.sel_daxian_idx = -1 if st.session_state.sel_daxian_idx == idx else idx
+                    st.session_state.sel_liunian_offset = -1
+                    st.rerun()
+                elif type_code == "l":
+                    st.session_state.sel_liunian_offset = -1 if st.session_state.sel_liunian_offset == idx else idx
+                    st.rerun()
 else:
     st.info("👈 請從左側選單「新增命盤」開始。")
