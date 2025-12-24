@@ -8,62 +8,67 @@ def get_css():
         [data-testid="stVerticalBlock"] { gap: 0 !important; }
         header { visibility: hidden; height: 0; }
 
+        /* === Layer 0: 最底層畫布 (白色) === */
         .master-container {
             display: flex; flex-direction: column; width: 100%;
             border: 2px solid var(--border); box-sizing: border-box;
-            position: relative; background-color: #fff;
+            position: relative; 
+            background-color: #ffffff; /* 這是唯一的底色 */
         }
 
+        /* === Layer 1: SVG 線條 (畫在白紙上) === */
         .svg-container {
             position: absolute; top: 0; left: 0; width: 100%; height: 560px;
-            pointer-events: none; z-index: 0;
+            pointer-events: none; 
+            z-index: 1; /* 比背景高，比文字低 */
         }
         svg { width: 100%; height: 100%; }
         polygon { fill: none !important; }
 
+        /* 格線系統 */
         .zwds-grid {
             display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(4, 140px);
-            gap: 1px; background-color: var(--grid-line); position: relative; z-index: 1;
+            gap: 1px; background-color: var(--grid-line); position: relative; z-index: 2;
         }
 
+        /* === Layer 2: 宮位格子 (透明玻璃) === */
         .zwds-cell {
-            background-color: rgba(255,255,255,0.92);
-            /* 設定 relative，讓內部的 a 連結可以絕對定位撐滿它 */
+            background-color: transparent !important; /* 關鍵修正：改成透明，才看得到底下的線 */
             position: relative; 
             overflow: hidden; display: flex; flex-direction: column;
         }
 
-        /* === 關鍵修正：這是隱形連結層 === */
+        /* === Layer 3: 文字內容 (浮在線條上) === */
+        .cell-content {
+            flex: 1; padding: 2px; display: flex; flex-direction: column;
+            background-color: rgba(255, 255, 255, 0.6); /* 半透明白，讓文字清楚但隱約看得到線 */
+            z-index: 10; 
+            pointer-events: none; /* 文字不擋滑鼠 */
+        }
+
+        /* === Layer 50: 隱形觸控連結 (最頂層) === */
         a.click-overlay {
-            display: block;          /* 變成區塊元素 */
+            display: block;
             position: absolute;
             top: 0; left: 0;
             width: 100%; height: 100%;
-            z-index: 50;             /* 蓋在最上面 */
-            text-decoration: none;   /* 去除底線 */
-            color: transparent;      /* 文字透明 (如果有) */
+            z-index: 50; /* 確保在最上面接收點擊 */
+            text-decoration: none;
+            color: transparent;
             cursor: pointer;
         }
-        a.click-overlay:hover {
-            background-color: rgba(0,0,0,0.02); /* 滑鼠滑過給一點點極淡的反應，確認感應區存在 */
-        }
+        a.click-overlay:hover { background-color: rgba(0,0,0,0.02); }
 
-        .cell-content {
-            flex: 1; padding: 2px; display: flex; flex-direction: column;
-            background-color: rgba(255, 255, 255, 0.85); 
-            z-index: 2;
-            pointer-events: none; /* 讓文字層完全不擋滑鼠 */
-        }
-        
-        .focus-bg .cell-content { background-color: rgba(230, 247, 255, 0.9) !important; }
-        .sanfang-bg .cell-content { background-color: rgba(255, 247, 230, 0.9) !important; }
-        .duigong-bg .cell-content { background-color: rgba(246, 255, 237, 0.9) !important; }
+        /* 動態背景色 (高亮時才給顏色) */
+        .focus-bg .cell-content { background-color: rgba(230, 247, 255, 0.85) !important; }
+        .sanfang-bg .cell-content { background-color: rgba(255, 247, 230, 0.85) !important; }
+        .duigong-bg .cell-content { background-color: rgba(246, 255, 237, 0.85) !important; }
+
         .border-active { box-shadow: inset 0 0 0 3px #666 !important; }
         .border-liu { box-shadow: inset 0 0 0 3px #007bff !important; }
 
         .stars-box { display: flex; flex-wrap: wrap; gap: 0; }
         .star-item { display: inline-flex; flex-direction: column; align-items: center; margin: 0 1px 1px 0; }
-        
         .txt-major { font-size: 18px; font-weight: 900; color: #B71C1C; writing-mode: vertical-rl; text-orientation: upright; letter-spacing: -2px; margin-bottom: 3px; }
         .txt-med { font-size: 13px; font-weight: 700; color: #000; writing-mode: vertical-rl; }
         .txt-sml { font-size: 11px; color: #4169E1; writing-mode: vertical-rl; }
@@ -78,7 +83,6 @@ def get_css():
         .ganzhi-txt { font-size: 15px; font-weight: 900; color: #000; writing-mode: vertical-rl; text-orientation: upright; margin-left: 2px; }
         .shen-tag { background-color: #007bff; color: #fff; font-size: 9px; padding: 0 2px; border-radius: 2px; }
 
-        /* 按鈕 */
         .timeline-container {
             display: grid; grid-template-columns: repeat(12, 1fr);
             border-top: 1px solid #999; background-color: #f4f4f4; width: 100%;
@@ -86,11 +90,9 @@ def get_css():
         .time-btn {
             border-right: 1px solid #ccc; padding: 6px 0; text-align: center;
             font-size: 12px; color: #333; 
-            /* 設定 relative，讓內部的 a 連結可以定位 */
             position: relative;
         }
-        .time-btn * { pointer-events: none; } /* 內部文字不擋 */
-        
+        .time-btn * { pointer-events: none; }
         .time-btn:hover { background-color: #e0e0e0; }
         .btn-on { background-color: #4B0082 !important; color: #fff !important; }
 
