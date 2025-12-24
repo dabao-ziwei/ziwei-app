@@ -3,7 +3,9 @@ import streamlit as st
 def apply_style():
     st.markdown("""
     <style>
-        /* (前略... 保持之前的設定) */
+        /* =================================================================
+           1. 基礎設定
+           ================================================================= */
         :root {
             --primary-color: #4B0082;
             --background-color: #ffffff;
@@ -17,6 +19,9 @@ def apply_style():
         div[data-baseweb="select"] > div { background-color: #ffffff !important; color: #000000 !important; }
         label, .stMarkdown p { color: #333 !important; }
 
+        /* =================================================================
+           2. 版面與網格
+           ================================================================= */
         .block-container {
             padding-top: 6rem !important; 
             padding-bottom: 3rem !important;
@@ -37,6 +42,7 @@ def apply_style():
             margin-left: auto;
             margin-right: auto;
         }
+        
         @media (max-width: 800px) {
             .zwds-grid { grid-template-columns: repeat(2, 1fr); grid-template-rows: auto; }
         }
@@ -44,7 +50,7 @@ def apply_style():
         .zwds-cell {
             background-color: #ffffff;
             border: 1px solid #ccc;
-            padding: 2px 4px;
+            padding: 4px;
             position: relative;
             display: flex;
             flex-direction: column;
@@ -56,6 +62,9 @@ def apply_style():
         .active-daxian { background-color: #f9f9f9 !important; border: 2px solid #666 !important; }
         .active-liunian { border: 3px solid #007bff !important; z-index: 5; }
 
+        /* =================================================================
+           3. 星曜樣式 (修正：左至右排列，紅->黑->藍)
+           ================================================================= */
         .stars-box {
             display: flex;
             flex-direction: row; 
@@ -72,12 +81,13 @@ def apply_style():
             margin-right: 2px;
         }
 
+        /* 主星：深紅 (#B71C1C) 粗體 */
         .star-name {
             font-size: 18px; 
             font-weight: 900;
-            color: #8B0000;
+            color: #B71C1C; 
             letter-spacing: 2px;
-            margin-bottom: 2px;
+            margin-bottom: 4px;
             writing-mode: vertical-rl;
             text-orientation: upright;
         }
@@ -85,12 +95,12 @@ def apply_style():
         .hua-badge {
             font-size: 11px;
             border-radius: 3px;
-            padding: 1px 2px;
+            padding: 1px 3px;
             color: #fff;
             text-align: center;
             font-weight: bold;
-            margin-top: 1px;
-            width: 16px;
+            margin-top: 2px;
+            width: 18px;
             line-height: 1.2;
             display: block;
         }
@@ -98,21 +108,40 @@ def apply_style():
         .bg-da  { background-color: #808080; }
         .bg-liu { background-color: #0056b3; }
 
+        /* 副星欄：改為 row (左至右) */
         .sub-stars-col {
             display: flex;
-            flex-direction: row-reverse;
-            flex-wrap: wrap-reverse;
+            flex-direction: row; /* 左至右 */
+            flex-wrap: wrap;     /* 自動換行 */
             align-content: flex-start;
-            gap: 2px;
+            gap: 4px;
+            margin-left: 2px;
         }
 
-        .star-medium { font-size: 14px; font-weight: bold; color: #000; writing-mode: vertical-rl; line-height: 1; }
-        .star-small { font-size: 10px; color: #000; writing-mode: vertical-rl; line-height: 1; margin-top: 2px; }
-        .color-bad { color: #000 !important; } 
-        .color-good { color: #2e7d32 !important; } 
+        /* 輔星：黑色 (#000) 粗體 */
+        .star-medium {
+            font-size: 14px;
+            font-weight: bold;
+            color: #000000;
+            writing-mode: vertical-rl;
+            line-height: 1;
+        }
+        
+        /* 雜曜：藍色 (#4169E1) 正常字體 */
+        .star-small {
+            font-size: 11px; /* 稍微大一點點方便閱讀 */
+            color: #4169E1;  /* RoyalBlue */
+            writing-mode: vertical-rl;
+            line-height: 1;
+            margin-top: 2px;
+            font-weight: normal;
+        }
 
+        /* =================================================================
+           4. 底部資訊
+           ================================================================= */
         .cell-footer {
-            margin-top: 0px; 
+            margin-top: 2px;
             border-top: 1px solid #eee;
             padding-top: 2px;
             display: flex;
@@ -131,7 +160,7 @@ def apply_style():
         .p-name-ben { color: #d32f2f; font-size: 14px; font-weight: 900; }
         .limit-info { font-size: 11px; color: #333; font-weight: normal; margin-left: 2px; }
         
-        /* 新增：長生十二神樣式 */
+        /* 長生十二神 */
         .life-stage {
             font-size: 12px;
             color: #555;
