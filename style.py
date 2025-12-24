@@ -12,7 +12,6 @@ def apply_style():
             padding: 0.5rem !important;
             max-width: 100% !important;
         }
-        /* 保持緊湊，但不要過度導致重疊 */
         [data-testid="stVerticalBlock"] { gap: 0px !important; }
         
         [data-testid="stSidebar"] {
@@ -21,16 +20,25 @@ def apply_style():
             min-width: 280px !important;
         }
 
-        /* === 2. 命盤容器 === */
+        /* === 2. 主容器 (垂直堆疊，防止重疊的核心) === */
+        .main-container {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            gap: 0px; /* 積木緊貼 */
+        }
+
+        /* === 3. 命盤容器 === */
         .chart-wrapper {
             position: relative;
             width: 100%;
             border: 2px solid #000;
+            /* 修正：下方邊框由按鈕列提供，視覺上融合 */
+            border-bottom: 1px solid #ccc; 
             background-color: #333;
-            /* 修正：不留底部邊距，讓按鈕緊貼，但邊框保留 */
-            margin-bottom: 0px !important; 
+            margin: 0 !important;
             box-sizing: border-box;
-            z-index: 1; /* 確保在底層 */
+            z-index: 10; /* 確保在按鈕之上 */
         }
 
         .svg-overlay {
@@ -41,8 +49,7 @@ def apply_style():
         .zwds-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            /* 關鍵修正：拉高格子高度，確保底部文字有足夠安全距離 */
-            grid-template-rows: repeat(4, 140px); 
+            grid-template-rows: repeat(4, 140px); /* 保持高度 */
             gap: 1px;
             background-color: #999;
             width: 100%;
@@ -58,14 +65,7 @@ def apply_style():
             height: 100%;
         }
 
-        /* 高亮 */
-        .highlight-focus { background-color: #E6F7FF !important; }
-        .highlight-sanfang { background-color: #FFF7E6 !important; }
-        .highlight-duigong { background-color: #F6FFED !important; }
-        .active-daxian { box-shadow: inset 0 0 0 2px #666; }
-        .active-liunian { box-shadow: inset 0 0 0 2px #007bff; }
-
-        /* === 3. 星曜區 === */
+        /* === 4. 星曜區 === */
         .stars-box {
             display: flex; flex-direction: row; flex-wrap: wrap;
             align-content: flex-start; align-items: flex-start;
@@ -82,7 +82,7 @@ def apply_style():
         .txt-major {
             font-size: 18px; font-weight: 900; color: #B71C1C;
             writing-mode: vertical-rl; text-orientation: upright;
-            line-height: 1; letter-spacing: -2px; margin-bottom: 2px;
+            line-height: 1; letter-spacing: -2px; margin-bottom: 4px !important;
         }
         .txt-med { font-size: 14px; font-weight: 700; color: #000; writing-mode: vertical-rl; line-height: 1.1; }
         .txt-sml { font-size: 11px; color: #4169E1; writing-mode: vertical-rl; line-height: 1.1; }
@@ -94,7 +94,7 @@ def apply_style():
         }
         .bg-ben { background-color: #d32f2f; } .bg-da { background-color: #808080; } .bg-liu { background-color: #0056b3; }
 
-        /* === 4. 角落資訊 === */
+        /* === 5. 角落資訊 === */
         .footer-left {
             position: absolute; bottom: 2px; left: 2px;
             display: flex; align-items: flex-end; gap: 4px; pointer-events: none;
@@ -119,14 +119,25 @@ def apply_style():
             writing-mode: vertical-rl; text-orientation: upright; line-height: 1; margin-left: 1px;
         }
 
-        /* === 5. 按鈕 (時間軸) === */
-        /* 直接針對 Streamlit 按鈕樣式進行改造，不依賴外部 div */
+        /* === 6. 時間軸按鈕 (大限) === */
+        /* 移除所有 margin hack，讓它自然排列 */
+        .timeline-container {
+            display: grid; grid-template-columns: repeat(12, 1fr);
+            background-color: #f8f8f8;
+            width: 100%;
+            margin: 0 !important; /* 緊貼上方 */
+            padding: 0 !important;
+            border-left: 1px solid #ccc;
+            border-right: 1px solid #ccc;
+            border-bottom: 1px solid #ccc;
+        }
         
         div.stButton > button {
             width: 100% !important;
             border: 1px solid #ccc !important;
-            /* 關鍵修正：移除上邊框，因為上面是命盤的下邊框 */
-            border-top: none !important; 
+            /* 讓按鈕的邊框重疊，看起來像表格 */
+            margin-left: -1px !important; 
+            margin-top: -1px !important; 
             border-radius: 0 !important;
             background-color: #f8f8f8 !important;
             color: #333 !important;
@@ -134,28 +145,28 @@ def apply_style():
             padding: 2px 0 !important;
             min-height: 40px !important;
             line-height: 1.2 !important;
-            /* 關鍵修正：讓按鈕稍微往上吸 1px 以接合邊框，但不覆蓋內容 */
-            margin: 0 !important; 
             box-shadow: none !important;
-            z-index: 2;
+            z-index: 1;
         }
         
         div.stButton > button:hover {
             background-color: #e0e0e0 !important;
-            z-index: 3; /* hover 時浮起 */
+            z-index: 2;
         }
         
         div.stButton > button[kind="primary"] {
             background-color: #4B0082 !important;
             color: white !important;
-            border: 1px solid #4B0082 !important;
-            border-top: none !important;
+            border-color: #4B0082 !important;
+            z-index: 3;
         }
 
-        /* 修正按鈕容器的間距 */
-        div[data-testid="column"] {
-            padding: 0 !important; /* 移除欄位間距 */
-        }
+        /* 高亮 */
+        .highlight-focus { background-color: #E6F7FF !important; }
+        .highlight-sanfang { background-color: #FFF7E6 !important; }
+        .highlight-duigong { background-color: #F6FFED !important; }
+        .active-daxian { box-shadow: inset 0 0 0 2px #666; }
+        .active-liunian { box-shadow: inset 0 0 0 2px #007bff; }
 
         .center-box {
             grid-column: 2 / 4; grid-row: 2 / 4; background-color: #fff;
