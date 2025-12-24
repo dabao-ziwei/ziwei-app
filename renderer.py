@@ -76,7 +76,7 @@ def render_full_chart_html(calc, data, d_idx, l_off, focus_idx):
             if d_pos != -1: p_html = f"<div style='color:#666;font-size:11px;font-weight:900'>大{get_relative_palace_name(d_pos, idx)[0]}</div>" + p_html
         ft_r = f"<div class='footer-right'><div class='info-box'>{'<span class=shen-tag>身</span>' if is_pure and idx==calc.shen_pos else ''}<span style='font-size:11px;color:#800080;font-weight:bold'>{info['life_stage']}</span>{p_html}</div><div class='ganzhi-txt'>{GAN[info['gan_idx']]}{ZHI[idx]}</div></div>"
         
-        # 關鍵修正：改回 href='#'，雖然會小跳動，但保證訊號發送
+        # 修正：保持 href='#'
         cells_html += f"""
         <div class='zwds-cell {border_cls}' style='grid-row:{r};grid-column:{c}; {cell_style_extra}'>
             <a href='#' id='p_{idx}' class='click-overlay'></a>
