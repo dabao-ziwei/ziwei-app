@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, Loader2 } from 'lucide-react'; // 新增 Loader2
 import type { Client } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
 
 interface AddChartModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (client: any) => void;
+  onSave: (client: any) => Promise<void>; // 修改定義，支援 async
   editData?: Client | null;
 }
 
@@ -23,6 +23,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
   const [minute, setMinute] = useState('');
   
   const [category, setCategory] = useState('客戶');
+  const [isSubmitting, setIsSubmitting] = useState(false); // 新增讀取狀態
 
   const yearRef = useRef<HTMLInputElement>(null);
   const monthRef = useRef<HTMLInputElement>(null);
@@ -72,37 +73,58 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    // 1. 基本驗證
     if (!name || !year || !month || !day || !hour || !minute) {
       alert("請填寫完整資訊");
       return;
     }
 
-    const birthYear = parseInt(year);
-    const birthMonth = parseInt(month);
-    const birthDay = parseInt(day);
-    const birthHour = parseInt(hour);
-    const birthMinute = parseInt(minute);
+    setIsSubmitting(true);
 
-    const engine = new ZiWeiEngine(birthYear, birthMonth, birthDay, birthHour, birthMinute, gender);
-    const chart = engine.getChartData();
-    const mingPos = engine.getMingPos();
-    const mingPalace = chart.palaces[mingPos];
-    const majorStarNames = mingPalace.majorStars.map(s => s.name).join('') || '無主星';
-    
-    onSave({
-      id: editData?.id, // 這裡是 string (UUID)
-      name,
-      gender,
-      birthYear,
-      birthMonth,
-      birthDay,
-      birthHour,
-      birthMinute,
-      type: category as any,
-      majorStars: majorStarNames
-    });
-    onClose();
+    try {
+      const birthYear = parseInt(year);
+      const birthMonth = parseInt(month);
+      const birthDay = parseInt(day);
+      const birthHour = parseInt(hour);
+      const birthMinute = parseInt(minute);
+
+      console.log('開始計算排盤...', { birthYear, birthMonth, birthDay, birthHour, birthMinute, gender });
+
+      // 2. 嘗試執行排盤引擎 (最可能出錯的地方)
+      const engine = new ZiWeiEngine(birthYear, birthMonth, birthDay, birthHour, birthMinute, gender);
+      const chart = engine.getChartData();
+      
+      // 3. 取得主星
+      const mingPos = engine.getMingPos();
+      const mingPalace = chart.palaces[mingPos];
+      if (!mingPalace) throw new Error(`找不到命宮 (MingPos: ${mingPos})`);
+      
+      const majorStarNames = mingPalace.majorStars.map(s => s.name).join('') || '無主星';
+      
+      // 4. 執行儲存
+      await onSave({
+        id: editData?.id,
+        name,
+        gender,
+        birthYear,
+        birthMonth,
+        birthDay,
+        birthHour,
+        birthMinute,
+        type: category as any,
+        majorStars: majorStarNames
+      });
+
+      onClose();
+
+    } catch (err: any) {
+      // 5. 捕捉錯誤並顯示
+      console.error('Save Error:', err);
+      alert(`發生錯誤：${err.message}\n請截圖提供給工程師`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -152,8 +174,14 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
           </div>
         </div>
         <div className="p-4 bg-gray-50 flex gap-3">
-          <button onClick={onClose} className="flex-1 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium">取消</button>
-          <button onClick={handleSubmit} className="flex-1 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 shadow-lg shadow-red-200 transition-all font-bold">✓ 儲存並排盤</button>
+          <button onClick={onClose} disabled={isSubmitting} className="flex-1 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50">取消</button>
+          <button 
+            onClick={handleSubmit} 
+            disabled={isSubmitting}
+            className="flex-1 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 shadow-lg shadow-red-200 transition-all font-bold flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+          >
+            {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : '✓ 儲存並排盤'}
+          </button>
         </div>
       </div>
     </div>
