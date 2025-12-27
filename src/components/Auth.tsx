@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { supabase } from '../supabase';
 import { Lock, Mail, Loader2, Cpu, CheckSquare, Square, ArrowLeft } from 'lucide-react';
 import { APP_CONFIG } from '../config';
+import { getErrorMessage } from '../logic/errorMapping'; // 1. 引入翻譯功能
 
 type AuthMode = 'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD';
 
@@ -42,7 +43,9 @@ export const Auth = () => {
         setMsg('重設信已寄出！請檢查您的電子信箱');
       }
     } catch (err: any) {
-      setMsg(err.message || '發生錯誤，請稍後再試');
+      // 2. 使用翻譯功能處理錯誤訊息
+      const translatedMsg = getErrorMessage(err.message);
+      setMsg(translatedMsg);
     } finally {
       setLoading(false);
     }

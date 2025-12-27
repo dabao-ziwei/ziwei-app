@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { supabase } from '../supabase';
 import { Lock, Loader2, Cpu, CheckCircle } from 'lucide-react';
 import { APP_CONFIG } from '../config';
+import { getErrorMessage } from '../logic/errorMapping'; // 1. 引入
 
 interface Props {
   onComplete: () => void;
@@ -43,7 +44,9 @@ export const UpdatePassword: React.FC<Props> = ({ onComplete }) => {
       }, 1500);
 
     } catch (err: any) {
-      setError(err.message || '修改失敗，請稍後再試');
+      // 2. 翻譯錯誤訊息
+      const translatedMsg = getErrorMessage(err.message);
+      setError(translatedMsg);
     } finally {
       setLoading(false);
     }
