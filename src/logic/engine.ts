@@ -95,26 +95,26 @@ export class ZiWeiEngine {
     gender: '男' | '女'
   ) {
     this.gender = gender;
-    
-    // 1. 建立原始時間物件 (保留用於八字計算與精確時間紀錄)
     this.solar = Solar.fromYmdHms(year, month, day, hour, minute, 0);
-    this.lunar = this.solar.getLunar();
-
-    // 【修正 1：夜子時換日鎖定】
-    // lunar-typescript 在 23:00 會自動跳轉到隔天農曆日期。
-    // 為了符合「晚子時」派別（算當天日期，但時辰為子時），我們建立一個「鎖定在當日中午」的物件
-    // 專門用來抓取「當天」的農曆月、日，確保紫微星起星位置正確 (七殺 vs 破軍的關鍵)。
-    const fixedSolarForDate = Solar.fromYmdHms(year, month, day, 12, 0, 0);
-    const fixedLunarForDate = fixedSolarForDate.getLunar();
+    
+    // 【修正重點 1】夜子時（23:00-24:00）強制算作隔日
+    // 如果時間是 23 點，我們將農曆物件往後推一天，確保抓到的是「隔日」的農曆日數
+    // 例如：10/26 23:00 -> 會使用 10/27 (農曆 9/19) 的數據來安星
+    // 這樣才會符合「七殺在命 (9/19)」而非「破軍在命 (9/18)」
+    let tempLunar = this.solar.getLunar();
+    if (hour === 23) {
+      tempLunar = tempLunar.next(1);
+    }
+    this.lunar = tempLunar;
 
     this.lunarYearGanIdx = this.lunar.getYearGanIndex();
     this.lunarYearZhiIdx = this.lunar.getYearZhiIndex();
     
-    // 使用「鎖定」的日期來決定星曜排列
-    this.lunarMonth = Math.abs(fixedLunarForDate.getMonth());
-    this.lunarDay = fixedLunarForDate.getDay();
+    // 取絕對值防呆
+    this.lunarMonth = Math.abs(this.lunar.getMonth());
+    this.lunarDay = this.lunar.getDay();
     
-    // 時辰依然根據真實時間計算 (23:00 會算成子時 index=0)
+    // 時辰計算：23:00 仍算子時 (Index 0)，這部分保持不變
     this.timeZhiIdx = Math.floor((hour + 1) / 2) % 12;
 
     const isYangYear = this.lunarYearGanIdx % 2 === 0;
@@ -147,10 +147,11 @@ export class ZiWeiEngine {
       });
     }
 
-    // 確保餘數計算為正整數
+    // 計算命宮位置 (確保餘數為正)
     const rawMingPos = (2 + (this.lunarMonth - 1) - this.timeZhiIdx);
     this.mingPos = ((rawMingPos % 12) + 12) % 12;
     
+    // 計算身宮位置
     const rawShenPos = (2 + (this.lunarMonth - 1) + this.timeZhiIdx);
     this.shenPos = ((rawShenPos % 12) + 12) % 12;
     
@@ -610,7 +611,8 @@ export class ZiWeiEngine {
     const mingZhu = MING_ZHU_TABLE[this.palaces[this.mingPos].zhiIndex];
     const shenZhu = SHEN_ZHU_TABLE[this.lunarYearZhiIdx];
 
-    // 【修正 2：補零】確保分鐘數顯示為 2 位數
+    // 【修正重點 2】時間顯示補零
+    // 使用 padStart 確保 0 分顯示為 "00"
     const minuteStr = this.solar.getMinute().toString().padStart(2, '0');
 
     return {
