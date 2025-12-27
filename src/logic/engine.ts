@@ -19,7 +19,7 @@ const STAR_BRIGHTNESS_TABLE: Record<string, string> = {
   廉貞: '平利廟平廟陷平廟廟平得陷',
   天府: '廟廟旺廟廟得廟廟旺得廟旺',
   太陰: '廟廟平陷陷陷陷得豪廟廟旺',
-  貪狼: '旺廟旺平廟陷旺廟旺平廟陷',
+  貪狼: '旺廟旺平廟陷旺廟廟旺平廟陷',
   巨門: '旺廟廟旺平平旺廟廟旺平平',
   天相: '廟廟廟陷廟平廟廟廟陷廟平',
   天梁: '廟旺廟廟旺陷廟旺廟廟旺陷',
@@ -100,7 +100,10 @@ export class ZiWeiEngine {
 
     this.lunarYearGanIdx = this.lunar.getYearGanIndex();
     this.lunarYearZhiIdx = this.lunar.getYearZhiIndex();
-    this.lunarMonth = this.lunar.getMonth();
+    
+    // 【修正 1】將月份取絕對值，解決閏月為負數 (如 -6) 導致計算錯誤的問題
+    this.lunarMonth = Math.abs(this.lunar.getMonth());
+    
     this.lunarDay = this.lunar.getDay();
     this.timeZhiIdx = Math.floor((hour + 1) / 2) % 12;
 
@@ -134,12 +137,20 @@ export class ZiWeiEngine {
       });
     }
 
-    this.mingPos = (2 + (this.lunarMonth - 1) - this.timeZhiIdx + 12) % 12;
-    this.shenPos = (2 + (this.lunarMonth - 1) + this.timeZhiIdx) % 12;
+    // 【修正 2】加強餘數計算的安全性，確保結果永遠為正整數
+    // 原始公式可能因為減法產生負數，這裡使用 ((n % 12) + 12) % 12 技巧
+    const rawMingPos = (2 + (this.lunarMonth - 1) - this.timeZhiIdx);
+    this.mingPos = ((rawMingPos % 12) + 12) % 12;
+    
+    // 身宮計算同理，確保安全
+    const rawShenPos = (2 + (this.lunarMonth - 1) + this.timeZhiIdx);
+    this.shenPos = ((rawShenPos % 12) + 12) % 12;
+    
     this.palaces[this.shenPos].isBody = true;
 
     for (let i = 0; i < 12; i++) {
-      const pos = (this.mingPos - i + 12) % 12;
+      // 計算相對位置時也加上安全餘數保護
+      const pos = ((this.mingPos - i) % 12 + 12) % 12;
       this.palaces[pos].name = PALACE_NAMES[i];
     }
 
@@ -165,7 +176,7 @@ export class ZiWeiEngine {
     let currentAge = this.bureauNum;
     for (let i = 0; i < 12; i++) {
       const offset = i * this.direction;
-      const pos = (this.mingPos + offset + 12) % 12;
+      const pos = (this.mingPos + offset + 120) % 12;
       const endAge = currentAge + 9;
       this.palaces[pos].ages = [currentAge, endAge];
       currentAge += 10;
@@ -546,11 +557,10 @@ export class ZiWeiEngine {
     if (xg !== null && xg >= 0) apply(xg, 'xiao');
   }
 
-  // 修改區塊：computeLimitStars 升級，支援新參數與年鸞喜
   public computeLimitStars(
     dg: number,
     lg: number,
-    lz: number, // 新增：流年地支 (0~11)
+    lz: number,
     xg: number | null,
     showXiao: boolean
   ) {
@@ -563,12 +573,10 @@ export class ZiWeiEngine {
       this.addStar((luIndex - 1 + 12) % 12, `${prefix}陀`, 'limit');
     };
 
-    // 修正：改用「年」字
     if (dg >= 0) placeLyt(dg, '大');
     if (lg >= 0) placeLyt(lg, '年');
     if (xg !== null && xg >= 0 && showXiao) placeLyt(xg, '小');
 
-    // 新增：年鸞、年喜
     if (lz >= 0) {
       const luanPos = (3 - lz + 12) % 12;
       const xiPos = (luanPos + 6) % 12;
@@ -577,7 +585,6 @@ export class ZiWeiEngine {
     }
   }
 
-  // 新增區塊：getSiHuaMap 供飛化功能使用
   public getSiHuaMap(ganIndex: number): Record<string, SiHuaType> {
     const map: Record<string, SiHuaType> = {};
     if (ganIndex < 0 || ganIndex > 9) return map;
