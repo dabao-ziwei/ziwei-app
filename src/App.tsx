@@ -1,36 +1,43 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
-  Menu, Plus, Search, ChevronDown, ChevronUp, Shield, RotateCcw, Trash2, Edit2, LogOut
+  Menu, Plus, Search, ChevronDown, ChevronUp, RotateCcw, Trash2, Edit2, LogOut
 } from 'lucide-react';
 import { ChartBoard } from './components/ChartBoard';
 import { AddChartModal } from './components/AddChartModal';
-import { Auth } from './components/Auth'; // 記得引入 Auth
+import { Auth } from './components/Auth';
+import { UpdatePassword } from './components/UpdatePassword'; // 新增引入
 import { loadClients, saveClient, deleteClient, restoreClient, type Client } from './db';
 import { ZHI } from './logic/constants';
-import { supabase } from './supabase'; // 引入 supabase
+import { supabase } from './supabase';
 
 const CATEGORY_ORDER = ['我', '家人', '朋友', '客戶', '名人', '其他'];
 
 function App() {
   const [session, setSession] = useState<any>(null);
+  const [isRecovery, setIsRecovery] = useState(false); // 新增：重設密碼模式
+
   const [clients, setClients] = useState<Client[]>([]);
-  // 修改 1: ID 改為 string
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [isAdmin, setIsAdmin] = useState(false); // 在雲端版通常等於是否有登入，或是特定權限
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({
     我: true, 家人: true, 朋友: true, 客戶: true, 名人: true, 其他: true,
   });
 
-  // 修改 2: 監聽登入狀態
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // 關鍵邏輯：如果是密碼重設事件，開啟重設模式
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsRecovery(true);
+      }
       setSession(session);
     });
+
     return () => subscription.unsubscribe();
   }, []);
 
@@ -43,7 +50,7 @@ function App() {
 
   useEffect(() => {
     refreshData();
-  }, [isAdmin, session]); // 加入 session 依賴
+  }, [isAdmin, session]);
 
   const handleSaveClient = async (clientData: any) => {
     const id = await saveClient(clientData);
@@ -59,7 +66,6 @@ function App() {
     setIsModalOpen(true);
   };
 
-  // 修改 3: id 參數改為 string
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (confirm('是否確認刪除')) {
@@ -98,7 +104,12 @@ function App() {
     return groups;
   }, [clients, searchTerm]);
 
-  // 修改 4: 如果沒登入，顯示 Auth
+  // 1. 如果正在重設密碼，優先顯示重設畫面
+  if (isRecovery) {
+    return <UpdatePassword onComplete={() => setIsRecovery(false)} />;
+  }
+
+  // 2. 如果沒有登入，顯示登入畫面
   if (!session) {
     return <Auth />;
   }
@@ -120,7 +131,6 @@ function App() {
 
   return (
     <div className="flex flex-col h-screen bg-[#f8f9fa] font-sans text-gray-900">
-      {/* Header */}
       <div className={`px-4 py-3 flex justify-between items-center shadow-sm sticky top-0 z-10 transition-colors bg-white text-gray-900`}>
         <div className="flex items-center gap-3">
           <button className="opacity-50 hover:opacity-100 p-1 rounded-full">
@@ -256,5 +266,5 @@ function App() {
     </div>
   );
 }
-//
+
 export default App;

@@ -1,73 +1,189 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabase';
-import { Lock, Mail, Loader2, Star } from 'lucide-react';
+import { Lock, Mail, Loader2, Cpu, CheckSquare, Square, ArrowLeft } from 'lucide-react';
+import { APP_CONFIG } from '../config';
+
+type AuthMode = 'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD';
 
 export const Auth = () => {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [mode, setMode] = useState<AuthMode>('LOGIN');
   const [msg, setMsg] = useState('');
+  const [keepLogin, setKeepLogin] = useState(true);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMsg('');
+
     try {
-      const { error } = isSignUp
-        ? await supabase.auth.signUp({ email, password })
-        : await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      if (isSignUp) setMsg('註冊成功！請檢查信箱 (或直接登入)');
+      if (mode === 'REGISTER') {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+        });
+        if (error) throw error;
+        setMsg('註冊成功！請檢查信箱驗證連結');
+      } 
+      else if (mode === 'LOGIN') {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw error;
+      }
+      else if (mode === 'FORGOT_PASSWORD') {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin,
+        });
+        if (error) throw error;
+        setMsg('重設信已寄出！請檢查您的電子信箱');
+      }
     } catch (err: any) {
-      setMsg(err.message);
+      setMsg(err.message || '發生錯誤，請稍後再試');
     } finally {
       setLoading(false);
     }
   };
 
+  const switchMode = (newMode: AuthMode) => {
+    setMode(newMode);
+    setMsg('');
+  };
+
+  const getButtonStyles = () => {
+    const base = "w-full font-bold py-3 rounded-xl shadow-lg transition-all flex justify-center items-center gap-2 mt-2 disabled:opacity-70 disabled:cursor-not-allowed";
+    
+    if (mode === 'REGISTER') {
+      return `${base} bg-emerald-700 hover:bg-emerald-800 text-white shadow-emerald-200`;
+    }
+    if (mode === 'FORGOT_PASSWORD') {
+      return `${base} bg-red-600 hover:bg-red-700 text-white shadow-red-200`;
+    }
+    // LOGIN
+    return `${base} bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200`;
+  };
+
   return (
-    <div className="min-h-screen bg-[#f8f9fa] flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-sm p-8 rounded-2xl shadow-xl border border-gray-100">
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center text-white mb-3 shadow-lg shadow-red-200">
-            <Star fill="currentColor" size={24} />
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative">
+      <div className="bg-white w-full max-w-sm p-8 rounded-2xl shadow-xl border border-slate-100 relative overflow-hidden z-10">
+        
+        {/* 頂部裝飾條 */}
+        <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-500 to-cyan-400"></div>
+
+        <div className="flex flex-col items-center mb-8 mt-2">
+          {/* Logo */}
+          <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 mb-4 shadow-inner ring-1 ring-blue-100">
+            <Cpu size={32} strokeWidth={1.5} />
           </div>
-          <h1 className="text-2xl font-bold text-gray-800">紫微斗數資料庫</h1>
-          <p className="text-gray-400 text-sm mt-1">雲端同步．永久保存</p>
+          
+          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
+            {APP_CONFIG.appName}
+          </h1>
+          <p className="text-slate-400 text-sm mt-1 font-medium tracking-wide">
+            {APP_CONFIG.subtitle}
+          </p>
         </div>
 
         <form onSubmit={handleAuth} className="space-y-4">
+          
           <div className="space-y-1">
-            <label className="text-xs font-bold text-gray-500 ml-1">電子信箱</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-2.5 text-gray-400" size={18} />
-              <input type="email" required value={email} onChange={e=>setEmail(e.target.value)} 
-                className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-100 focus:border-red-400 outline-none transition-all" placeholder="name@example.com" />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-gray-500 ml-1">密碼</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-2.5 text-gray-400" size={18} />
-              <input type="password" required value={password} onChange={e=>setPassword(e.target.value)} 
-                className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-100 focus:border-red-400 outline-none transition-all" placeholder="••••••••" minLength={6} />
+            <label className="text-xs font-bold text-slate-500 ml-1">電子信箱</label>
+            <div className="relative group">
+              <Mail className="absolute left-3 top-2.5 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
+              <input 
+                type="email" 
+                required 
+                value={email} 
+                onChange={e=>setEmail(e.target.value)} 
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all text-slate-700 font-medium" 
+                placeholder="name@example.com" 
+              />
             </div>
           </div>
 
-          {msg && <div className={`text-xs p-3 rounded-lg ${msg.includes('成功')?'bg-green-50 text-green-600':'bg-red-50 text-red-600'}`}>{msg}</div>}
+          {mode !== 'FORGOT_PASSWORD' && (
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-500 ml-1">密碼</label>
+              <div className="relative group">
+                <Lock className="absolute left-3 top-2.5 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
+                <input 
+                  type="password" 
+                  required 
+                  value={password} 
+                  onChange={e=>setPassword(e.target.value)} 
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all text-slate-700 font-medium" 
+                  placeholder="••••••••" 
+                  minLength={6} 
+                />
+              </div>
+            </div>
+          )}
 
-          <button disabled={loading} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-red-200 transition-all flex justify-center items-center gap-2">
+          {mode === 'LOGIN' && (
+            <div 
+              className="flex items-center gap-2 cursor-pointer w-fit"
+              onClick={() => setKeepLogin(!keepLogin)}
+            >
+              <div className={`text-blue-600 transition-colors ${keepLogin ? 'text-blue-600' : 'text-slate-300'}`}>
+                {keepLogin ? <CheckSquare size={18} /> : <Square size={18} />}
+              </div>
+              <span className="text-xs text-slate-500 font-medium select-none">讓我保持登入</span>
+            </div>
+          )}
+
+          {msg && (
+            <div className={`text-xs p-3 rounded-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-1
+              ${msg.includes('成功') || msg.includes('寄出') 
+                ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' 
+                : 'bg-red-50 text-red-600 border border-red-100'}`
+            }>
+              {msg}
+            </div>
+          )}
+
+          <button 
+            disabled={loading} 
+            className={getButtonStyles()}
+          >
             {loading && <Loader2 className="animate-spin" size={18}/>}
-            {isSignUp ? '註冊帳號' : '登入系統'}
+            {mode === 'LOGIN' && '登入'}
+            {mode === 'REGISTER' && '註冊'} 
+            {mode === 'FORGOT_PASSWORD' && '重設密碼'}
           </button>
         </form>
 
-        <div className="mt-6 text-center">
-          <button onClick={() => {setIsSignUp(!isSignUp); setMsg('')}} className="text-sm text-gray-500 hover:text-red-600 font-medium transition-colors">
-            {isSignUp ? '已有帳號？登入' : '沒有帳號？註冊'}
-          </button>
+        <div className="mt-6 flex items-center justify-center gap-4 text-sm font-medium">
+          {mode === 'LOGIN' && (
+            <>
+              <button onClick={() => switchMode('REGISTER')} className="text-slate-500 hover:text-blue-600 transition-colors">
+                註冊
+              </button>
+              <span className="text-slate-300">|</span>
+              <button onClick={() => switchMode('FORGOT_PASSWORD')} className="text-slate-500 hover:text-blue-600 transition-colors">
+                忘記密碼
+              </button>
+            </>
+          )}
+
+          {(mode === 'REGISTER' || mode === 'FORGOT_PASSWORD') && (
+            <button 
+              onClick={() => switchMode('LOGIN')} 
+              className="text-slate-500 hover:text-blue-600 transition-colors flex items-center gap-1"
+            >
+              <ArrowLeft size={16} />
+              返回登入
+            </button>
+          )}
         </div>
+
+      </div>
+      
+      {/* 底部版權宣告 */}
+      <div className="absolute bottom-4 text-slate-400 text-xs font-mono">
+        © {new Date().getFullYear()} {APP_CONFIG.appName} | {APP_CONFIG.brand}
       </div>
     </div>
   );
