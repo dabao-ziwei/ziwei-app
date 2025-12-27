@@ -95,16 +95,26 @@ export class ZiWeiEngine {
     gender: '男' | '女'
   ) {
     this.gender = gender;
+    
+    // 1. 建立原始時間物件 (保留用於八字計算與精確時間紀錄)
     this.solar = Solar.fromYmdHms(year, month, day, hour, minute, 0);
     this.lunar = this.solar.getLunar();
+
+    // 【修正 1：夜子時換日鎖定】
+    // lunar-typescript 在 23:00 會自動跳轉到隔天農曆日期。
+    // 為了符合「晚子時」派別（算當天日期，但時辰為子時），我們建立一個「鎖定在當日中午」的物件
+    // 專門用來抓取「當天」的農曆月、日，確保紫微星起星位置正確 (七殺 vs 破軍的關鍵)。
+    const fixedSolarForDate = Solar.fromYmdHms(year, month, day, 12, 0, 0);
+    const fixedLunarForDate = fixedSolarForDate.getLunar();
 
     this.lunarYearGanIdx = this.lunar.getYearGanIndex();
     this.lunarYearZhiIdx = this.lunar.getYearZhiIndex();
     
-    // 【修正 1】將月份取絕對值，解決閏月為負數 (如 -6) 導致計算錯誤的問題
-    this.lunarMonth = Math.abs(this.lunar.getMonth());
+    // 使用「鎖定」的日期來決定星曜排列
+    this.lunarMonth = Math.abs(fixedLunarForDate.getMonth());
+    this.lunarDay = fixedLunarForDate.getDay();
     
-    this.lunarDay = this.lunar.getDay();
+    // 時辰依然根據真實時間計算 (23:00 會算成子時 index=0)
     this.timeZhiIdx = Math.floor((hour + 1) / 2) % 12;
 
     const isYangYear = this.lunarYearGanIdx % 2 === 0;
@@ -137,19 +147,16 @@ export class ZiWeiEngine {
       });
     }
 
-    // 【修正 2】加強餘數計算的安全性，確保結果永遠為正整數
-    // 原始公式可能因為減法產生負數，這裡使用 ((n % 12) + 12) % 12 技巧
+    // 確保餘數計算為正整數
     const rawMingPos = (2 + (this.lunarMonth - 1) - this.timeZhiIdx);
     this.mingPos = ((rawMingPos % 12) + 12) % 12;
     
-    // 身宮計算同理，確保安全
     const rawShenPos = (2 + (this.lunarMonth - 1) + this.timeZhiIdx);
     this.shenPos = ((rawShenPos % 12) + 12) % 12;
     
     this.palaces[this.shenPos].isBody = true;
 
     for (let i = 0; i < 12; i++) {
-      // 計算相對位置時也加上安全餘數保護
       const pos = ((this.mingPos - i) % 12 + 12) % 12;
       this.palaces[pos].name = PALACE_NAMES[i];
     }
@@ -603,13 +610,15 @@ export class ZiWeiEngine {
     const mingZhu = MING_ZHU_TABLE[this.palaces[this.mingPos].zhiIndex];
     const shenZhu = SHEN_ZHU_TABLE[this.lunarYearZhiIdx];
 
+    // 【修正 2：補零】確保分鐘數顯示為 2 位數
+    const minuteStr = this.solar.getMinute().toString().padStart(2, '0');
+
     return {
       gender: this.gender,
-      solarDate: `${this.solar.getYear()}-${this.solar.getMonth()}-${this.solar.getDay()} ${this.solar.getHour()}:${this.solar.getMinute()}`,
+      solarDate: `${this.solar.getYear()}-${this.solar.getMonth()}-${this.solar.getDay()} ${this.solar.getHour()}:${minuteStr}`,
       lunarDate: `${this.lunar.getYearInGanZhi()}年 ${this.lunar.getMonthInChinese()}月 ${this.lunar.getDayInChinese()} ${
         ZHI[this.timeZhiIdx]
       }時`,
-      // 關鍵新增：回傳 lunarYear 供 ChartBoard 計算大限年份
       lunarYear: this.lunar.getYear(),
       bazi: `${this.lunar.getYearInGanZhi()} ${this.lunar.getMonthInGanZhi()} ${this.lunar.getDayInGanZhi()} ${this.lunar.getTimeInGanZhi()}`,
       bureau: this.bureauName,
