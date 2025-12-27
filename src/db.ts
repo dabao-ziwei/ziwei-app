@@ -1,5 +1,8 @@
+import { supabase } from './supabase';
+
+// 1. 修改 Interface：ID 改為 string
 export interface Client {
-  id: number;
+  id: string; // 改為 UUID 字串
   name: string;
   gender: '男' | '女';
   birthYear: number;
@@ -8,110 +11,97 @@ export interface Client {
   birthHour: number;
   birthMinute: number;
   type: '我' | '家人' | '朋友' | '客戶' | '名人' | '其他';
-  
-  majorStars: string; // 命宮主星
-  isDeleted: boolean; // 假刪除標記
+  majorStars: string;
+  isDeleted: boolean;
   ownerId: string;
-  createdAt: number;
+  createdAt: number; 
 }
 
-const STORAGE_KEY = 'ziwei_clients_v2';
-
-// 預設資料
-const DEFAULT_CLIENTS: Client[] = [
-  {
-    id: 1,
-    name: '我 (本命)',
-    gender: '男',
-    birthYear: 1979,
-    birthMonth: 9,
-    birthDay: 26,
-    birthHour: 18,
-    birthMinute: 26,
-    type: '我',
-    majorStars: '天同',
-    isDeleted: false,
-    ownerId: 'admin',
-    createdAt: Date.now()
-  }
-];
-
+// 2. 讀取資料 (從 Supabase)
 export const loadClients = async (includeDeleted: boolean = false): Promise<Client[]> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_CLIENTS));
-        resolve(DEFAULT_CLIENTS);
-        return;
-      }
-      try {
-        const data: Client[] = JSON.parse(raw);
-        const filtered = data.filter(c => includeDeleted ? true : !c.isDeleted);
-        resolve(filtered.sort((a, b) => b.createdAt - a.createdAt));
-      } catch (e) {
-        resolve(DEFAULT_CLIENTS);
-      }
-    }, 50); 
-  });
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return []; // 沒登入就回傳空陣列
+
+  let query = supabase
+    .from('clients')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (!includeDeleted) {
+    query = query.eq('is_deleted', false);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.error('Supabase load error:', error);
+    return [];
+  }
+
+  // 轉換資料庫欄位 (snake_case) -> 前端 (camelCase)
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    name: row.name,
+    gender: row.gender as '男' | '女',
+    birthYear: row.birth_year,
+    birthMonth: row.birth_month,
+    birthDay: row.birth_day,
+    birthHour: row.birth_hour,
+    birthMinute: row.birth_minute,
+    type: row.type || '其他', // 預防舊資料沒 type
+    majorStars: row.major_stars || '',
+    isDeleted: row.is_deleted,
+    ownerId: row.user_id, // 對應 schema 的 user_id
+    createdAt: new Date(row.created_at).getTime(),
+  }));
 };
 
-export const saveClient = async (clientData: Omit<Client, 'id' | 'createdAt'> & { id?: number }): Promise<number> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      const currentList: Client[] = raw ? JSON.parse(raw) : [];
+// 3. 儲存/更新資料
+export const saveClient = async (client: Omit<Client, 'id' | 'createdAt' | 'ownerId'> & { id?: string }): Promise<string> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('請先登入');
 
-      let newId = clientData.id;
-      let newList = [...currentList];
+  // 準備寫入資料庫的物件
+  const payload = {
+    user_id: user.id,
+    name: client.name,
+    gender: client.gender,
+    birth_year: client.birthYear,
+    birth_month: client.birthMonth,
+    birth_day: client.birthDay,
+    birth_hour: client.birthHour,
+    birth_minute: client.birthMinute,
+    type: client.type,
+    major_stars: client.majorStars,
+    is_deleted: client.isDeleted || false,
+    updated_at: new Date().toISOString(), // 你的 schema 有 updated_at
+  };
 
-      if (newId) {
-        const idx = newList.findIndex(c => c.id === newId);
-        if (idx >= 0) {
-          newList[idx] = {
-            ...newList[idx],
-            ...clientData,
-            id: newId, 
-          };
-        }
-      } else {
-        newId = Date.now();
-        const newClient: Client = {
-          ...clientData,
-          id: newId,
-          createdAt: Date.now(),
-          isDeleted: false,
-          ownerId: 'user',
-          majorStars: clientData.majorStars || ''
-        } as Client;
-        newList = [newClient, ...newList];
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newList));
-      resolve(newId!);
-    }, 100);
-  });
+  if (client.id) {
+    // 更新
+    const { error } = await supabase
+      .from('clients')
+      .update(payload)
+      .eq('id', client.id);
+    if (error) throw error;
+    return client.id;
+  } else {
+    // 新增
+    const { data, error } = await supabase
+      .from('clients')
+      .insert(payload)
+      .select('id')
+      .single();
+    if (error) throw error;
+    return data.id;
+  }
 };
 
-export const deleteClient = async (id: number): Promise<void> => {
-    return new Promise((resolve) => {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if(!raw) { resolve(); return; }
-        let list: Client[] = JSON.parse(raw);
-        const idx = list.findIndex(c => c.id === id);
-        if (idx >= 0) list[idx].isDeleted = true;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-        resolve();
-    });
-}
+// 4. 軟刪除
+export const deleteClient = async (id: string): Promise<void> => {
+  await supabase.from('clients').update({ is_deleted: true }).eq('id', id);
+};
 
-export const restoreClient = async (id: number): Promise<void> => {
-    return new Promise((resolve) => {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if(!raw) { resolve(); return; }
-        let list: Client[] = JSON.parse(raw);
-        const idx = list.findIndex(c => c.id === id);
-        if (idx >= 0) list[idx].isDeleted = false;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-        resolve();
-    });
-}
+// 5. 還原
+export const restoreClient = async (id: string): Promise<void> => {
+  await supabase.from('clients').update({ is_deleted: false }).eq('id', id);
+};

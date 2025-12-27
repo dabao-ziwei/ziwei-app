@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X } from 'lucide-react';
-import type { Client } from '../db'; // <--- 關鍵修正：加上 type
+import type { Client } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
 
 interface AddChartModalProps {
@@ -84,17 +84,14 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
     const birthHour = parseInt(hour);
     const birthMinute = parseInt(minute);
 
-    // 預先運算命宮主星
     const engine = new ZiWeiEngine(birthYear, birthMonth, birthDay, birthHour, birthMinute, gender);
     const chart = engine.getChartData();
     const mingPos = engine.getMingPos();
     const mingPalace = chart.palaces[mingPos];
-    
-    // 組合主星名稱 (例如: "武曲七殺" 或 "無主星")
     const majorStarNames = mingPalace.majorStars.map(s => s.name).join('') || '無主星';
     
     onSave({
-      id: editData?.id,
+      id: editData?.id, // 這裡是 string (UUID)
       name,
       gender,
       birthYear,
@@ -103,7 +100,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
       birthHour,
       birthMinute,
       type: category as any,
-      majorStars: majorStarNames // 存入主星
+      majorStars: majorStarNames
     });
     onClose();
   };
