@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Loader2 } from 'lucide-react'; // 新增 Loader2
+import { X, Loader2 } from 'lucide-react'; 
 import type { Client } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
 
 interface AddChartModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (client: any) => Promise<void>; // 修改定義，支援 async
+  onSave: (client: any) => Promise<void>;
   editData?: Client | null;
 }
 
@@ -23,7 +23,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
   const [minute, setMinute] = useState('');
   
   const [category, setCategory] = useState('客戶');
-  const [isSubmitting, setIsSubmitting] = useState(false); // 新增讀取狀態
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const yearRef = useRef<HTMLInputElement>(null);
   const monthRef = useRef<HTMLInputElement>(null);
@@ -56,6 +56,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
     }
   }, [isOpen, editData]);
 
+  // 修改：輸入自動跳轉邏輯
   const handleDateInput = (
     e: React.ChangeEvent<HTMLInputElement>,
     setValue: (val: string) => void,
@@ -65,11 +66,25 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
     const val = e.target.value.replace(/\D/g, '');
     if (val.length > maxLength) return;
     setValue(val);
+    
+    // 如果長度到了，直接跳下一格並全選 (提升 UX)
     if (val.length === maxLength && nextRef && nextRef.current) {
-      setTimeout(() => {
-        nextRef.current?.focus();
-        nextRef.current?.select();
-      }, 10);
+      nextRef.current.focus();
+      nextRef.current.select();
+    }
+  };
+
+  // 新增：處理 Backspace 倒退邏輯
+  const handleKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    currentValue: string,
+    prevRef?: React.RefObject<HTMLInputElement>
+  ) => {
+    // 當按下 Backspace 且目前格子是空的，就跳回上一格
+    if (e.key === 'Backspace' && currentValue === '' && prevRef && prevRef.current) {
+      e.preventDefault();
+      prevRef.current.focus();
+      // prevRef.current.select(); // 視需求決定是否要全選上一格內容
     }
   };
 
@@ -91,7 +106,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
 
       console.log('開始計算排盤...', { birthYear, birthMonth, birthDay, birthHour, birthMinute, gender });
 
-      // 2. 嘗試執行排盤引擎 (最可能出錯的地方)
+      // 2. 嘗試執行排盤引擎
       const engine = new ZiWeiEngine(birthYear, birthMonth, birthDay, birthHour, birthMinute, gender);
       const chart = engine.getChartData();
       
@@ -129,6 +144,9 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
 
   if (!isOpen) return null;
 
+  // 定義輸入框共用樣式 (加入 text-center 和 focus ring)
+  const inputClass = "px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none transition-all";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden relative animate-in fade-in zoom-in duration-200">
@@ -153,15 +171,60 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
           <div className="space-y-2">
             <label className="text-xs font-bold text-gray-500 block">時間 (西元 / 24小時制)</label>
             <div className="flex items-center gap-2">
-              <input ref={yearRef} type="text" value={year} onChange={(e) => handleDateInput(e, setYear, 4, monthRef)} placeholder="YYYY" className="w-[28%] px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" />
+              <input 
+                ref={yearRef} 
+                type="text" 
+                inputMode="numeric" pattern="[0-9]*" // 手機鍵盤優化
+                value={year} 
+                onChange={(e) => handleDateInput(e, setYear, 4, monthRef)} 
+                onKeyDown={(e) => handleKeyDown(e, year, undefined)} // 年份沒有上一格
+                placeholder="YYYY" 
+                className={`${inputClass} w-[28%]`} 
+              />
               <span className="text-gray-400">-</span>
-              <input ref={monthRef} type="text" value={month} onChange={(e) => handleDateInput(e, setMonth, 2, dayRef)} placeholder="MM" className="w-[18%] px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" />
+              <input 
+                ref={monthRef} 
+                type="text" 
+                inputMode="numeric" pattern="[0-9]*"
+                value={month} 
+                onChange={(e) => handleDateInput(e, setMonth, 2, dayRef)} 
+                onKeyDown={(e) => handleKeyDown(e, month, yearRef)} // 按 Backspace 跳回年份
+                placeholder="MM" 
+                className={`${inputClass} w-[18%]`} 
+              />
               <span className="text-gray-400">-</span>
-              <input ref={dayRef} type="text" value={day} onChange={(e) => handleDateInput(e, setDay, 2, hourRef)} placeholder="DD" className="w-[18%] px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" />
+              <input 
+                ref={dayRef} 
+                type="text" 
+                inputMode="numeric" pattern="[0-9]*"
+                value={day} 
+                onChange={(e) => handleDateInput(e, setDay, 2, hourRef)} 
+                onKeyDown={(e) => handleKeyDown(e, day, monthRef)} // 按 Backspace 跳回月份
+                placeholder="DD" 
+                className={`${inputClass} w-[18%]`} 
+              />
               <span className="text-gray-300 mx-1">|</span>
-              <input ref={hourRef} type="text" value={hour} onChange={(e) => handleDateInput(e, setHour, 2, minuteRef)} placeholder="hh" className="w-[18%] px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" />
+              <input 
+                ref={hourRef} 
+                type="text" 
+                inputMode="numeric" pattern="[0-9]*"
+                value={hour} 
+                onChange={(e) => handleDateInput(e, setHour, 2, minuteRef)} 
+                onKeyDown={(e) => handleKeyDown(e, hour, dayRef)} // 按 Backspace 跳回日期
+                placeholder="hh" 
+                className={`${inputClass} w-[18%]`} 
+              />
               <span className="text-gray-400">:</span>
-              <input ref={minuteRef} type="text" value={minute} onChange={(e) => handleDateInput(e, setMinute, 2, undefined)} placeholder="mm" className="w-[18%] px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" />
+              <input 
+                ref={minuteRef} 
+                type="text" 
+                inputMode="numeric" pattern="[0-9]*"
+                value={minute} 
+                onChange={(e) => handleDateInput(e, setMinute, 2, undefined)} 
+                onKeyDown={(e) => handleKeyDown(e, minute, hourRef)} // 按 Backspace 跳回小時
+                placeholder="mm" 
+                className={`${inputClass} w-[18%]`} 
+              />
             </div>
           </div>
           <div className="space-y-2">
