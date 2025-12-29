@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Routes, Route, Navigate, Outlet, useNavigate } from 'react-router-dom'; // 1. 引入 useNavigate
+import { Routes, Route, Navigate, Outlet, useNavigate } from 'react-router-dom';
 import { ChartBoard } from './components/ChartBoard';
 import { AddChartModal } from './components/AddChartModal';
 import { Auth } from './components/Auth';
@@ -13,7 +13,7 @@ function App() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isRecovery, setIsRecovery] = useState(false);
-  const navigate = useNavigate(); // 2. 初始化導航功能
+  const navigate = useNavigate();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -35,16 +35,13 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // 3. 修改儲存邏輯：接收回傳的 ID 並跳轉
   const handleSaveClient = async (clientData: any) => {
     try {
-      // saveClient 會回傳新增或更新後的 ID (string)
       const savedId = await saveClient(clientData);
       
       setIsModalOpen(false);
       setEditingClient(null);
 
-      // 如果有回傳 ID，就跳轉到命盤頁面
       if (savedId) {
         navigate(`/chart/${savedId}`);
       }
@@ -101,6 +98,8 @@ function App() {
           } 
         />
         <Route path="/chart/:id" element={<ChartBoard />} />
+        {/* 新增紫占模式路由 */}
+        <Route path="/divination/:id" element={<ChartBoard mode="divination" />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

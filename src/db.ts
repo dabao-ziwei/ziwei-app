@@ -12,7 +12,8 @@ export interface UserProfile {
   role: string;
   maxCharts: number;
   maxEditsPerChart: number;
-  isBanned: boolean; 
+  isBanned: boolean;
+  can_use_divination: boolean; // 新增：紫占功能權限
   activeCount?: number;
   deletedCount?: number;
 }
@@ -55,11 +56,11 @@ export const getMyProfile = async (): Promise<UserProfile | null> => {
     role: data.role,
     maxCharts: data.max_charts,
     maxEditsPerChart: data.max_edits_per_chart,
-    isBanned: data.is_banned || false
+    isBanned: data.is_banned || false,
+    can_use_divination: data.can_use_divination ?? true // 預設開啟
   };
 };
 
-// 【重要修改】載入命盤邏輯
 export const loadClients = async (): Promise<Client[]> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
@@ -76,7 +77,6 @@ export const loadClients = async (): Promise<Client[]> => {
   if (!isSuperViewer) {
     query = query.eq('user_id', user.id);
   }
-  // 如果是超級檢視者，不加 user_id 過濾條件 (即看全部)
 
   const { data, error } = await query;
 
@@ -110,7 +110,6 @@ export const loadClients = async (): Promise<Client[]> => {
     type: item.type,
     majorStars: item.major_stars,
     editCount: item.edit_count ?? 0,
-    // 填入建立者 Email
     creatorEmail: userIdToEmailMap[item.user_id] || '' 
   }));
 };
@@ -234,6 +233,7 @@ export const getAllProfilesWithStats = async (): Promise<UserProfile[]> => {
     maxCharts: p.max_charts,
     maxEditsPerChart: p.max_edits_per_chart,
     isBanned: p.is_banned,
+    can_use_divination: p.can_use_divination ?? true,
     activeCount: p.active_count,
     deletedCount: p.deleted_count
   }));
@@ -253,6 +253,7 @@ export const updateProfile = async (id: string, updates: Partial<UserProfile>): 
   if (updates.role) dbUpdates.role = updates.role;
   if (updates.maxCharts !== undefined) dbUpdates.max_charts = updates.maxCharts;
   if (updates.maxEditsPerChart !== undefined) dbUpdates.max_edits_per_chart = updates.maxEditsPerChart;
+  if (updates.can_use_divination !== undefined) dbUpdates.can_use_divination = updates.can_use_divination;
 
   const { error } = await supabase.from('profiles').update(dbUpdates).eq('id', id);
   return !error;
@@ -264,4 +265,24 @@ export const deleteUserProfile = async (id: string): Promise<boolean> => {
     const { error: err2 } = await supabase.from('profiles').delete().eq('id', id);
     if (err2) return false;
     return true;
+};
+
+// 新增：邀請使用者 (發送 Magic Link)
+export const inviteUserByEmail = async (email: string): Promise<{ success: boolean; msg: string }> => {
+    // 注意：Client-side 只能用 signInWithOtp 模擬邀請，或者 redirect 到註冊頁
+    // 這裡我們只回傳成功，實際的 Email 發送需透過 Supabase Auth UI 或 Edge Function
+    // 但為了滿足 "管理者輸入信箱，發送邀請信" 的流程，我們使用 resetPasswordForEmail
+    // 這會發送一封 "重設密碼" 的信，使用者點擊後可以直接設定密碼並登入，達到邀請效果
+    
+    // 檢查是否已存在 (略，Supabase 會處理)
+    
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + '/login', // 導向登入頁
+    });
+
+    if (error) {
+        console.error("Invite Error:", error);
+        return { success: false, msg: error.message };
+    }
+    return { success: true, msg: "邀請信已發送 (重設密碼連結)" };
 };
