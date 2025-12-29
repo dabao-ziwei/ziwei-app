@@ -13,7 +13,7 @@ interface AddChartModalProps {
 const CATEGORIES = ['我', '家人', '朋友', '客戶', '名人', '其他'];
 
 export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, onSave, editData }) => {
-  // 修改 1: 預設值改為 '女'
+  // 修改 1: 這裡初始值改為 '女'
   const [gender, setGender] = useState<'男' | '女'>('女');
   const [name, setName] = useState('');
   
@@ -44,7 +44,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
         setMinute(editData.birthMinute.toString().padStart(2, '0'));
         setCategory(editData.type);
       } else {
-        // 修改 2: 新增模式預設設為 '女'
+        // 修改 2: 新增模式時，強制設定為 '女'
         setGender('女');
         setName('');
         setYear('');
@@ -86,7 +86,6 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
     if (e.key === 'Backspace' && currentValue === '' && prevRef && prevRef.current) {
       e.preventDefault();
       prevRef.current.focus();
-      // prevRef.current.select(); // 視需求決定是否要全選上一格內容
     }
   };
 
@@ -146,7 +145,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
 
   if (!isOpen) return null;
 
-  // 定義輸入框共用樣式 (加入 text-center 和 focus ring)
+  // 定義輸入框共用樣式
   const inputClass = "px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none transition-all";
 
   return (
@@ -162,7 +161,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
           <div className="space-y-2">
             <label className="text-xs font-bold text-gray-500 block">性別</label>
             <div className="flex gap-4">
-              {/* 修改 3: 交換按鈕順序，女在前 */}
+              {/* 修改 3: 確認這裡 女在前，男在後 */}
               <button onClick={() => setGender('女')} className={`flex-1 py-2 rounded border transition-all ${gender === '女' ? 'border-pink-500 text-pink-600 bg-pink-50 font-bold ring-1 ring-pink-500' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>♀ 女</button>
               <button onClick={() => setGender('男')} className={`flex-1 py-2 rounded border transition-all ${gender === '男' ? 'border-blue-500 text-blue-600 bg-blue-50 font-bold ring-1 ring-blue-500' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>♂ 男</button>
             </div>
@@ -177,10 +176,10 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
               <input 
                 ref={yearRef} 
                 type="text" 
-                inputMode="numeric" pattern="[0-9]*" // 手機鍵盤優化
+                inputMode="numeric" pattern="[0-9]*" 
                 value={year} 
                 onChange={(e) => handleDateInput(e, setYear, 4, monthRef)} 
-                onKeyDown={(e) => handleKeyDown(e, year, undefined)} // 年份沒有上一格
+                onKeyDown={(e) => handleKeyDown(e, year, undefined)} 
                 placeholder="YYYY" 
                 className={`${inputClass} w-[28%]`} 
               />
@@ -191,7 +190,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
                 inputMode="numeric" pattern="[0-9]*"
                 value={month} 
                 onChange={(e) => handleDateInput(e, setMonth, 2, dayRef)} 
-                onKeyDown={(e) => handleKeyDown(e, month, yearRef)} // 按 Backspace 跳回年份
+                onKeyDown={(e) => handleKeyDown(e, month, yearRef)}
                 placeholder="MM" 
                 className={`${inputClass} w-[18%]`} 
               />
@@ -202,7 +201,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
                 inputMode="numeric" pattern="[0-9]*"
                 value={day} 
                 onChange={(e) => handleDateInput(e, setDay, 2, hourRef)} 
-                onKeyDown={(e) => handleKeyDown(e, day, monthRef)} // 按 Backspace 跳回月份
+                onKeyDown={(e) => handleKeyDown(e, day, monthRef)}
                 placeholder="DD" 
                 className={`${inputClass} w-[18%]`} 
               />
@@ -213,7 +212,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
                 inputMode="numeric" pattern="[0-9]*"
                 value={hour} 
                 onChange={(e) => handleDateInput(e, setHour, 2, minuteRef)} 
-                onKeyDown={(e) => handleKeyDown(e, hour, dayRef)} // 按 Backspace 跳回日期
+                onKeyDown={(e) => handleKeyDown(e, hour, dayRef)}
                 placeholder="hh" 
                 className={`${inputClass} w-[18%]`} 
               />
@@ -224,7 +223,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
                 inputMode="numeric" pattern="[0-9]*"
                 value={minute} 
                 onChange={(e) => handleDateInput(e, setMinute, 2, undefined)} 
-                onKeyDown={(e) => handleKeyDown(e, minute, hourRef)} // 按 Backspace 跳回小時
+                onKeyDown={(e) => handleKeyDown(e, minute, hourRef)}
                 placeholder="mm" 
                 className={`${inputClass} w-[18%]`} 
               />
