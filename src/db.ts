@@ -1,5 +1,9 @@
 import { supabase } from './supabase'; 
 
+// --- 設定 ---
+// 定義超級管理員 Email (僅此帳號可看全部)
+const SUPER_VIEW_EMAIL = 'stephenwu.0926@gmail.com';
+
 // --- 介面定義 ---
 
 export interface UserProfile {
@@ -27,6 +31,8 @@ export interface Client {
   type?: string; 
   majorStars?: string;
   editCount?: number;
+  // 新增：建立者 Email (給超級管理員看用)
+  creatorEmail?: string;
 }
 
 // --- 一般使用者功能 ---
@@ -53,20 +59,41 @@ export const getMyProfile = async (): Promise<UserProfile | null> => {
   };
 };
 
+// 【重要修改】載入命盤邏輯
 export const loadClients = async (): Promise<Client[]> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
 
-  const { data, error } = await supabase
+  const isSuperViewer = user.email === SUPER_VIEW_EMAIL;
+
+  let query = supabase
     .from('clients')
     .select('*')
-    .eq('user_id', user.id)
     .eq('is_deleted', false)
     .order('created_at', { ascending: false });
+
+  // 如果不是超級檢視者，只能看自己的
+  if (!isSuperViewer) {
+    query = query.eq('user_id', user.id);
+  }
+  // 如果是超級檢視者，不加 user_id 過濾條件 (即看全部)
+
+  const { data, error } = await query;
 
   if (error) {
     console.error('Error fetching clients:', error);
     return [];
+  }
+
+  // 如果是超級檢視者，需要額外抓取所有使用者的 Email 來對應顯示
+  let userIdToEmailMap: Record<string, string> = {};
+  if (isSuperViewer) {
+      const { data: profiles } = await supabase.from('profiles').select('id, email');
+      if (profiles) {
+          profiles.forEach(p => {
+              userIdToEmailMap[p.id] = p.email;
+          });
+      }
   }
 
   return data.map((item: any) => ({
@@ -82,7 +109,9 @@ export const loadClients = async (): Promise<Client[]> => {
     created_at: item.created_at,
     type: item.type,
     majorStars: item.major_stars,
-    editCount: item.edit_count ?? 0
+    editCount: item.edit_count ?? 0,
+    // 填入建立者 Email
+    creatorEmail: userIdToEmailMap[item.user_id] || '' 
   }));
 };
 
@@ -229,21 +258,10 @@ export const updateProfile = async (id: string, updates: Partial<UserProfile>): 
   return !error;
 };
 
-// 新增：完全刪除使用者資料 (包含 Profile 與其所有命盤)
 export const deleteUserProfile = async (id: string): Promise<boolean> => {
-    // 1. 先刪除該使用者的所有命盤 (Hard Delete)
     const { error: err1 } = await supabase.from('clients').delete().eq('user_id', id);
-    if (err1) {
-        console.error('Error deleting user clients:', err1);
-        return false;
-    }
-
-    // 2. 刪除 Profile
+    if (err1) return false;
     const { error: err2 } = await supabase.from('profiles').delete().eq('id', id);
-    if (err2) {
-        console.error('Error deleting user profile:', err2);
-        return false;
-    }
-    
+    if (err2) return false;
     return true;
 };

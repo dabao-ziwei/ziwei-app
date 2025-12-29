@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, UserCog, LogOut } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, UserCog, LogOut, User } from 'lucide-react';
 import { loadClients, deleteClient, getMyProfile, getUsedChartCount, type Client, type UserProfile } from '../db';
 import { supabase } from '../supabase';
 import { useNavigate } from 'react-router-dom';
@@ -92,7 +92,8 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     const nameMatch = (c.name || '').toLowerCase().includes(term);
     const yearMatch = (c.birthYear || 0).toString().includes(term);
     const starMatch = (c.majorStars || '').includes(term);
-    return nameMatch || yearMatch || starMatch;
+    const creatorMatch = (c.creatorEmail || '').toLowerCase().includes(term);
+    return nameMatch || yearMatch || starMatch || creatorMatch;
   });
 
   const grouped: Record<string, Client[]> = {};
@@ -192,7 +193,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
           <input 
             type="text" 
-            placeholder="搜尋姓名、年份、主星 (如: 紫微)..." 
+            placeholder="搜尋姓名、年份、主星..." 
             className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all text-slate-700 shadow-sm" 
             value={searchTerm} 
             onChange={e=>setSearchTerm(e.target.value)} 
@@ -230,64 +231,83 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                     {items.length === 0 ? (
                       <div className="p-8 text-center text-slate-400 text-sm italic">此分類尚無資料</div>
                     ) : (
-                      items.map(c => (
-                        <div 
-                          key={c.id} 
-                          onClick={() => navigate(`/chart/${c.id}`)} 
-                          className="group relative p-3 sm:p-4 hover:bg-blue-50/50 cursor-pointer transition-colors flex items-center justify-between gap-3"
-                        >
-                          <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0 overflow-hidden">
-                            <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-sm shrink-0
-                              ${c.gender === '男' ? 'bg-gradient-to-br from-blue-400 to-blue-600' : 'bg-gradient-to-br from-pink-400 to-pink-600'}`}>
-                              {c.gender}
-                            </div>
-                            <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold text-base sm:text-lg text-slate-700 truncate max-w-[120px] sm:max-w-none">
-                                  {c.name}
-                                </span>
-                                {c.majorStars && (
-                                  <span className="text-[10px] sm:text-[11px] font-medium text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 whitespace-nowrap">
-                                    {c.majorStars}
+                      items.map(c => {
+                        // 判斷是否為自己建立的命盤
+                        const isMine = c.user_id === userProfile?.id;
+                        
+                        return (
+                          <div 
+                            key={c.id} 
+                            onClick={() => navigate(`/chart/${c.id}`)} 
+                            className="group relative p-3 sm:p-4 hover:bg-blue-50/50 cursor-pointer transition-colors flex items-center justify-between gap-3"
+                          >
+                            <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0 overflow-hidden">
+                              <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-sm shrink-0
+                                ${c.gender === '男' ? 'bg-gradient-to-br from-blue-400 to-blue-600' : 'bg-gradient-to-br from-pink-400 to-pink-600'}`}>
+                                {c.gender}
+                              </div>
+                              <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-base sm:text-lg text-slate-700 truncate max-w-[120px] sm:max-w-none">
+                                    {c.name}
                                   </span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-500 font-mono">
-                                <span className="hidden sm:inline text-slate-300">|</span>
-                                <span className="whitespace-nowrap">
-                                  {c.birthYear}.{c.birthMonth}.{c.birthDay}
-                                </span>
-                                <span className="text-slate-300">|</span>
-                                <span className="whitespace-nowrap">
-                                  {getTimeDisplay(c.birthHour, c.birthMinute)}
-                                </span>
+                                  {c.majorStars && (
+                                    <span className="text-[10px] sm:text-[11px] font-medium text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 whitespace-nowrap">
+                                      {c.majorStars}
+                                    </span>
+                                  )}
+                                  {/* 如果不是自己的，顯示建立者標籤 */}
+                                  {!isMine && c.creatorEmail && (
+                                    <span className="flex items-center gap-1 text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full border border-gray-200">
+                                        <User size={10} /> 建立者: {c.creatorEmail}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-500 font-mono">
+                                  <span className="hidden sm:inline text-slate-300">|</span>
+                                  <span className="whitespace-nowrap">
+                                    {c.birthYear}.{c.birthMonth}.{c.birthDay}
+                                  </span>
+                                  <span className="text-slate-300">|</span>
+                                  <span className="whitespace-nowrap">
+                                    {getTimeDisplay(c.birthHour, c.birthMinute)}
+                                  </span>
+                                </div>
                               </div>
                             </div>
-                          </div>
 
-                          <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); onEdit(c); }} 
-                              className={`p-2 rounded-full transition-colors 
-                                ${(!userProfile || userProfile.role === 'admin' || c.editCount < userProfile.maxEditsPerChart) 
-                                    ? 'text-slate-400 hover:text-blue-600 hover:bg-blue-100' 
+                            <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
+                              {/* 編輯按鈕：必須是自己建立的才能按 */}
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); if(isMine) onEdit(c); }} 
+                                className={`p-2 rounded-full transition-colors 
+                                  ${isMine && (!userProfile || userProfile.role === 'admin' || c.editCount < userProfile.maxEditsPerChart) 
+                                      ? 'text-slate-400 hover:text-blue-600 hover:bg-blue-100' 
+                                      : 'text-gray-200 cursor-not-allowed'
+                                  }`}
+                                title={isMine ? `編輯 (已修 ${c.editCount}/${userProfile?.role === 'admin' ? '∞' : userProfile?.maxEditsPerChart})` : '非本人建立，無法編輯'}
+                                disabled={!isMine || (userProfile?.role !== 'admin' && c.editCount >= (userProfile?.maxEditsPerChart || 3))}
+                              >
+                                <Edit2 size={18}/>
+                              </button>
+                              
+                              {/* 刪除按鈕：必須是自己建立的才能按 */}
+                              <button 
+                                onClick={(e) => { if(isMine) handleDelete(e, c.id); else e.stopPropagation(); }} 
+                                className={`p-2 rounded-full transition-colors ${
+                                    isMine 
+                                    ? 'text-slate-400 hover:text-red-600 hover:bg-red-100' 
                                     : 'text-gray-200 cursor-not-allowed'
                                 }`}
-                              title={`編輯 (已修 ${c.editCount}/${userProfile?.role === 'admin' ? '∞' : userProfile?.maxEditsPerChart})`}
-                              disabled={userProfile?.role !== 'admin' && c.editCount >= (userProfile?.maxEditsPerChart || 3)}
-                            >
-                              <Edit2 size={18}/>
-                            </button>
-                            <button 
-                              onClick={(e) => handleDelete(e, c.id)} 
-                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-100 rounded-full transition-colors"
-                              title="刪除"
-                            >
-                              <Trash2 size={18}/>
-                            </button>
+                                title={isMine ? "刪除" : "非本人建立，無法刪除"}
+                                disabled={!isMine}
+                              >
+                                <Trash2 size={18}/>
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 )}
