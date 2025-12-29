@@ -75,7 +75,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
       }
   }, [mode, isDivinationReady, loading]);
 
-  // 1. 基礎引擎：加入錯誤防護，避免 "wrong day" 錯誤導致白屏
+  // 1. 基礎引擎：加入錯誤防護
   const baseEngine = useMemo(() => {
     if (!client || currentHour === -1) return null;
     try {
@@ -115,44 +115,47 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
           client.gender
         );
     } catch (e) {
-        return null; // 初始化失敗直接回傳 null
+        return null;
     }
 
     if (mode === 'divination') {
         const data = displayEngine.getChartData();
         
+        // 【修正邏輯】
         if (isDivinationReady && divNum.every(d => d !== '')) {
-            const n1 = parseInt(divNum[0]);
-            const n2 = parseInt(divNum[1]);
-            const n3 = parseInt(divNum[2]);
-            const n4 = parseInt(divNum[3]);
-
-            let mingSum = n1 + n2;
-            while (mingSum > 12) {
-                const s = mingSum.toString();
-                mingSum = parseInt(s[0]) + parseInt(s[1]);
-            }
-            // ZHI: 0=子, 1=丑... 
-            // 命宮數字 1=子, 2=丑... (假設) -> 對應 index 為 mingSum - 1
-            const targetZhiIdx = (mingSum - 1) % 12;
+            // 1. 計算命宮數字 (AB)
+            let mingNum = parseInt(divNum[0] + divNum[1], 10);
             
-            let sihuaSum = n3 + n4;
-            while (sihuaSum > 12) {
-                const s = sihuaSum.toString();
-                sihuaSum = parseInt(s[0]) + parseInt(s[1]);
+            // 規則：大於 12 才拆分相加
+            while (mingNum > 12) {
+                const s = mingNum.toString();
+                mingNum = parseInt(s[0]) + parseInt(s[1]);
             }
             
+            // 轉換為地支 index (1=子(0), 2=丑(1)... 12=亥(11))
+            const targetZhiIdx = (mingNum - 1) % 12;
+            
+            // 2. 計算四化數字 (CD)
+            let sihuaNum = parseInt(divNum[2] + divNum[3], 10);
+            
+            // 規則：大於 12 才拆分相加
+            while (sihuaNum > 12) {
+                const s = sihuaNum.toString();
+                sihuaNum = parseInt(s[0]) + parseInt(s[1]);
+            }
+            
+            // 查表取天干 index (0=甲 ... 9=癸)
             let ganIdx = -1;
-            if (sihuaSum === 3) ganIdx = 0;
-            else if (sihuaSum === 4) ganIdx = 1;
-            else if (sihuaSum === 5) ganIdx = 2;
-            else if (sihuaSum === 6) ganIdx = 3;
-            else if (sihuaSum === 7) ganIdx = 4;
-            else if (sihuaSum === 8) ganIdx = 5;
-            else if (sihuaSum === 9) ganIdx = 6;
-            else if (sihuaSum === 0 || sihuaSum === 10) ganIdx = 7;
-            else if (sihuaSum === 1 || sihuaSum === 11) ganIdx = 8;
-            else if (sihuaSum === 2 || sihuaSum === 12) ganIdx = 9;
+            if (sihuaNum === 3) ganIdx = 0; // 甲
+            else if (sihuaNum === 4) ganIdx = 1; // 乙
+            else if (sihuaNum === 5) ganIdx = 2; // 丙
+            else if (sihuaNum === 6) ganIdx = 3; // 丁
+            else if (sihuaNum === 7) ganIdx = 4; // 戊
+            else if (sihuaNum === 8) ganIdx = 5; // 己
+            else if (sihuaNum === 9) ganIdx = 6; // 庚
+            else if (sihuaNum === 10 || sihuaNum === 0) ganIdx = 7; // 辛
+            else if (sihuaNum === 11 || sihuaNum === 1) ganIdx = 8; // 壬
+            else if (sihuaNum === 12 || sihuaNum === 2) ganIdx = 9; // 癸
 
             if (ganIdx !== -1) {
                 data.palaces.forEach(p => {
@@ -216,19 +219,19 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     return displayEngine.getChartData();
   }, [client, currentHour, daXianSeq, liuNianYear, showXiaoXian, mode, isDivinationReady]);
 
-  // 3. UI 顯示用變數 (需定義在 Loading 之後)
+  // 3. UI 顯示用變數 - 修正 divMingIndex 邏輯以匹配上方
   const divMingIndex = useMemo(() => {
       if (mode !== 'divination') return -1;
       if (!isDivinationReady) return -1;
       
-      const n1 = parseInt(divNum[0]);
-      const n2 = parseInt(divNum[1]);
-      let mingSum = n1 + n2;
-      while (mingSum > 12) {
-          const s = mingSum.toString();
-          mingSum = parseInt(s[0]) + parseInt(s[1]);
+      // 計算 AB
+      let mingNum = parseInt(divNum[0] + divNum[1], 10);
+      while (mingNum > 12) {
+          const s = mingNum.toString();
+          mingNum = parseInt(s[0]) + parseInt(s[1]);
       }
-      const targetZhiIdx = (mingSum - 1) % 12;
+      
+      const targetZhiIdx = (mingNum - 1) % 12;
       return chartData?.palaces.findIndex(p => p.zhiIndex === targetZhiIdx) ?? -1;
   }, [mode, divNum, chartData, isDivinationReady]);
 
@@ -291,7 +294,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
       return '(無主星)';
   }, [baseEngine, baseChartData, mode, divMingIndex, chartData]);
 
-  // Loading Block
   if (loading || !client || !baseChartData || !baseEngine || !chartData) {
     return (
         <div className="flex h-[100dvh] w-full items-center justify-center bg-gray-100">
@@ -300,7 +302,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     );
   }
 
-  // --- 【關鍵位置】變數宣告 (必須在 Loading 之後, Return 之前) ---
+  // --- 變數宣告 ---
   const benMingPos = baseEngine.getMingPos();
   
   const isLimitActive = daXianSeq >= 0 || liuNianYear !== null || showXiaoXian;
@@ -642,6 +644,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                 if (gridPos === 5)
                 return (
                     <div key="center" className="col-span-2 row-span-2 flex flex-col items-center justify-center p-2 border border-gray-300 bg-white z-10 relative">
+                        {/* 1. 時辰切換 */}
                         <div className="flex w-full justify-center gap-6 items-center mb-1 mt-2">
                             <button onClick={() => changeHour(-1)} className="text-gray-400 hover:text-gray-800 font-bold text-2xl select-none">&lt;</button>
                             <div onClick={isTimeModified ? resetTime : undefined} className={`text-lg font-bold select-none ${isTimeModified ? 'text-blue-600 cursor-pointer underline' : 'text-gray-600'}`} title={isTimeModified ? '點擊還原出生時辰' : ''}>
@@ -650,6 +653,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                             <button onClick={() => changeHour(1)} className="text-gray-400 hover:text-gray-800 font-bold text-2xl select-none">&gt;</button>
                         </div>
 
+                        {/* 2. 名字 + 本命主星 */}
                         <div className="flex flex-col items-center gap-1 mb-2">
                             <div className="text-3xl sm:text-4xl font-bold text-black tracking-widest text-center">
                                 {client.name}
@@ -659,6 +663,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                             </div>
                         </div>
 
+                        {/* 3. 命主資訊 */}
                         <div className="flex flex-col items-center w-full leading-tight gap-1">
                             <div className="text-gray-700 text-sm sm:text-base font-medium">
                                 {client.gender} {chartData.bureau}
