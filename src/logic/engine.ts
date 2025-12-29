@@ -98,9 +98,6 @@ export class ZiWeiEngine {
     this.solar = Solar.fromYmdHms(year, month, day, hour, minute, 0);
     
     // 【修正重點 1】夜子時（23:00-24:00）強制算作隔日
-    // 如果時間是 23 點，我們將農曆物件往後推一天，確保抓到的是「隔日」的農曆日數
-    // 例如：10/26 23:00 -> 會使用 10/27 (農曆 9/19) 的數據來安星
-    // 這樣才會符合「七殺在命 (9/19)」而非「破軍在命 (9/18)」
     let tempLunar = this.solar.getLunar();
     if (hour === 23) {
       tempLunar = tempLunar.next(1);
@@ -114,7 +111,7 @@ export class ZiWeiEngine {
     this.lunarMonth = Math.abs(this.lunar.getMonth());
     this.lunarDay = this.lunar.getDay();
     
-    // 時辰計算：23:00 仍算子時 (Index 0)，這部分保持不變
+    // 時辰計算：23:00 仍算子時 (Index 0)
     this.timeZhiIdx = Math.floor((hour + 1) / 2) % 12;
 
     const isYangYear = this.lunarYearGanIdx % 2 === 0;
@@ -610,17 +607,24 @@ export class ZiWeiEngine {
   public getChartData(): ChartData {
     const mingZhu = MING_ZHU_TABLE[this.palaces[this.mingPos].zhiIndex];
     const shenZhu = SHEN_ZHU_TABLE[this.lunarYearZhiIdx];
-
-    // 【修正重點 2】時間顯示補零
-    // 使用 padStart 確保 0 分顯示為 "00"
     const minuteStr = this.solar.getMinute().toString().padStart(2, '0');
+
+    // 【修正重點 2】顯示「早子」與「晚子」
+    // timeZhiIdx 為 0 代表是子時
+    let timeZhiStr = ZHI[this.timeZhiIdx];
+    if (this.timeZhiIdx === 0) {
+        // solar.getHour() 回傳的是 24 小時制的 0~23
+        if (this.solar.getHour() === 23) {
+            timeZhiStr = '晚子';
+        } else {
+            timeZhiStr = '早子';
+        }
+    }
 
     return {
       gender: this.gender,
       solarDate: `${this.solar.getYear()}-${this.solar.getMonth()}-${this.solar.getDay()} ${this.solar.getHour()}:${minuteStr}`,
-      lunarDate: `${this.lunar.getYearInGanZhi()}年 ${this.lunar.getMonthInChinese()}月 ${this.lunar.getDayInChinese()} ${
-        ZHI[this.timeZhiIdx]
-      }時`,
+      lunarDate: `${this.lunar.getYearInGanZhi()}年 ${this.lunar.getMonthInChinese()}月 ${this.lunar.getDayInChinese()} ${timeZhiStr}時`,
       lunarYear: this.lunar.getYear(),
       bazi: `${this.lunar.getYearInGanZhi()} ${this.lunar.getMonthInGanZhi()} ${this.lunar.getDayInGanZhi()} ${this.lunar.getTimeInGanZhi()}`,
       bureau: this.bureauName,

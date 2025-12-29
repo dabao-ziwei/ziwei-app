@@ -3,9 +3,10 @@ import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu } from 'lu
 import { loadClients, deleteClient, type Client } from '../db';
 import { supabase } from '../supabase';
 import { useNavigate } from 'react-router-dom';
+import { ZHI } from '../logic/constants'; // 1. 引入 ZHI 常數
 
 const CATEGORIES = ["我", "家人", "朋友", "客戶", "名人", "其他"];
-const STORAGE_KEY = 'ziwei_expanded_cats'; // 定義儲存的 Key
+const STORAGE_KEY = 'ziwei_expanded_cats';
 
 interface ClientListProps {
   onAdd: () => void;
@@ -16,13 +17,11 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const [clients, setClients] = useState<Client[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // 修改 1: 初始化時優先讀取 LocalStorage，如果沒有才全部展開
   const [expandedCats, setExpandedCats] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       return saved ? JSON.parse(saved) : CATEGORIES;
     } catch (e) {
-      console.warn('讀取分類狀態失敗，回復預設值', e);
       return CATEGORIES;
     }
   });
@@ -30,7 +29,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  // 修改 2: 當 expandedCats 改變時，自動存入 LocalStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(expandedCats));
   }, [expandedCats]);
@@ -45,8 +43,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
 
   useEffect(() => {
     refreshData();
-    
-    // 訂閱資料庫變更
     const channel = supabase
       .channel('client_list_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => {
@@ -58,6 +54,20 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  // 2. 輔助函式：取得顯示用的時辰字串 (含早晚子判斷)
+  const getTimeDisplay = (hour: number, minute: number) => {
+    const minuteStr = minute.toString().padStart(2, '0'); // 分鐘補零
+    const zhiIdx = Math.floor((hour + 1) / 2) % 12;
+    let zhiStr = ZHI[zhiIdx];
+    
+    // 判斷早晚子
+    if (zhiIdx === 0) {
+      zhiStr = hour === 23 ? '晚子' : '早子';
+    }
+
+    return `${hour}:${minuteStr}(${zhiStr}時)`;
+  };
 
   const filtered = clients.filter(c => 
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -169,40 +179,52 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                         <div 
                           key={c.id} 
                           onClick={() => navigate(`/chart/${c.id}`)} 
-                          className="group relative p-4 hover:bg-blue-50/50 cursor-pointer transition-colors flex items-center justify-between gap-4"
+                          className="group relative p-3 sm:p-4 hover:bg-blue-50/50 cursor-pointer transition-colors flex items-center justify-between gap-3"
                         >
-                          {/* 左側：頭像 + 資訊 */}
-                          <div className="flex items-center gap-4 flex-1 min-w-0">
+                          {/* 左側內容區：頭像 + 所有文字資訊 (線性排列) */}
+                          <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0 overflow-hidden">
                             {/* 頭像 */}
-                            <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-sm shrink-0
+                            <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-sm shrink-0
                               ${c.gender === '男' ? 'bg-gradient-to-br from-blue-400 to-blue-600' : 'bg-gradient-to-br from-pink-400 to-pink-600'}`}>
                               {c.gender}
                             </div>
 
-                            {/* 文字資訊區 */}
-                            <div className="flex flex-col md:flex-row md:items-center md:gap-4 flex-1 min-w-0">
+                            {/* 線性排列的資訊區：手機版可能會自動換行，電腦版盡量一直線 */}
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 flex-1 min-w-0">
                               
-                              {/* 第一行：姓名 + 主星 */}
-                              <div className="flex items-center gap-2 min-w-[140px]">
-                                <span className="font-bold text-lg text-slate-700 truncate">{c.name}</span>
+                              {/* 第一組：姓名 + 主星 */}
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-base sm:text-lg text-slate-700 truncate max-w-[120px] sm:max-w-none">
+                                  {c.name}
+                                </span>
                                 {c.majorStars && (
-                                  <span className="text-[11px] font-medium text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-100 whitespace-nowrap shrink-0">
+                                  <span className="text-[10px] sm:text-[11px] font-medium text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 whitespace-nowrap">
                                     {c.majorStars}
                                   </span>
                                 )}
                               </div>
 
-                              {/* 第二行/右側：日期資訊 */}
-                              <div className="text-sm text-slate-400 font-mono flex items-center gap-2 md:ml-auto md:mr-8 mt-1 md:mt-0">
-                                <span>{c.birthYear}.{c.birthMonth}.{c.birthDay}</span>
+                              {/* 第二組：日期時間 (電腦版顯示 | 分隔，手機版換行顯示) */}
+                              <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-500 font-mono">
+                                {/* 電腦版的分隔線 */}
                                 <span className="hidden sm:inline text-slate-300">|</span>
-                                <span className="text-slate-500">{c.birthHour}時</span>
+                                
+                                <span className="whitespace-nowrap">
+                                  {c.birthYear}.{c.birthMonth}.{c.birthDay}
+                                </span>
+                                
+                                <span className="text-slate-300">|</span>
+                                
+                                <span className="whitespace-nowrap">
+                                  {getTimeDisplay(c.birthHour, c.birthMinute)}
+                                </span>
                               </div>
+
                             </div>
                           </div>
 
-                          {/* 右側：操作按鈕 */}
-                          <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
+                          {/* 右側：操作按鈕 (hover 顯示) */}
+                          <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
                             <button 
                               onClick={(e) => { e.stopPropagation(); onEdit(c); }} 
                               className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-100 rounded-full transition-colors"
