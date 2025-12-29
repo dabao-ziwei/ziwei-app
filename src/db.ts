@@ -33,7 +33,17 @@ export interface Client {
   majorStars?: string;
   editCount?: number;
   creatorEmail?: string;
-  is_deleted?: boolean; // 新增：讓前端知道這是否為軟刪除資料
+  is_deleted?: boolean;
+}
+
+// 新增：關係介面
+export interface Relationship {
+  id: string;
+  from_client_id: string;
+  to_client_id: string;
+  relation_type: string;
+  // 關聯對象的詳細資料 (透過 Join 取得)
+  to_client?: Client;
 }
 
 // --- 一般使用者功能 ---
@@ -73,10 +83,8 @@ export const loadClients = async (): Promise<Client[]> => {
     .order('created_at', { ascending: false });
 
   if (isSuperViewer) {
-      // 超級管理員：可以看到所有資料 (包含 is_deleted = true)
-      // 不加 .eq('is_deleted', false) 濾條件
+      // 超級管理員可以看到所有資料
   } else {
-      // 一般使用者：只能看自己的，且看不到已刪除的
       query = query.eq('user_id', user.id).eq('is_deleted', false);
   }
 
@@ -87,7 +95,6 @@ export const loadClients = async (): Promise<Client[]> => {
     return [];
   }
 
-  // 抓取 Email 對應 (僅管理員需要)
   let userIdToEmailMap: Record<string, string> = {};
   if (isSuperViewer) {
       const { data: profiles } = await supabase.from('profiles').select('id, email');
@@ -113,15 +120,12 @@ export const loadClients = async (): Promise<Client[]> => {
     majorStars: item.major_stars,
     editCount: item.edit_count ?? 0,
     creatorEmail: userIdToEmailMap[item.user_id] || '',
-    is_deleted: item.is_deleted // 回傳刪除狀態
+    is_deleted: item.is_deleted
   }));
 };
 
 export const getClients = loadClients;
 
-// 【修改】刪除命盤邏輯
-// 一般人 -> 軟刪除 (標記)
-// 管理員 -> 硬刪除 (清空)
 export const deleteClient = async (id: string): Promise<boolean> => {
     const { data: { user } } = await supabase.auth.getUser();
     const isSuperAdmin = user?.email === SUPER_VIEW_EMAIL;
@@ -129,11 +133,9 @@ export const deleteClient = async (id: string): Promise<boolean> => {
     let error;
 
     if (isSuperAdmin) {
-        // 管理員：執行真正的物理刪除
         const res = await supabase.from('clients').delete().eq('id', id);
         error = res.error;
     } else {
-        // 一般使用者：執行軟刪除
         const res = await supabase
             .from('clients')
             .update({ is_deleted: true })
@@ -233,6 +235,67 @@ export const saveClient = async (clientData: any): Promise<string | null> => {
     }
 };
 
+// --- 新增：關係功能 ---
+
+export const getRelationships = async (clientId: string): Promise<Relationship[]> => {
+    // 抓取 "我是起點" 的關係，並 Join "終點" 的 Client 資料
+    const { data, error } = await supabase
+        .from('relationships')
+        .select(`
+            *,
+            to_client:clients!to_client_id (*)
+        `)
+        .eq('from_client_id', clientId);
+
+    if (error) {
+        console.error('Fetch relationships error:', error);
+        return [];
+    }
+
+    return data.map((r: any) => ({
+        id: r.id,
+        from_client_id: r.from_client_id,
+        to_client_id: r.to_client_id,
+        relation_type: r.relation_type,
+        to_client: r.to_client ? {
+            id: r.to_client.id,
+            name: r.to_client.name,
+            gender: r.to_client.gender,
+            birthYear: r.to_client.birth_year,
+            birthMonth: r.to_client.birth_month,
+            birthDay: r.to_client.birth_day,
+            birthHour: r.to_client.birth_hour,
+            birthMinute: r.to_client.birth_minute,
+            type: r.to_client.type,
+            majorStars: r.to_client.major_stars
+        } : undefined
+    }));
+};
+
+export const addRelationship = async (fromId: string, toId: string, type: string): Promise<boolean> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+
+    const { error } = await supabase.from('relationships').insert({
+        user_id: user.id,
+        from_client_id: fromId,
+        to_client_id: toId,
+        relation_type: type
+    });
+
+    if (error) {
+        console.error('Add relationship error:', error);
+        return false;
+    }
+    return true;
+};
+
+export const deleteRelationship = async (relId: string): Promise<boolean> => {
+    const { error } = await supabase.from('relationships').delete().eq('id', relId);
+    return !error;
+};
+
+
 // --- 管理員專用功能 ---
 
 export const getAllProfilesWithStats = async (): Promise<UserProfile[]> => {
@@ -279,38 +342,23 @@ export const updateProfile = async (id: string, updates: Partial<UserProfile>): 
   return !error;
 };
 
-// 【修改】刪除使用者邏輯
-// 先過戶 (Transfer) -> 再刪除 (Delete)
 export const deleteUserProfile = async (targetUserId: string): Promise<boolean> => {
-    // 1. 取得超級管理員 (自己) 的 ID
     const { data: { user: currentUser } } = await supabase.auth.getUser();
-    
-    // 安全檢查：只有超級管理員可以執行此操作
     if (currentUser?.email !== SUPER_VIEW_EMAIL) return false;
 
-    // 2. 將該使用者的所有命盤 (包含軟刪除的) 轉移給超級管理員
     const { error: transferError } = await supabase
         .from('clients')
         .update({ user_id: currentUser.id })
         .eq('user_id', targetUserId);
 
-    if (transferError) {
-        console.error('Transfer clients failed:', transferError);
-        return false; // 轉移失敗則中止，保護資料
-    }
+    if (transferError) return false;
 
-    // 3. 轉移成功後，才刪除使用者 Profile
-    // (注意：Auth User 的刪除通常需透過 Supabase 後台或 Edge Function，
-    // 這裡刪除 profiles 雖然無法完全刪除登入帳號，但會切斷其與系統的連結)
     const { error: deleteError } = await supabase
         .from('profiles')
         .delete()
         .eq('id', targetUserId);
 
-    if (deleteError) {
-        console.error('Delete profile failed:', deleteError);
-        return false;
-    }
+    if (deleteError) return false;
 
     return true;
 };

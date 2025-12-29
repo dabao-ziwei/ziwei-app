@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, UserCog, LogOut, User, Sparkles } from 'lucide-react';
-import { loadClients, deleteClient, getMyProfile, getUsedChartCount, type Client, type UserProfile } from '../db';
+import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, UserCog, LogOut, User, Sparkles, Network } from 'lucide-react';
+import { loadClients, deleteClient, getMyProfile, getUsedChartCount, saveClient, type Client, type UserProfile } from '../db';
 import { supabase } from '../supabase';
 import { useNavigate } from 'react-router-dom';
 import { ZHI } from '../logic/constants';
 import { UserManagementModal } from '../components/UserManagementModal'; 
 import { DivinationSetupModal } from '../components/DivinationSetupModal';
+import { RelationshipModal } from '../components/RelationshipModal'; // 新增引用
 
 const CATEGORIES = ["我", "家人", "朋友", "客戶", "名人", "其他"];
 const STORAGE_KEY_CATS = 'ziwei_expanded_cats';
@@ -45,6 +46,9 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false); 
   const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false); 
   const [isDivinationModalOpen, setIsDivinationModalOpen] = useState(false);
+  
+  // 關係管理 Modal
+  const [relationClient, setRelationClient] = useState<Client | null>(null);
 
   const navigate = useNavigate();
 
@@ -122,8 +126,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const grouped: Record<string, Client[]> = {};
   CATEGORIES.forEach(c => grouped[c] = []);
   
-  // 紫占不應該出現在列表中，但為了相容舊資料，若有舊資料仍顯示
-  // 新邏輯不會產生 type='紫占' 的 DB 資料
   const hasDivination = filtered.some(c => c.type === '紫占');
   if (hasDivination) grouped['紫占'] = [];
 
@@ -147,9 +149,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     }
   };
 
-  // 【核心修正】紫占不存檔，直接傳遞資料並跳轉
   const handleCreateDivination = async (data: any) => {
-      // 隨機產生一個暫時 ID，避免元件 key 報錯 (雖然不存 DB)
       const tempClient = { 
           ...data, 
           id: `temp-${Date.now()}`,
@@ -179,7 +179,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
 
             {isMenuOpen && (
                 <div className="absolute top-12 left-0 w-52 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
-                    {/* 紫微占卜按鈕 */}
                     {userProfile?.can_use_divination && (
                         <button 
                             onClick={() => { setIsDivinationModalOpen(true); setIsMenuOpen(false); }} 
@@ -216,6 +215,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         </div>
 
         <div className="flex gap-4 items-center">
+            
             {isSuperAdmin && (
                 <div 
                     className="hidden sm:flex items-center gap-2 cursor-pointer select-none bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-200 transition-colors"
@@ -351,6 +351,17 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                                 )}
 
                                 <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                  {/* 新增：關係管理按鈕 (紫占不顯示) */}
+                                  {!isZiZhan && isMine && (
+                                      <button 
+                                        onClick={(e) => { e.stopPropagation(); setRelationClient(c); }} 
+                                        className="p-2 rounded-full text-slate-400 hover:text-green-600 hover:bg-green-100 transition-colors"
+                                        title="人際關係"
+                                      >
+                                        <Network size={18}/>
+                                      </button>
+                                  )}
+
                                   {!isZiZhan && (
                                       <button 
                                         onClick={(e) => { e.stopPropagation(); if(isMine) onEdit(c); }} 
@@ -402,6 +413,15 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         onClose={() => setIsDivinationModalOpen(false)}
         onConfirm={handleCreateDivination}
       />
+
+      {/* 關係管理 Modal */}
+      {relationClient && (
+          <RelationshipModal 
+            isOpen={!!relationClient}
+            onClose={() => setRelationClient(null)}
+            currentClient={relationClient}
+          />
+      )}
     </div>
   );
 };
