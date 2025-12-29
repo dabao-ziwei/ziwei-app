@@ -1,27 +1,65 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { toPng } from 'html-to-image';
+import { useParams, useNavigate } from 'react-router-dom'; // 新增路由 hooks
 import { PalaceCard } from './PalaceCard';
-import type { Client } from '../db';
+import { getClient, type Client } from '../db'; // 引入 getClient
 import { ZiWeiEngine } from '../logic/engine';
 import { GAN, ZHI, PALACE_NAMES } from '../logic/constants';
+import { Loader2 } from 'lucide-react';
 
 interface ChartBoardProps {
-  client: Client;
+  client?: Client; // 變為可選，因為可能由 URL ID 載入
   onBack?: () => void;
 }
 
-export const ChartBoard: React.FC<ChartBoardProps> = ({ client, onBack }) => {
+export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBack }) => {
+  const { id } = useParams<{ id: string }>(); // 從網址取得 ID
+  const navigate = useNavigate();
+  
+  const [client, setClient] = useState<Client | null>(propClient || null);
+  const [loading, setLoading] = useState(!propClient);
+  
+  // 內部狀態
   const [selectedPalace, setSelectedPalace] = useState<number | null>(null);
   const [flyingPalace, setFlyingPalace] = useState<number | null>(null);
-
   const [daXianSeq, setDaXianSeq] = useState<number>(-1);
   const [liuNianYear, setLiuNianYear] = useState<number | null>(null);
   const [showXiaoXian, setShowXiaoXian] = useState<boolean>(false);
-  const [currentHour, setCurrentHour] = useState<number>(client.birthHour);
+  const [currentHour, setCurrentHour] = useState<number>(-1); // 初始值設為 -1，拿到 client 後再更新
 
   const chartRef = useRef<HTMLDivElement>(null);
 
+  // 1. 如果有 ID 但沒有 client 資料，就去資料庫抓 (處理重新整理的情況)
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!client && id) {
+        setLoading(true);
+        try {
+            const data = await getClient(id);
+            if (data) {
+                setClient(data);
+                setCurrentHour(data.birthHour);
+            } else {
+                alert("找不到此命盤");
+                navigate('/');
+            }
+        } catch (e) {
+            console.error(e);
+            navigate('/');
+        } finally {
+            setLoading(false);
+        }
+      } else if (client && currentHour === -1) {
+          // 初始化 currentHour
+          setCurrentHour(client.birthHour);
+      }
+    };
+    fetchData();
+  }, [id, client, navigate]);
+
+  // 排盤引擎
   const engine = useMemo(() => {
+    if (!client || currentHour === -1) return null;
     return new ZiWeiEngine(
       client.birthYear,
       client.birthMonth,
@@ -32,7 +70,18 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client, onBack }) => {
     );
   }, [client, currentHour]);
 
-  const baseChartData = useMemo(() => engine.getChartData(), [engine]);
+  const baseChartData = useMemo(() => engine?.getChartData(), [engine]);
+
+  // 如果正在載入或發生錯誤
+  if (loading || !client || !baseChartData || !engine) {
+    return (
+        <div className="flex h-screen w-full items-center justify-center bg-gray-100">
+            <Loader2 className="animate-spin text-gray-500" size={48} />
+        </div>
+    );
+  }
+
+  // --- 以下邏輯與原本相同，僅修改 onBack 處理 ---
 
   const resetAllStates = () => {
     setDaXianSeq(-1);
@@ -57,9 +106,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client, onBack }) => {
 
   const isTimeModified = currentHour !== client.birthHour;
 
-  const currentHourZhi = useMemo(() => {
-    return ZHI[Math.floor((currentHour + 1) / 2) % 12];
-  }, [currentHour]);
+  const currentHourZhi = ZHI[Math.floor((currentHour + 1) / 2) % 12];
 
   const isCleanState =
     daXianSeq === -1 &&
@@ -83,7 +130,8 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client, onBack }) => {
     }
   };
 
-  const daXianList = useMemo(() => {
+  const daXianList = (() => {
+    if (!baseChartData) return [];
     const list = [];
     const startPos = engine.getMingPos();
     const direction = baseChartData.direction || 1;
@@ -108,9 +156,9 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client, onBack }) => {
       }
     }
     return list;
-  }, [baseChartData, engine]);
+  })();
 
-  const liuNianList = useMemo(() => {
+  const liuNianList = (() => {
     const targetSeq = daXianSeq === -1 ? 0 : daXianSeq;
     const targetDaXian = daXianList[targetSeq];
     if (!targetDaXian) return [];
@@ -124,15 +172,15 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client, onBack }) => {
       list.push({ year, age, label: `${year}${GAN[gan]}${ZHI[zhi]} ${age}` });
     }
     return list;
-  }, [daXianSeq, daXianList]);
+  })();
 
-  const xiaoXianMingIdx = useMemo(() => {
+  const xiaoXianMingIdx = (() => {
     if (!liuNianYear) return -1;
     const virtualAge = liuNianYear - baseChartData.lunarYear + 1;
     return engine.getXiaoXianPos(virtualAge);
-  }, [liuNianYear, baseChartData.lunarYear, engine]);
+  })();
 
-  const chartData = useMemo(() => {
+  const chartData = (() => {
     let daGan = -1;
     let liuGan = -1;
     let liuZhi = -1;
@@ -158,15 +206,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client, onBack }) => {
     engine.computeSiHua(daGan, liuGan, xiaoGan);
 
     return engine.getChartData();
-  }, [
-    engine,
-    baseChartData,
-    daXianSeq,
-    liuNianYear,
-    xiaoXianMingIdx,
-    daXianList,
-    showXiaoXian,
-  ]);
+  })();
 
   const getRelativeNames = (currentIdx: number) => {
     let daName = undefined;
@@ -241,33 +281,21 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client, onBack }) => {
     }
   };
 
-  const flyingStarsLookup = useMemo(() => {
+  const flyingStarsLookup = (() => {
     if (flyingPalace === null) return {};
     const targetPalace = baseChartData.palaces[flyingPalace];
     if (!targetPalace) return {};
     return engine.getSiHuaMap(targetPalace.ganIndex);
-  }, [flyingPalace, baseChartData, engine]);
+  })();
 
   const gridLayout = [
-    5,
-    6,
-    7,
-    8,
-    4,
-    null,
-    null,
-    9,
-    3,
-    null,
-    null,
-    10,
-    2,
-    1,
-    0,
-    11,
+    5, 6, 7, 8,
+    4, null, null, 9,
+    3, null, null, 10,
+    2, 1, 0, 11,
   ];
 
-  const connections = useMemo(() => {
+  const connections = (() => {
     if (selectedPalace === null)
       return { self: -1, tri1: -1, tri2: -1, opp: -1 };
     return {
@@ -276,7 +304,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client, onBack }) => {
       tri2: (selectedPalace + 8) % 12,
       opp: (selectedPalace + 6) % 12,
     };
-  }, [selectedPalace]);
+  })();
 
   const getAnchorCoord = (palaceIdx: number) => {
     const map: { [key: number]: { x: number; y: number } } = {
@@ -298,11 +326,17 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client, onBack }) => {
 
   const benMingPos = engine.getMingPos();
 
+  // 修改：返回按鈕的邏輯
+  const handleBack = () => {
+      if (onBack) onBack(); // 為了相容
+      else navigate('/'); // 使用路由返回
+  };
+
   return (
     <div className="flex flex-col h-full w-full bg-white overflow-hidden relative">
       <div className="absolute top-4 left-4 z-50 flex flex-col gap-2 items-start">
         <button
-          onClick={onBack}
+          onClick={handleBack}
           className="bg-white text-gray-700 px-3 py-2 rounded-lg shadow-md hover:bg-gray-100 flex items-center gap-1.5 transition-all border border-gray-300"
         >
           <svg
@@ -351,7 +385,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client, onBack }) => {
           ref={chartRef}
           className="relative w-full max-w-[1200px] aspect-[4/3] bg-white border-2 border-gray-800 shadow-xl z-10 shrink-1 min-h-0 flex-1"
         >
-          {/* SVG 繪圖層 (僅保留三方四正) */}
+          {/* SVG 繪圖層 */}
           <svg className="absolute inset-0 w-full h-full pointer-events-none z-40">
             {selectedPalace !== null &&
               (() => {

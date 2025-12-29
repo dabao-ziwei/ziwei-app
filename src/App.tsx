@@ -1,269 +1,111 @@
-import { useState, useEffect, useMemo } from 'react';
-import {
-  Menu, Plus, Search, ChevronDown, ChevronUp, RotateCcw, Trash2, Edit2, LogOut
-} from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Routes, Route, Navigate, Outlet } from 'react-router-dom'; // 1. 引入路由組件
 import { ChartBoard } from './components/ChartBoard';
 import { AddChartModal } from './components/AddChartModal';
 import { Auth } from './components/Auth';
-import { UpdatePassword } from './components/UpdatePassword'; // 新增引入
-import { loadClients, saveClient, deleteClient, restoreClient, type Client } from './db';
-import { ZHI } from './logic/constants';
+import { UpdatePassword } from './components/UpdatePassword';
+import { ClientList } from './pages/ClientList'; // 引入 ClientList 頁面
+import { saveClient, type Client } from './db';
 import { supabase } from './supabase';
-
-const CATEGORY_ORDER = ['我', '家人', '朋友', '客戶', '名人', '其他'];
+import { Loader2 } from 'lucide-react';
 
 function App() {
   const [session, setSession] = useState<any>(null);
-  const [isRecovery, setIsRecovery] = useState(false); // 新增：重設密碼模式
+  const [loading, setLoading] = useState(true);
+  const [isRecovery, setIsRecovery] = useState(false);
 
-  const [clients, setClients] = useState<Client[]>([]);
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  // Modal 狀態 (仍然由 App 控制，因為它通常跨頁面存在，或可移至 ClientList)
+  // 為了簡單起見，我們將新增功能保留在 ClientList 觸發，但 Modal 放在這裡或 ClientList 皆可
+  // 這裡演示將 Modal 狀態與 ClientList 結合的邏輯
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({
-    我: true, 家人: true, 朋友: true, 客戶: true, 名人: true, 其他: true,
-  });
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
+    // 檢查初始 Session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      // 關鍵邏輯：如果是密碼重設事件，開啟重設模式
       if (event === 'PASSWORD_RECOVERY') {
         setIsRecovery(true);
       }
       setSession(session);
+      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const refreshData = async () => {
-    if (session) {
-      const data = await loadClients(isAdmin);
-      setClients(data);
-    }
-  };
-
-  useEffect(() => {
-    refreshData();
-  }, [isAdmin, session]);
-
   const handleSaveClient = async (clientData: any) => {
-    const id = await saveClient(clientData);
-    await refreshData();
-    setSelectedClientId(id);
+    await saveClient(clientData);
     setIsModalOpen(false);
     setEditingClient(null);
+    // ClientList 透過 Supabase 訂閱會自動更新，或我們可以強制重整，
+    // 但在路由架構下，ClientList 會自己處理資料讀取。
   };
 
-  const handleEdit = (e: React.MouseEvent, client: Client) => {
-    e.stopPropagation();
-    setEditingClient(client);
-    setIsModalOpen(true);
-  };
+  // 載入畫面
+  if (loading) {
+    return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin" /></div>;
+  }
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    if (confirm('是否確認刪除')) {
-      await deleteClient(id);
-      await refreshData();
-    }
-  };
-
-  const handleRestore = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    await restoreClient(id);
-    await refreshData();
-  };
-
-  const toggleCategory = (cat: string) => {
-    setExpandedCats((prev) => ({ ...prev, [cat]: !prev[cat] }));
-  };
-
-  const groupedClients = useMemo(() => {
-    const groups: Record<string, Client[]> = {};
-    CATEGORY_ORDER.forEach((cat) => (groups[cat] = []));
-
-    clients.forEach((client) => {
-      const term = searchTerm.toLowerCase();
-      const matchSearch =
-        client.name.toLowerCase().includes(term) ||
-        client.birthYear.toString().includes(term) ||
-        (client.majorStars && client.majorStars.includes(term));
-
-      if (matchSearch) {
-        const type = client.type || '其他';
-        if (!groups[type]) groups[type] = [];
-        groups[type].push(client);
-      }
-    });
-    return groups;
-  }, [clients, searchTerm]);
-
-  // 1. 如果正在重設密碼，優先顯示重設畫面
+  // 1. 密碼重設流程
   if (isRecovery) {
     return <UpdatePassword onComplete={() => setIsRecovery(false)} />;
   }
 
-  // 2. 如果沒有登入，顯示登入畫面
-  if (!session) {
-    return <Auth />;
-  }
-
-  const selectedClient = clients.find((c) => c.id === selectedClientId);
-
-  if (selectedClient) {
+  // 2. 保護路由外殼 (Layout)
+  const ProtectedLayout = () => {
+    if (!session) return <Navigate to="/login" replace />;
     return (
-      <div className="flex flex-col h-screen bg-gray-100 overflow-hidden">
-        <div className="flex-1 w-full h-full flex items-center justify-center p-1 bg-gray-200/50">
-          <ChartBoard
-            client={selectedClient}
-            onBack={() => setSelectedClientId(null)}
-          />
-        </div>
+      <div className="w-full h-screen bg-[#f8f9fa]">
+        <Outlet />
+        {/* Modal 放在 Layout 層，確保任何子頁面都能呼叫 (目前主要由 List 呼叫) */}
+        <AddChartModal
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false);
+            setEditingClient(null);
+          }}
+          onSave={handleSaveClient}
+          editData={editingClient}
+        />
       </div>
     );
-  }
+  };
 
+  // 3. 路由定義
   return (
-    <div className="flex flex-col h-screen bg-[#f8f9fa] font-sans text-gray-900">
-      <div className={`px-4 py-3 flex justify-between items-center shadow-sm sticky top-0 z-10 transition-colors bg-white text-gray-900`}>
-        <div className="flex items-center gap-3">
-          <button className="opacity-50 hover:opacity-100 p-1 rounded-full">
-            <Menu size={24} />
-          </button>
-          <h1 className="text-xl font-bold">命盤資料庫</h1>
-        </div>
-        <div className="flex gap-2">
-           <button
-            onClick={() => {
-              setEditingClient(null);
-              setIsModalOpen(true);
-            }}
-            className="bg-red-700 hover:bg-red-800 text-white w-9 h-9 rounded-full flex items-center justify-center shadow-md transition-colors"
-          >
-            <Plus size={24} />
-          </button>
-          <button
-             onClick={() => supabase.auth.signOut()}
-             className="bg-gray-200 hover:bg-gray-300 text-gray-700 w-9 h-9 rounded-full flex items-center justify-center shadow-md transition-colors"
-             title="登出"
-          >
-             <LogOut size={18} />
-          </button>
-        </div>
-      </div>
-
-      <div className="p-4 flex-1 overflow-y-auto">
-        <div className="max-w-6xl mx-auto w-full relative mb-6">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-          <input
-            type="text"
-            placeholder="搜尋姓名、年份、主星(如:武曲)..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-white border border-gray-200 text-gray-700 pl-11 pr-4 py-3 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-red-100 focus:border-red-300 transition-all text-sm placeholder-gray-400"
-          />
-        </div>
-
-        <div className="max-w-6xl mx-auto w-full space-y-4">
-          {CATEGORY_ORDER.map((category) => {
-            const groupList = groupedClients[category];
-            const count = groupList.length;
-            const isExpanded = expandedCats[category] && count > 0;
-
-            return (
-              <div key={category} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <button
-                  onClick={() => toggleCategory(category)}
-                  className="w-full flex items-center justify-between px-5 py-4 bg-white hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-gray-700 text-base">{category}</span>
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${count > 0 ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-400'}`}>
-                      {count}
-                    </span>
-                  </div>
-                  <div className="text-gray-400">
-                    {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                  </div>
-                </button>
-
-                {isExpanded && (
-                  <div className="border-t border-gray-100">
-                    <div className="divide-y divide-gray-50">
-                      {groupList.map((client) => {
-                        const zhiChar = ZHI[Math.floor((client.birthHour + 1) / 2) % 12];
-                        const minuteStr = client.birthMinute.toString().padStart(2, '0');
-
-                        return (
-                          <div
-                            key={client.id}
-                            onClick={() => !client.isDeleted && setSelectedClientId(client.id)}
-                            className={`flex items-center justify-between px-5 py-3 transition-colors group relative ${client.isDeleted ? 'bg-red-50 opacity-70 cursor-not-allowed' : 'hover:bg-gray-50 cursor-pointer'}`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${client.gender === '男' ? 'bg-blue-100 text-blue-600' : 'bg-pink-100 text-pink-600'}`}>
-                                {client.gender}
-                              </div>
-                              <div>
-                                <div className="font-bold text-gray-700 flex items-center gap-2">
-                                  {client.name}
-                                  {client.majorStars && (
-                                    <span className="text-xs font-normal text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
-                                      {client.majorStars}
-                                    </span>
-                                  )}
-                                  {client.isDeleted && <span className="text-[10px] bg-red-600 text-white px-1 rounded">已刪除</span>}
-                                </div>
-                                <div className="text-xs text-gray-400 font-medium">
-                                  {client.birthYear}.{client.birthMonth}.{client.birthDay} {client.birthHour}:{minuteStr} ({zhiChar})
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-1">
-                              {client.isDeleted ? (
-                                <button onClick={(e) => handleRestore(e, client.id)} className="p-2 text-green-600 hover:bg-green-50 rounded-full" title="還原">
-                                  <RotateCcw size={18} />
-                                </button>
-                              ) : (
-                                <>
-                                  <button onClick={(e) => handleEdit(e, client)} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full">
-                                    <Edit2 size={16} />
-                                  </button>
-                                  <button onClick={(e) => handleDelete(e, client.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full">
-                                    <Trash2 size={16} />
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
+    <Routes>
+      <Route path="/login" element={!session ? <Auth /> : <Navigate to="/" replace />} />
       
-      <AddChartModal
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setEditingClient(null);
-        }}
-        onSave={handleSaveClient}
-        editData={editingClient}
-      />
-    </div>
+      <Route element={<ProtectedLayout />}>
+        {/* 首頁：列表 */}
+        <Route 
+          path="/" 
+          element={
+            <ClientList 
+              onAdd={() => {
+                setEditingClient(null);
+                setIsModalOpen(true);
+              }}
+              onEdit={(client) => {
+                setEditingClient(client);
+                setIsModalOpen(true);
+              }}
+            />
+          } 
+        />
+        
+        {/* 命盤詳情頁：帶 ID */}
+        <Route path="/chart/:id" element={<ChartBoard />} />
+      </Route>
+
+      {/* 404 導回首頁 */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
 
