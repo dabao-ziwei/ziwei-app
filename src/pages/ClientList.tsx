@@ -45,7 +45,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false); 
   const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false); 
   
-  // 紫占 Modal
   const [isDivinationModalOpen, setIsDivinationModalOpen] = useState(false);
 
   const navigate = useNavigate();
@@ -124,7 +123,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const grouped: Record<string, Client[]> = {};
   CATEGORIES.forEach(c => grouped[c] = []);
   
-  // 增加「紫占」分類
   const hasDivination = filtered.some(c => c.type === '紫占');
   if (hasDivination) grouped['紫占'] = [];
 
@@ -148,12 +146,10 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     }
   };
 
-  // 處理紫占建立
   const handleCreateDivination = async (data: any) => {
       try {
           const savedId = await saveClient(data);
           if (savedId) {
-              // 導向紫占專用 Route
               navigate(`/divination/${savedId}`);
           }
       } catch (err) {
@@ -209,7 +205,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
 
         <div className="flex gap-4 items-center">
             
-            {/* 超級管理員開關 */}
             {isSuperAdmin && (
                 <div 
                     className="hidden sm:flex items-center gap-2 cursor-pointer select-none bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-200 transition-colors"
@@ -228,15 +223,15 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                     {quotaDisplay}
                 </span>
 
-                {/* 紫占排盤按鈕 (如果有權限) */}
+                {/* 紫占按鈕 - 改名為「紫微占卜」 */}
                 {userProfile?.can_use_divination && (
                     <button 
                         onClick={() => setIsDivinationModalOpen(true)} 
                         className="px-3 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl shadow-lg shadow-purple-200 transition-all flex items-center gap-1 font-bold text-sm"
-                        title="紫占排盤"
+                        title="紫微占卜"
                     >
                         <Sparkles size={18} />
-                        <span className="hidden sm:inline">紫占</span>
+                        <span className="hidden sm:inline">紫微占卜</span>
                     </button>
                 )}
 
@@ -276,7 +271,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         ) : (
           Object.entries(grouped).map(([cat, items]) => {
             if (items.length === 0 && !CATEGORIES.includes(cat) && cat !== '紫占' && searchTerm) return null;
-            if (items.length === 0 && cat === '紫占') return null; // 沒紫占資料就不顯示該分類
+            if (items.length === 0 && cat === '紫占') return null;
 
             const isOpen = expandedCats.includes(cat);
             const isDivinationCat = cat === '紫占';
@@ -357,7 +352,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                                 )}
 
                                 <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                                  {/* 紫占盤不允許編輯 (或是稍後實作) */}
                                   {!isZiZhan && (
                                       <button 
                                         onClick={(e) => { e.stopPropagation(); if(isMine) onEdit(c); }} 

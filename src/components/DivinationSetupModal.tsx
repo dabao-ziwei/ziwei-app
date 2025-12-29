@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Loader2, Dices, User } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { X, Loader2, Dices } from 'lucide-react';
 import { supabase } from '../supabase';
 
 interface DivinationSetupModalProps {
@@ -22,13 +22,45 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
   const [hour, setHour] = useState('');
   const [minute, setMinute] = useState('');
 
+  // Refs for auto-focus
+  const yearRef = useRef<HTMLInputElement>(null);
+  const monthRef = useRef<HTMLInputElement>(null);
+  const dayRef = useRef<HTMLInputElement>(null);
+  const hourRef = useRef<HTMLInputElement>(null);
+  const minuteRef = useRef<HTMLInputElement>(null);
+
+  const handleInput = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    setter: (v: string) => void,
+    maxLen: number,
+    nextRef?: React.RefObject<HTMLInputElement>
+  ) => {
+      const val = e.target.value.replace(/\D/g, '').slice(0, maxLen);
+      setter(val);
+      if (val.length === maxLen && nextRef?.current) {
+          nextRef.current.focus();
+          nextRef.current.select();
+      }
+  };
+
+  const handleKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    currentVal: string,
+    prevRef?: React.RefObject<HTMLInputElement>
+  ) => {
+      if (e.key === 'Backspace' && currentVal === '' && prevRef?.current) {
+          e.preventDefault();
+          prevRef.current.focus();
+      }
+  };
+
   const handleConfirm = async () => {
     setLoading(true);
     try {
         let finalData: any = {
             gender: gender,
             type: '紫占',
-            name: '紫占排盤', // 預設名稱
+            name: '紫微占卜',
         };
 
         const { data: { user } } = await supabase.auth.getUser();
@@ -36,10 +68,9 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
 
         if (mode === 'random') {
             if (isSuperAdmin) {
-                // 超級管理員外掛：固定帶入 1979/09/26 18:26 男
                 finalData = {
                     ...finalData,
-                    gender: '男',
+                    gender: '男', // Admin 測試固定
                     birthYear: 1979,
                     birthMonth: 9,
                     birthDay: 26,
@@ -47,11 +78,8 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
                     birthMinute: 26,
                 };
             } else {
-                // 一般亂數取盤
-                // 隨機生成 1950 ~ 2023 年
                 const rndYear = Math.floor(Math.random() * (2023 - 1950 + 1)) + 1950;
                 const rndMonth = Math.floor(Math.random() * 12) + 1;
-                // 簡單處理，統一只取 1-28 日避免大小月問題
                 const rndDay = Math.floor(Math.random() * 28) + 1; 
                 const rndHour = Math.floor(Math.random() * 24);
                 const rndMinute = Math.floor(Math.random() * 60);
@@ -66,7 +94,6 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
                 };
             }
         } else {
-            // 手動輸入
             if (!year || !month || !day || !hour || !minute) {
                 alert("請填寫完整時間");
                 setLoading(false);
@@ -82,7 +109,6 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
             };
         }
 
-        // 呼叫父層處理 (通常是 saveClient)
         await onConfirm(finalData);
         onClose();
 
@@ -96,7 +122,7 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
 
   if (!isOpen) return null;
 
-  const inputClass = "px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 outline-none transition-all w-full";
+  const inputClass = "px-1 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 outline-none transition-all text-lg";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
@@ -105,7 +131,7 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
         <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-4 flex justify-between items-center text-white">
             <h2 className="text-lg font-bold flex items-center gap-2">
                 <Dices size={20} />
-                紫占排盤設定
+                紫微占卜設定
             </h2>
             <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition-colors">
                 <X size={20} />
@@ -118,19 +144,19 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
             <div className="flex bg-gray-100 p-1 rounded-lg">
                 <button 
                     onClick={() => setMode('random')}
-                    className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-all ${mode === 'random' ? 'bg-white shadow text-purple-700' : 'text-gray-500 hover:text-gray-700'}`}
+                    className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${mode === 'random' ? 'bg-white shadow text-purple-700' : 'text-gray-500 hover:text-gray-700'}`}
                 >
                     亂數取盤
                 </button>
                 <button 
                     onClick={() => setMode('manual')}
-                    className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-all ${mode === 'manual' ? 'bg-white shadow text-purple-700' : 'text-gray-500 hover:text-gray-700'}`}
+                    className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${mode === 'manual' ? 'bg-white shadow text-purple-700' : 'text-gray-500 hover:text-gray-700'}`}
                 >
                     手動輸入
                 </button>
             </div>
 
-            {/* 性別選擇 (不管是亂數還是手動都需要) */}
+            {/* 性別選擇 */}
             <div className="space-y-2">
                 <label className="text-xs font-bold text-gray-500 block">設定性別</label>
                 <div className="flex gap-4">
@@ -139,27 +165,27 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
                 </div>
             </div>
 
-            {/* 手動輸入區塊 */}
+            {/* 手動輸入區塊 (單行排列 + Auto Focus) */}
             {mode === 'manual' && (
                 <div className="space-y-2 animate-in slide-in-from-top-2 fade-in">
                     <label className="text-xs font-bold text-gray-500 block">輸入時間 (西元)</label>
-                    <div className="flex gap-2">
-                        <input type="text" placeholder="YYYY" className={inputClass} value={year} onChange={e => setYear(e.target.value.replace(/\D/g, '').slice(0,4))} />
-                        <input type="text" placeholder="MM" className={inputClass} value={month} onChange={e => setMonth(e.target.value.replace(/\D/g, '').slice(0,2))} />
-                        <input type="text" placeholder="DD" className={inputClass} value={day} onChange={e => setDay(e.target.value.replace(/\D/g, '').slice(0,2))} />
-                    </div>
-                    <div className="flex gap-2 items-center">
-                        <input type="text" placeholder="hh" className={inputClass} value={hour} onChange={e => setHour(e.target.value.replace(/\D/g, '').slice(0,2))} />
-                        <span>:</span>
-                        <input type="text" placeholder="mm" className={inputClass} value={minute} onChange={e => setMinute(e.target.value.replace(/\D/g, '').slice(0,2))} />
+                    <div className="flex items-center gap-1 justify-between">
+                        <input ref={yearRef} type="text" placeholder="YYYY" className={`${inputClass} w-[28%]`} value={year} onChange={e => handleInput(e, setYear, 4, monthRef)} onKeyDown={e => handleKeyDown(e, year)} />
+                        <span className="text-gray-300">-</span>
+                        <input ref={monthRef} type="text" placeholder="MM" className={`${inputClass} w-[15%]`} value={month} onChange={e => handleInput(e, setMonth, 2, dayRef)} onKeyDown={e => handleKeyDown(e, month, yearRef)} />
+                        <span className="text-gray-300">-</span>
+                        <input ref={dayRef} type="text" placeholder="DD" className={`${inputClass} w-[15%]`} value={day} onChange={e => handleInput(e, setDay, 2, hourRef)} onKeyDown={e => handleKeyDown(e, day, monthRef)} />
+                        <span className="text-gray-300 mx-1">|</span>
+                        <input ref={hourRef} type="text" placeholder="hh" className={`${inputClass} w-[15%]`} value={hour} onChange={e => handleInput(e, setHour, 2, minuteRef)} onKeyDown={e => handleKeyDown(e, hour, dayRef)} />
+                        <span className="text-gray-300">:</span>
+                        <input ref={minuteRef} type="text" placeholder="mm" className={`${inputClass} w-[15%]`} value={minute} onChange={e => handleInput(e, setMinute, 2)} onKeyDown={e => handleKeyDown(e, minute, hourRef)} />
                     </div>
                 </div>
             )}
 
             {mode === 'random' && (
                 <div className="text-center text-sm text-gray-500 bg-gray-50 p-4 rounded-lg border border-gray-100">
-                    系統將隨機產生一組出生時間進行排盤。<br/>
-                    (StepH 管理員測試時會自動鎖定特定時間)
+                    系統將隨機產生一組出生時間進行排盤。
                 </div>
             )}
 
@@ -172,7 +198,7 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
                 disabled={loading}
                 className="flex-1 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 shadow-lg shadow-purple-200 transition-all font-bold flex items-center justify-center gap-2"
             >
-                {loading ? <Loader2 className="animate-spin" size={20} /> : '開始紫占'}
+                {loading ? <Loader2 className="animate-spin" size={20} /> : '開始占卜'}
             </button>
         </div>
 

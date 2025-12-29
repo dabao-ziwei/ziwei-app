@@ -4,15 +4,19 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { PalaceCard } from './PalaceCard';
 import { getClient, type Client } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
-import { GAN, ZHI, PALACE_NAMES } from '../logic/constants';
-import { Loader2 } from 'lucide-react';
+import { GAN, ZHI, PALACE_NAMES, SIHUA_TABLE } from '../logic/constants';
+import { Loader2, RefreshCw, Sparkles, Check, ArrowRight } from 'lucide-react';
 
 interface ChartBoardProps {
   client?: Client;
   onBack?: () => void;
+  mode?: 'standard' | 'divination';
 }
 
-export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBack }) => {
+// 嚴格定義時辰順序索引
+const HOUR_SEQUENCE = [23, 0, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21];
+
+export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBack, mode = 'standard' }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   
@@ -27,6 +31,18 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const [showXiaoXian, setShowXiaoXian] = useState<boolean>(false);
   const [isReverse, setIsReverse] = useState<boolean>(false);
   const [isTwinMode, setIsTwinMode] = useState<boolean>(false);
+
+  // 紫占數字狀態
+  const [divNum, setDivNum] = useState<string[]>(['', '', '', '']);
+  const [isDivinationReady, setIsDivinationReady] = useState(false); // 是否已完成數字輸入
+
+  // 輸入框 Refs (用於自動跳格)
+  const divRefs = [
+      useRef<HTMLInputElement>(null),
+      useRef<HTMLInputElement>(null),
+      useRef<HTMLInputElement>(null),
+      useRef<HTMLInputElement>(null)
+  ];
 
   const chartRef = useRef<HTMLDivElement>(null);
 
@@ -55,6 +71,13 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     fetchData();
   }, [id, client, navigate]);
 
+  // 自動 Focus 第一個輸入框
+  useEffect(() => {
+      if (mode === 'divination' && !isDivinationReady && !loading) {
+          setTimeout(() => divRefs[0].current?.focus(), 300);
+      }
+  }, [mode, isDivinationReady, loading]);
+
   const baseEngine = useMemo(() => {
     if (!client || currentHour === -1) return null;
     return new ZiWeiEngine(
@@ -81,6 +104,73 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
       client.gender
     );
 
+    // 紫占模式核心邏輯
+    if (mode === 'divination') {
+        const data = displayEngine.getChartData();
+        
+        // 只有當使用者按下確認後 (isDivinationReady=true) 才進行覆寫
+        if (isDivinationReady && divNum.every(d => d !== '')) {
+            const n1 = parseInt(divNum[0]);
+            const n2 = parseInt(divNum[1]);
+            const n3 = parseInt(divNum[2]);
+            const n4 = parseInt(divNum[3]);
+
+            // 計算命宮位置 (前兩碼)
+            let mingSum = n1 + n2;
+            while (mingSum > 12) {
+                const s = mingSum.toString();
+                mingSum = parseInt(s[0]) + parseInt(s[1]);
+            }
+            // ZHI[0]=子, 對應宮位地支
+            // 我們這裡不改 palaces 順序，只標記命宮
+            
+            // 計算四化天干 (後兩碼)
+            let sihuaSum = n3 + n4;
+            while (sihuaSum > 12) {
+                const s = sihuaSum.toString();
+                sihuaSum = parseInt(s[0]) + parseInt(s[1]);
+            }
+            
+            let ganIdx = -1;
+            if (sihuaSum === 3) ganIdx = 0; // 甲
+            else if (sihuaSum === 4) ganIdx = 1;
+            else if (sihuaSum === 5) ganIdx = 2;
+            else if (sihuaSum === 6) ganIdx = 3;
+            else if (sihuaSum === 7) ganIdx = 4;
+            else if (sihuaSum === 8) ganIdx = 5;
+            else if (sihuaSum === 9) ganIdx = 6;
+            else if (sihuaSum === 0 || sihuaSum === 10) ganIdx = 7; // 辛
+            else if (sihuaSum === 1 || sihuaSum === 11) ganIdx = 8; // 壬
+            else if (sihuaSum === 2 || sihuaSum === 12) ganIdx = 9; // 癸
+
+            if (ganIdx !== -1) {
+                // 強制覆寫四化
+                data.palaces.forEach(p => {
+                    [...p.majorStars, ...p.minorStars, ...p.miscStars].forEach(s => {
+                        s.sihua = [];
+                    });
+                });
+
+                const newSihua = SIHUA_TABLE[GAN[ganIdx]];
+                if (newSihua) {
+                    const types = ['祿', '權', '科', '忌'] as const;
+                    newSihua.forEach((starName, idx) => {
+                        data.palaces.forEach(p => {
+                            const allStars = [...p.majorStars, ...p.minorStars, ...p.miscStars];
+                            const star = allStars.find(s => s.name === starName);
+                            if (star) {
+                                if (!star.sihua) star.sihua = [];
+                                star.sihua.push({ type: types[idx], scope: 'ben' });
+                            }
+                        });
+                    });
+                }
+            }
+        }
+        return data;
+    }
+
+    // 標準模式
     let daGan = -1;
     let liuGan = -1;
     let liuZhi = -1;
@@ -114,10 +204,26 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     displayEngine.computeSiHua(daGan, liuGan, xiaoGan);
 
     return displayEngine.getChartData();
-  }, [client, currentHour, daXianSeq, liuNianYear, showXiaoXian]);
+  }, [client, currentHour, daXianSeq, liuNianYear, showXiaoXian, mode, isDivinationReady]); // 加入 isDivinationReady 依賴
+
+  // 計算紫占命宮 Index
+  const divMingIndex = useMemo(() => {
+      if (mode !== 'divination') return -1;
+      if (!isDivinationReady) return -1; // 未確認前不顯示
+      
+      const n1 = parseInt(divNum[0]);
+      const n2 = parseInt(divNum[1]);
+      let mingSum = n1 + n2;
+      while (mingSum > 12) {
+          const s = mingSum.toString();
+          mingSum = parseInt(s[0]) + parseInt(s[1]);
+      }
+      const targetZhiIdx = (mingSum - 1) % 12;
+      return chartData?.palaces.findIndex(p => p.zhiIndex === targetZhiIdx) ?? -1;
+  }, [mode, divNum, chartData, isDivinationReady]);
 
   const daXianList = useMemo(() => {
-    if (!baseChartData || !baseEngine) return [];
+    if (!baseChartData || !baseEngine || mode === 'divination') return []; 
     const list = [];
     const startPos = baseEngine.getMingPos();
     const direction = baseChartData.direction || 1;
@@ -140,9 +246,10 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
       }
     }
     return list;
-  }, [baseChartData, baseEngine]);
+  }, [baseChartData, baseEngine, mode]);
 
   const liuNianList = useMemo(() => {
+    if (mode === 'divination') return [];
     const targetSeq = daXianSeq === -1 ? 0 : daXianSeq;
     const targetDaXian = daXianList[targetSeq];
     if (!targetDaXian) return [];
@@ -156,7 +263,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
       list.push({ year, age, label: `${year}${GAN[gan]}${ZHI[zhi]} ${age}` });
     }
     return list;
-  }, [daXianSeq, daXianList]);
+  }, [daXianSeq, daXianList, mode]);
 
   const xiaoXianMingIdx = useMemo(() => {
     if (!liuNianYear || !baseChartData || !baseEngine) return -1;
@@ -166,13 +273,13 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
 
   const benMingMajorStarsStr = useMemo(() => {
       if (!baseEngine || !baseChartData) return '';
-      const pos = baseEngine.getMingPos();
-      const p = baseChartData.palaces[pos];
+      const pos = (mode === 'divination' && divMingIndex !== -1) ? divMingIndex : baseEngine.getMingPos();
+      const p = chartData?.palaces[pos] || baseChartData.palaces[pos];
       if (p && p.majorStars.length > 0) {
           return `(${p.majorStars.map(s => s.name).join('、')})`;
       }
       return '(無主星)';
-  }, [baseEngine, baseChartData]);
+  }, [baseEngine, baseChartData, mode, divMingIndex, chartData]);
 
   if (loading || !client || !baseChartData || !baseEngine || !chartData) {
     return (
@@ -185,17 +292,12 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const benMingPos = baseEngine.getMingPos();
   const isLimitActive = daXianSeq >= 0 || liuNianYear !== null || showXiaoXian;
   
-  // 【修改重點】定義何時顯示截圖按鈕
-  // 只要是在本命盤狀態（無大限流年），且畫面乾淨（無選取、無飛化、無顛倒檢視），就允許截圖。
-  // 這包含了「普通本命盤」和「雙胞胎本命盤」。
   const isCleanState =
     daXianSeq === -1 &&
     liuNianYear === null &&
     selectedPalace === null &&
     flyingPalace === null &&
     !isReverse;
-
-  const isTimeModified = currentHour !== client.birthHour;
 
   let currentHourZhi = ZHI[Math.floor((currentHour + 1) / 2) % 12];
   if (Math.floor((currentHour + 1) / 2) % 12 === 0) {
@@ -212,10 +314,18 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     setIsTwinMode(false);
   };
 
+  // 【修復】時辰切換邏輯 (嚴格使用陣列索引)
   const changeHour = (delta: number) => {
-    let newHour = currentHour + delta * 2;
-    if (newHour < 0) newHour = 22;
-    if (newHour > 23) newHour = 0;
+    const currentIndex = HOUR_SEQUENCE.indexOf(currentHour);
+    if (currentIndex === -1) return; // 防呆
+
+    let nextIndex = currentIndex + delta;
+    
+    // 循環處理
+    if (nextIndex < 0) nextIndex = HOUR_SEQUENCE.length - 1;
+    if (nextIndex >= HOUR_SEQUENCE.length) nextIndex = 0;
+    
+    const newHour = HOUR_SEQUENCE[nextIndex];
     setCurrentHour(newHour);
     resetAllStates();
   };
@@ -244,8 +354,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
         }
       });
       const link = document.createElement('a');
-      // 根據檔名邏輯，雙胞胎模式優先於本命盤
-      const suffix = isTwinMode ? '_雙胞胎' : (isReverse ? '_顛倒盤' : '_本命盤');
+      const suffix = mode === 'divination' ? '_紫占' : (isTwinMode ? '_雙胞胎' : (isReverse ? '_顛倒盤' : '_本命盤'));
       link.download = `${client.name}${suffix}.png`;
       link.href = dataUrl;
       link.click();
@@ -254,7 +363,53 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     }
   };
 
+  // 紫占數字輸入處理 (Auto Jump + 0 Check)
+  const handleDivInput = (index: number, val: string) => {
+      if (val === '') {
+          // 處理刪除 (空白)
+          const newArr = [...divNum];
+          newArr[index] = '';
+          setDivNum(newArr);
+          return;
+      }
+
+      const v = val.slice(-1); // 只取最後一個輸入的字
+      if (!/^\d$/.test(v)) return; // 非數字擋掉
+
+      // 檢查 0 是否重複
+      if (v === '0') {
+          const zeroCount = divNum.filter((n, i) => n === '0' && i !== index).length;
+          if (zeroCount >= 1) return; 
+      }
+
+      const newArr = [...divNum];
+      newArr[index] = v;
+      setDivNum(newArr);
+
+      // 自動跳格
+      if (index < 3) {
+          divRefs[index + 1].current?.focus();
+      }
+  };
+
+  // 處理 Backspace 跳回上一格
+  const handleDivKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
+      if (e.key === 'Backspace' && divNum[index] === '' && index > 0) {
+          divRefs[index - 1].current?.focus();
+      }
+  };
+
+  const handleStartDivination = () => {
+      if (divNum.some(d => d === '')) {
+          alert('請輸入完整 4 個數字');
+          return;
+      }
+      setIsDivinationReady(true); // 觸發 chartData 重算 & 關閉遮罩
+  };
+
   const getRelativeNames = (currentIdx: number) => {
+    if (mode === 'divination') return {};
+
     let daName = undefined;
     let liuName = undefined;
     let xiaoName = undefined;
@@ -414,6 +569,43 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
 
       {/* Main Content */}
       <div className="flex-1 min-h-0 w-full relative">
+        
+        {/* 紫占輸入遮罩 (Overlay) */}
+        {mode === 'divination' && !isDivinationReady && (
+            <div className="absolute inset-0 z-[60] bg-white/90 backdrop-blur-md flex flex-col items-center justify-center p-6 animate-in fade-in duration-300">
+                <div className="bg-white p-8 rounded-2xl shadow-2xl border border-purple-100 max-w-sm w-full text-center">
+                    <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4 text-purple-600">
+                        <Sparkles size={32} />
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-800 mb-2">紫微占卜</h2>
+                    <p className="text-gray-500 text-sm mb-6">請輸入 4 個數字 (0~9，0 不可重複)</p>
+                    
+                    <div className="flex gap-3 justify-center mb-8">
+                        {divNum.map((v, i) => (
+                            <input 
+                                key={i}
+                                ref={divRefs[i]}
+                                type="text" 
+                                inputMode="numeric"
+                                value={v}
+                                onChange={e => handleDivInput(i, e.target.value)}
+                                onKeyDown={e => handleDivKeyDown(e, i)}
+                                className="w-14 h-16 border-2 border-purple-200 rounded-xl text-center text-3xl font-bold focus:border-purple-600 focus:ring-4 focus:ring-purple-100 outline-none transition-all text-purple-800 shadow-sm"
+                                placeholder="-"
+                            />
+                        ))}
+                    </div>
+
+                    <button 
+                        onClick={handleStartDivination}
+                        className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-purple-200 transition-all flex items-center justify-center gap-2 text-lg active:scale-95"
+                    >
+                        開始占卜 <ArrowRight size={20} />
+                    </button>
+                </div>
+            </div>
+        )}
+
         <div
             ref={chartRef}
             className="w-full h-full bg-white border-2 border-gray-800 shadow-xl z-10 grid grid-cols-4 grid-rows-4"
@@ -473,53 +665,58 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                             </div>
                         </div>
 
-                        {/* 4. 右上角開關：統一使用 Toggle 樣式 */}
-                        <div className="absolute top-2 right-2 flex flex-col items-center gap-2 z-50">
-                            
-                            {/* 雙胞/顛倒 按鈕 (紫色系) */}
-                            <div className="flex flex-col items-center gap-0.5 no-screenshot">
-                                <span className="text-[9px] text-gray-400 font-bold transform scale-90">
-                                    {isLimitActive ? '顛倒盤' : '雙胞胎'}
-                                </span>
-                                <button 
-                                    onClick={toggleViewMode} 
-                                    className={`w-9 h-5 rounded-full p-0.5 transition-colors duration-200 ease-in-out
-                                        ${(isLimitActive ? isReverse : isTwinMode) 
-                                            ? 'bg-purple-600' 
-                                            : 'bg-gray-300'
-                                        }`}
-                                    title={isLimitActive 
-                                        ? (isReverse ? "關閉顛倒" : "開啟顛倒") 
-                                        : (isTwinMode ? "關閉雙胞胎" : "開啟雙胞胎")
-                                    }
-                                >
-                                    <div 
-                                        className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-200 ease-in-out
+                        {/* 4. 右上角開關：紫占模式隱藏 */}
+                        {mode !== 'divination' && (
+                            <div className="absolute top-2 right-2 flex flex-col items-center gap-2 z-50">
+                                
+                                <div className="flex flex-col items-center gap-0.5 no-screenshot">
+                                    <span className="text-[9px] text-gray-400 font-bold transform scale-90">
+                                        {isLimitActive ? '顛倒盤' : '雙胞胎'}
+                                    </span>
+                                    <button 
+                                        onClick={toggleViewMode} 
+                                        className={`w-9 h-5 rounded-full p-0.5 transition-colors duration-200 ease-in-out
                                             ${(isLimitActive ? isReverse : isTwinMode) 
-                                                ? 'translate-x-4' 
-                                                : 'translate-x-0'
+                                                ? 'bg-purple-600' 
+                                                : 'bg-gray-300'
                                             }`}
-                                    />
-                                </button>
-                            </div>
-
-                            {/* 小限按鈕 (綠色系) */}
-                            {liuNianYear && (
-                                <div className="flex flex-col items-center gap-0.5">
-                                  <span className="text-[9px] text-gray-400 font-bold transform scale-90">小限盤</span>
-                                  <button 
-                                    onClick={toggleXiaoXian} 
-                                    className={`w-9 h-5 rounded-full p-0.5 transition-colors duration-200 ease-in-out
-                                        ${showXiaoXian ? 'bg-green-500' : 'bg-gray-300'}`}
-                                  >
-                                    <div 
-                                        className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-200 ease-in-out
-                                            ${showXiaoXian ? 'translate-x-4' : 'translate-x-0'}`} 
-                                    />
-                                  </button>
+                                    >
+                                        <div 
+                                            className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-200 ease-in-out
+                                                ${(isLimitActive ? isReverse : isTwinMode) 
+                                                    ? 'translate-x-4' 
+                                                    : 'translate-x-0'
+                                                }`}
+                                        />
+                                    </button>
                                 </div>
-                            )}
-                        </div>
+
+                                {liuNianYear && (
+                                    <div className="flex flex-col items-center gap-0.5">
+                                    <span className="text-[9px] text-gray-400 font-bold transform scale-90">小限盤</span>
+                                    <button 
+                                        onClick={toggleXiaoXian} 
+                                        className={`w-9 h-5 rounded-full p-0.5 transition-colors duration-200 ease-in-out
+                                            ${showXiaoXian ? 'bg-green-500' : 'bg-gray-300'}`}
+                                    >
+                                        <div 
+                                            className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-200 ease-in-out
+                                                ${showXiaoXian ? 'translate-x-4' : 'translate-x-0'}`} 
+                                        />
+                                    </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        
+                        {/* 紫占模式下顯示已輸入的數字 (方便截圖) */}
+                        {mode === 'divination' && isDivinationReady && (
+                            <div className="absolute top-2 right-2 flex gap-1 z-50 opacity-50">
+                                {divNum.map((n, i) => (
+                                    <span key={i} className="text-xs font-bold text-purple-800 bg-purple-100 px-1.5 py-0.5 rounded border border-purple-200">{n}</span>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 );
                 return null;
@@ -529,7 +726,10 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
             const oppPalaceIdx = (palaceIdx + 6) % 12;
             const { daName: reverseDaName, liuName: reverseLiuName } = getRelativeNames(oppPalaceIdx);
 
-            const isBenMingMing = palaceIdx === benMingPos;
+            const isBenMingMing = mode === 'divination' 
+                ? palaceIdx === divMingIndex 
+                : palaceIdx === benMingPos;
+
             const isDaXianMing = daXianSeq >= 0 && daXianList[daXianSeq].palaceIdx === palaceIdx;
             const isLiuNianMing = liuNianYear !== null && chartData.palaces[palaceIdx].zhiIndex === (liuNianYear - 4) % 12;
             const isXiaoXianMingPalace = liuNianYear !== null && palaceIdx === xiaoXianMingIdx;
@@ -573,31 +773,33 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="w-full shrink-0 border-t-2 border-gray-800 bg-gray-100 z-50">
-        <div className="w-full">
-            <div className="flex w-full overflow-x-auto scrollbar-hide border-b border-gray-300">
-                {daXianList.map((limit) => {
-                const isActive = daXianSeq === limit.seq;
-                return (
-                    <button key={limit.seq} onClick={() => handleDaXianClick(limit.seq)} className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs ${isActive ? 'bg-gray-600 text-white font-bold' : 'hover:bg-gray-200 text-gray-700'}`}>
-                    <div>{limit.name} {limit.ganZhi}</div>
-                    </button>
-                );
-                })}
+      {/* Footer (紫占模式隱藏) */}
+      {mode !== 'divination' && (
+          <div className="w-full shrink-0 border-t-2 border-gray-800 bg-gray-100 z-50">
+            <div className="w-full">
+                <div className="flex w-full overflow-x-auto scrollbar-hide border-b border-gray-300">
+                    {daXianList.map((limit) => {
+                    const isActive = daXianSeq === limit.seq;
+                    return (
+                        <button key={limit.seq} onClick={() => handleDaXianClick(limit.seq)} className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs ${isActive ? 'bg-gray-600 text-white font-bold' : 'hover:bg-gray-200 text-gray-700'}`}>
+                        <div>{limit.name} {limit.ganZhi}</div>
+                        </button>
+                    );
+                    })}
+                </div>
+                <div className="flex w-full overflow-x-auto scrollbar-hide">
+                    {liuNianList.map((item) => {
+                    const isActive = liuNianYear === item.year;
+                    return (
+                        <button key={item.year} onClick={() => handleLiuNianClick(item.year)} className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs ${isActive ? 'bg-blue-600 text-white font-bold' : 'hover:bg-blue-100 text-gray-600'}`}>
+                        {item.label}
+                        </button>
+                    );
+                    })}
+                </div>
             </div>
-            <div className="flex w-full overflow-x-auto scrollbar-hide">
-                {liuNianList.map((item) => {
-                const isActive = liuNianYear === item.year;
-                return (
-                    <button key={item.year} onClick={() => handleLiuNianClick(item.year)} className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs ${isActive ? 'bg-blue-600 text-white font-bold' : 'hover:bg-blue-100 text-gray-600'}`}>
-                    {item.label}
-                    </button>
-                );
-                })}
-            </div>
-        </div>
-      </div>
+          </div>
+      )}
       
     </div>
   );
