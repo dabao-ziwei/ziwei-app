@@ -36,14 +36,16 @@ export interface Client {
   is_deleted?: boolean;
 }
 
-// 新增：關係介面
+// 修改：關係介面，增加反向標記與統一的對象欄位
 export interface Relationship {
   id: string;
   from_client_id: string;
   to_client_id: string;
   relation_type: string;
-  // 關聯對象的詳細資料 (透過 Join 取得)
-  to_client?: Client;
+  // 統一存放「對方」的資料 (無論是 from 還是 to)
+  related_client?: Client;
+  // 標記這是否為「對方設定我」的關係
+  is_reverse?: boolean; 
 }
 
 // --- 一般使用者功能 ---
@@ -83,7 +85,7 @@ export const loadClients = async (): Promise<Client[]> => {
     .order('created_at', { ascending: false });
 
   if (isSuperViewer) {
-      // 超級管理員可以看到所有資料
+      // 超級管理員：可以看到所有資料
   } else {
       query = query.eq('user_id', user.id).eq('is_deleted', false);
   }
@@ -235,46 +237,88 @@ export const saveClient = async (clientData: any): Promise<string | null> => {
     }
 };
 
-// --- 新增：關係功能 ---
+// --- 【修改】 雙向關係讀取 ---
 
 export const getRelationships = async (clientId: string): Promise<Relationship[]> => {
-    // 抓取 "我是起點" 的關係，並 Join "終點" 的 Client 資料
-    const { data, error } = await supabase
+    // 1. 抓取 "我設定的" (Outgoing)
+    const { data: outgoing, error: err1 } = await supabase
         .from('relationships')
-        .select(`
-            *,
-            to_client:clients!to_client_id (*)
-        `)
+        .select(`*, related:clients!to_client_id (*)`)
         .eq('from_client_id', clientId);
 
-    if (error) {
-        console.error('Fetch relationships error:', error);
-        return [];
+    if (err1) console.error('Fetch outgoing error:', err1);
+
+    // 2. 抓取 "別人設定我的" (Incoming)
+    const { data: incoming, error: err2 } = await supabase
+        .from('relationships')
+        .select(`*, related:clients!from_client_id (*)`)
+        .eq('to_client_id', clientId);
+
+    if (err2) console.error('Fetch incoming error:', err2);
+
+    const result: Relationship[] = [];
+
+    // 處理 Outgoing
+    if (outgoing) {
+        outgoing.forEach((r: any) => {
+            if (r.related) {
+                result.push({
+                    id: r.id,
+                    from_client_id: r.from_client_id,
+                    to_client_id: r.to_client_id,
+                    relation_type: r.relation_type,
+                    is_reverse: false,
+                    related_client: mapClientData(r.related)
+                });
+            }
+        });
     }
 
-    return data.map((r: any) => ({
-        id: r.id,
-        from_client_id: r.from_client_id,
-        to_client_id: r.to_client_id,
-        relation_type: r.relation_type,
-        to_client: r.to_client ? {
-            id: r.to_client.id,
-            name: r.to_client.name,
-            gender: r.to_client.gender,
-            birthYear: r.to_client.birth_year,
-            birthMonth: r.to_client.birth_month,
-            birthDay: r.to_client.birth_day,
-            birthHour: r.to_client.birth_hour,
-            birthMinute: r.to_client.birth_minute,
-            type: r.to_client.type,
-            majorStars: r.to_client.major_stars
-        } : undefined
-    }));
+    // 處理 Incoming
+    if (incoming) {
+        incoming.forEach((r: any) => {
+            if (r.related) {
+                result.push({
+                    id: r.id,
+                    from_client_id: r.from_client_id,
+                    to_client_id: r.to_client_id,
+                    relation_type: r.relation_type,
+                    is_reverse: true, // 標記為反向
+                    related_client: mapClientData(r.related) // 這裡的 related 是來源者 (from)
+                });
+            }
+        });
+    }
+
+    return result;
 };
+
+// Helper: 格式化 DB 資料為 Client 物件
+const mapClientData = (data: any): Client => ({
+    id: data.id,
+    name: data.name,
+    gender: data.gender,
+    birthYear: data.birth_year,
+    birthMonth: data.birth_month,
+    birthDay: data.birth_day,
+    birthHour: data.birth_hour,
+    birthMinute: data.birth_minute,
+    type: data.type,
+    majorStars: data.major_stars
+});
 
 export const addRelationship = async (fromId: string, toId: string, type: string): Promise<boolean> => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
+
+    // 檢查是否已存在 (避免重複)
+    const { count } = await supabase
+        .from('relationships')
+        .select('*', { count: 'exact', head: true })
+        .eq('from_client_id', fromId)
+        .eq('to_client_id', toId);
+    
+    if (count && count > 0) return false;
 
     const { error } = await supabase.from('relationships').insert({
         user_id: user.id,

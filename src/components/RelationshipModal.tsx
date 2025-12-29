@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, Link as LinkIcon, Trash2, Plus, Users } from 'lucide-react';
+import { X, Search, Link as LinkIcon, Trash2, Plus, Users, ArrowRightLeft } from 'lucide-react';
 import { getRelationships, addRelationship, deleteRelationship, loadClients, type Client, type Relationship } from '../db';
 
 interface Props {
@@ -103,24 +103,35 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
                 )}
 
                 {relationships.map(rel => (
-                    <div key={rel.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
+                    <div key={rel.id} className={`flex items-center justify-between p-3 rounded-lg border ${rel.is_reverse ? 'bg-orange-50 border-orange-200' : 'bg-gray-50 border-gray-100'}`}>
                         <div className="flex items-center gap-3">
-                            <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded">
-                                {rel.relation_type}
-                            </span>
+                            <div className="flex flex-col items-center">
+                                <span className={`text-xs font-bold px-2 py-1 rounded ${rel.is_reverse ? 'bg-orange-200 text-orange-800' : 'bg-blue-100 text-blue-700'}`}>
+                                    {rel.relation_type}
+                                </span>
+                                {rel.is_reverse && (
+                                    <span className="text-[10px] text-orange-500 flex items-center gap-0.5 mt-0.5">
+                                        <ArrowRightLeft size={10} /> 對方設定
+                                    </span>
+                                )}
+                            </div>
+                            
                             <div className="flex flex-col">
-                                <span className="font-bold text-gray-800">{rel.to_client?.name}</span>
+                                <span className="font-bold text-gray-800">{rel.related_client?.name}</span>
                                 <span className="text-xs text-gray-500">
-                                    {rel.to_client?.gender} • {rel.to_client?.birthYear}年
+                                    {rel.related_client?.gender} • {rel.related_client?.birthYear}年
                                 </span>
                             </div>
                         </div>
-                        <button 
-                            onClick={() => handleDelete(rel.id)}
-                            className="p-2 text-gray-400 hover:text-red-500 transition-colors"
-                        >
-                            <Trash2 size={16} />
-                        </button>
+                        {/* 只有自己設定的關係才能刪除，如果是對方設定的，這裡不提供刪除按鈕 (或可選擇允許刪除，看需求) */}
+                        {!rel.is_reverse && (
+                            <button 
+                                onClick={() => handleDelete(rel.id)}
+                                className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                            >
+                                <Trash2 size={16} />
+                            </button>
+                        )}
                     </div>
                 ))}
             </div>
