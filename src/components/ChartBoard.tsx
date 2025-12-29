@@ -54,7 +54,9 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     fetchData();
   }, [id, client, navigate]);
 
-  const engine = useMemo(() => {
+  // 1. 基礎引擎：只負責提供「原始」的命盤結構 (不含流年/四化變動)
+  // 用於計算大限列表、本命位置等靜態資訊
+  const baseEngine = useMemo(() => {
     if (!client || currentHour === -1) return null;
     return new ZiWeiEngine(
       client.birthYear,
@@ -66,13 +68,70 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     );
   }, [client, currentHour]);
 
-  const baseChartData = useMemo(() => engine?.getChartData(), [engine]);
+  const baseChartData = useMemo(() => baseEngine?.getChartData(), [baseEngine]);
 
-  // 【修正重點 1】將 daXianList 包入 useMemo
+  // 2. 顯示數據計算：這裡使用全新的 Engine 實體，避免汙染 baseEngine 造成 React 錯誤
+  const chartData = useMemo(() => {
+    if (!client || currentHour === -1) return null;
+
+    // 創建一個新的引擎實體，專門用於這次渲染的計算
+    // 這樣做可以確保 computeLimitStars 的副作用不會影響到其他 useMemo
+    const displayEngine = new ZiWeiEngine(
+      client.birthYear,
+      client.birthMonth,
+      client.birthDay,
+      currentHour,
+      client.birthMinute,
+      client.gender
+    );
+
+    let daGan = -1;
+    let liuGan = -1;
+    let liuZhi = -1;
+    let xiaoGan = -1;
+
+    // 取得大限資訊 (需要依賴 baseEngine 算出的大限列表，但這裡我們重新計算一次以保持獨立性)
+    // 為了效能，我們這裡簡單重算一次大限位置，或者傳入參數
+    // 但最安全的方式是重用 displayEngine 的基礎數據
+    const tempBaseData = displayEngine.getChartData();
+    const startPos = displayEngine.getMingPos();
+    const direction = tempBaseData.direction || 1;
+
+    // 重新定位大限
+    let daXianPalaceIdx = -1;
+    if (daXianSeq >= 0) {
+        const offset = daXianSeq * direction;
+        daXianPalaceIdx = (startPos + offset + 120) % 12;
+        const p = tempBaseData.palaces[daXianPalaceIdx];
+        if (p) daGan = p.ganIndex;
+    }
+
+    if (liuNianYear) {
+      liuGan = (liuNianYear - 4) % 10;
+      liuZhi = (liuNianYear - 4) % 12;
+    }
+
+    if (liuNianYear && showXiaoXian) {
+       const virtualAge = liuNianYear - tempBaseData.lunarYear + 1;
+       const xiaoPos = displayEngine.getXiaoXianPos(virtualAge);
+       if (xiaoPos >= 0) {
+           xiaoGan = tempBaseData.palaces[xiaoPos].ganIndex;
+       }
+    }
+
+    // 執行計算 (這會修改 displayEngine 內部狀態，但因為它是新的，所以安全)
+    displayEngine.computeLimitStars(daGan, liuGan, liuZhi, xiaoGan, showXiaoXian);
+    displayEngine.computeSiHua(daGan, liuGan, xiaoGan);
+
+    return displayEngine.getChartData();
+  }, [client, currentHour, daXianSeq, liuNianYear, showXiaoXian]);
+
+
+  // 生成大限列表 (使用 baseEngine，因為大限列表是靜態的)
   const daXianList = useMemo(() => {
-    if (!baseChartData || !engine) return [];
+    if (!baseChartData || !baseEngine) return [];
     const list = [];
-    const startPos = engine.getMingPos();
+    const startPos = baseEngine.getMingPos();
     const direction = baseChartData.direction || 1;
 
     for (let i = 0; i < 10; i++) {
@@ -93,9 +152,8 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
       }
     }
     return list;
-  }, [baseChartData, engine]);
+  }, [baseChartData, baseEngine]);
 
-  // 【修正重點 2】將 liuNianList 包入 useMemo
   const liuNianList = useMemo(() => {
     const targetSeq = daXianSeq === -1 ? 0 : daXianSeq;
     const targetDaXian = daXianList[targetSeq];
@@ -112,53 +170,34 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     return list;
   }, [daXianSeq, daXianList]);
 
-  // 【修正重點 3】將 xiaoXianMingIdx 包入 useMemo
+  // 取得小限宮位索引 (用於 UI 判斷)
   const xiaoXianMingIdx = useMemo(() => {
-    if (!liuNianYear || !baseChartData || !engine) return -1;
+    if (!liuNianYear || !baseChartData || !baseEngine) return -1;
     const virtualAge = liuNianYear - baseChartData.lunarYear + 1;
-    return engine.getXiaoXianPos(virtualAge);
-  }, [liuNianYear, baseChartData, engine]);
+    return baseEngine.getXiaoXianPos(virtualAge);
+  }, [liuNianYear, baseChartData, baseEngine]);
 
-  // 【修正重點 4】將 chartData 包入 useMemo，解決 #310 錯誤
-  const chartData = useMemo(() => {
-    if (!engine || !baseChartData) return baseChartData; // Fallback
-
-    let daGan = -1;
-    let liuGan = -1;
-    let liuZhi = -1;
-    let xiaoGan = -1;
-
-    if (daXianSeq >= 0) {
-      const target = daXianList[daXianSeq];
-      if (target && baseChartData.palaces[target.palaceIdx]) {
-        daGan = baseChartData.palaces[target.palaceIdx].ganIndex;
+  // 計算命宮主星字串 (UI 優化需求 2)
+  const benMingMajorStarsStr = useMemo(() => {
+      if (!baseEngine || !baseChartData) return '';
+      const pos = baseEngine.getMingPos();
+      const p = baseChartData.palaces[pos];
+      if (p && p.majorStars.length > 0) {
+          return `(${p.majorStars.map(s => s.name).join('、')})`;
       }
-    }
+      return '(無主星)';
+  }, [baseEngine, baseChartData]);
 
-    if (liuNianYear) {
-      liuGan = (liuNianYear - 4) % 10;
-      liuZhi = (liuNianYear - 4) % 12;
-    }
 
-    if (xiaoXianMingIdx >= 0 && showXiaoXian) {
-      xiaoGan = baseChartData.palaces[xiaoXianMingIdx].ganIndex;
-    }
-
-    // 這些會修改 engine 內部狀態，必須包在 useMemo 裡以避免 render loop
-    engine.computeLimitStars(daGan, liuGan, liuZhi, xiaoGan, showXiaoXian);
-    engine.computeSiHua(daGan, liuGan, xiaoGan);
-
-    return engine.getChartData();
-  }, [engine, baseChartData, daXianSeq, daXianList, liuNianYear, xiaoXianMingIdx, showXiaoXian]);
-
-  // Loading 檢查移到 Hooks 之後
-  if (loading || !client || !baseChartData || !engine || !chartData) {
+  if (loading || !client || !baseChartData || !baseEngine || !chartData) {
     return (
         <div className="flex h-[100dvh] w-full items-center justify-center bg-gray-100">
             <Loader2 className="animate-spin text-gray-500" size={48} />
         </div>
     );
   }
+
+  // --- 狀態控制與事件 ---
 
   const resetAllStates = () => {
     setDaXianSeq(-1);
@@ -231,7 +270,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
 
     if (liuNianYear) {
       const liuZhi = (liuNianYear - 4) % 12;
-      const liuMingIdx = baseChartData.palaces.findIndex(
+      const liuMingIdx = chartData.palaces.findIndex(
         (p) => p.zhiIndex === liuZhi
       );
       if (liuMingIdx >= 0) {
@@ -299,9 +338,11 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
 
   const flyingStarsLookup = (() => {
     if (flyingPalace === null) return {};
-    const targetPalace = baseChartData.palaces[flyingPalace];
+    const targetPalace = chartData.palaces[flyingPalace];
     if (!targetPalace) return {};
-    return engine.getSiHuaMap(targetPalace.ganIndex);
+    // 這裡我們需要一個 helper 來算飛化，或者直接用 engine 的靜態方法
+    // 因為 displayEngine 是局部變數，這裡可以用 baseEngine (規則是一樣的)
+    return baseEngine.getSiHuaMap(targetPalace.ganIndex);
   })();
 
   const gridLayout = [
@@ -340,7 +381,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     return map[palaceIdx] || { x: 50, y: 50 };
   };
 
-  const benMingPos = engine.getMingPos();
+  const benMingPos = baseEngine.getMingPos();
 
   const handleBack = () => {
       if (onBack) onBack();
@@ -348,16 +389,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   };
 
   const isLimitActive = daXianSeq >= 0 || liuNianYear !== null || showXiaoXian;
-
-  // 計算命宮主星字串 (這部分就是剛剛引發錯誤的源頭，現在 chartData 穩定了，這裡就不會報錯了)
-  const benMingMajorStarsStr = useMemo(() => {
-      if (!chartData) return '';
-      const p = chartData.palaces[benMingPos];
-      if (p && p.majorStars.length > 0) {
-          return `(${p.majorStars.map(s => s.name).join('、')})`;
-      }
-      return '(無主星)';
-  }, [chartData, benMingPos]);
 
   return (
     // 1. 最外層：鎖定螢幕高度
@@ -426,7 +457,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                             <button onClick={() => changeHour(1)} className="text-gray-400 hover:text-gray-800 font-bold text-2xl select-none">&gt;</button>
                         </div>
 
-                        {/* 2. 名字 + 本命主星 */}
+                        {/* 2. 名字 + 本命主星 (UI 優化需求 2) */}
                         <div className="flex flex-col items-center gap-1 mb-2">
                             <div className="text-3xl sm:text-4xl font-bold text-black tracking-widest text-center">
                                 {client.name}
@@ -436,7 +467,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                             </div>
                         </div>
 
-                        {/* 3. 命主資訊 - 置中顯示但文字開頭對齊 */}
+                        {/* 3. 命主資訊 - 外層置中，內層靠左 (UI 優化需求 3) */}
                         <div className="flex flex-col items-center w-full leading-tight gap-1">
                             <div className="text-gray-700 text-sm sm:text-base font-medium">
                                 {client.gender} {chartData.bureau}
@@ -449,7 +480,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                             </div>
                         </div>
 
-                        {/* 4. 右上角開關 (顛倒盤 / 小限盤) */}
+                        {/* 4. 右上角開關 */}
                         <div className="absolute top-2 right-2 flex flex-col items-center gap-2 z-50">
                             <div className="flex flex-col items-center gap-0.5 no-screenshot">
                                 <span className="text-[9px] text-gray-400 font-bold transform scale-90">{isLimitActive ? '顛倒' : '雙胞'}</span>
