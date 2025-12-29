@@ -44,7 +44,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const [usedCount, setUsedCount] = useState(0);
   const [isMenuOpen, setIsMenuOpen] = useState(false); 
   const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false); 
-  
   const [isDivinationModalOpen, setIsDivinationModalOpen] = useState(false);
 
   const navigate = useNavigate();
@@ -177,7 +176,17 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
             </button>
 
             {isMenuOpen && (
-                <div className="absolute top-12 left-0 w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                <div className="absolute top-12 left-0 w-52 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
+                    {/* 1. 紫微占卜按鈕 (移到這裡，位於使用者管理上方) */}
+                    {userProfile?.can_use_divination && (
+                        <button 
+                            onClick={() => { setIsDivinationModalOpen(true); setIsMenuOpen(false); }} 
+                            className="w-full text-left px-4 py-3 hover:bg-purple-50 flex items-center gap-2 text-purple-700 font-bold border-b border-gray-50"
+                        >
+                            <Sparkles size={18} /> 紫微占卜
+                        </button>
+                    )}
+
                     {userProfile?.role === 'admin' && (
                         <button 
                             onClick={() => { setIsUserMgmtOpen(true); setIsMenuOpen(false); }}
@@ -186,6 +195,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                             <UserCog size={16} /> 使用者管理
                         </button>
                     )}
+                    
                     <button 
                         onClick={() => supabase.auth.signOut()}
                         className="w-full text-left px-4 py-3 hover:bg-red-50 flex items-center gap-2 text-red-600 font-medium border-t border-gray-100"
@@ -194,7 +204,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                     </button>
                 </div>
             )}
-            {isMenuOpen && <div className="fixed inset-0 z-[-1]" onClick={() => setIsMenuOpen(false)}></div>}
+            {isMenuOpen && <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)}></div>}
           </div>
 
           <div>
@@ -222,18 +232,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                 <span className={`text-xs font-bold font-mono hidden sm:inline ${isOverQuota ? 'text-red-500' : 'text-slate-400'}`}>
                     {quotaDisplay}
                 </span>
-
-                {/* 紫占按鈕 - 改名為「紫微占卜」 */}
-                {userProfile?.can_use_divination && (
-                    <button 
-                        onClick={() => setIsDivinationModalOpen(true)} 
-                        className="px-3 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl shadow-lg shadow-purple-200 transition-all flex items-center gap-1 font-bold text-sm"
-                        title="紫微占卜"
-                    >
-                        <Sparkles size={18} />
-                        <span className="hidden sm:inline">紫微占卜</span>
-                    </button>
-                )}
 
                 <button 
                     onClick={onAdd} 
