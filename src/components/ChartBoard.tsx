@@ -259,7 +259,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     setShowXiaoXian(false);
     setFlyingPalace(null);
     setSelectedPalace(null);
-    setIsReverse(false); // 切換大限時重置顛倒盤
+    setIsReverse(false);
   };
 
   const handleLiuNianClick = (year: number) => {
@@ -268,14 +268,13 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     setShowXiaoXian(false);
     setFlyingPalace(null);
     setSelectedPalace(null);
-    setIsReverse(false); // 切換流年時重置顛倒盤
+    setIsReverse(false);
   };
 
   const toggleXiaoXian = () => {
     setShowXiaoXian(!showXiaoXian);
     setFlyingPalace(null);
     setSelectedPalace(null);
-    // 注意：切換小限盤不重置顛倒盤狀態
   };
 
   const handlePalaceClick = (palaceIdx: number) => {
@@ -352,8 +351,11 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const isLimitActive = daXianSeq >= 0 || liuNianYear !== null || showXiaoXian;
 
   return (
-    <div className="flex flex-col h-full w-full bg-white overflow-hidden relative">
-      <div className="absolute top-4 left-4 z-50 flex flex-col gap-2 items-start">
+    // 修改 1: 使用 h-[100dvh] 來對應 iPad/Mobile 的動態網址列，並使用 overflow-hidden
+    <div className="flex flex-col h-[100dvh] w-full bg-white overflow-hidden relative">
+      
+      {/* 修改 2: 左上角按鈕保持 absolute，但確保不被切掉，在 iPad 上可能需要一點點頂部空間 */}
+      <div className="absolute top-4 left-4 z-50 flex flex-col gap-2 items-start pointer-events-auto">
         <button
           onClick={handleBack}
           className="bg-white text-gray-700 px-3 py-2 rounded-lg shadow-md hover:bg-gray-100 flex items-center gap-1.5 transition-all border border-gray-300"
@@ -399,10 +401,19 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
         )}
       </div>
 
-      <div className="flex-1 flex flex-col items-center w-full p-1 gap-0 overflow-hidden">
+      {/* 修改 3: 中間命盤區塊
+          - flex-1: 佔據剩餘空間
+          - min-h-0: 關鍵！允許 flex item 縮小，不會撐爆容器
+          - justify-center: 垂直置中
+      */}
+      <div className="flex-1 flex flex-col items-center justify-center w-full p-2 gap-0 overflow-hidden min-h-0">
         <div
           ref={chartRef}
-          className="relative w-full max-w-[1200px] aspect-[4/3] bg-white border-2 border-gray-800 shadow-xl z-10 shrink-1 min-h-0 flex-1"
+          // 修改 4: 命盤本體
+          // - aspect-[4/3]: 維持比例
+          // - max-h-full & max-w-full: 關鍵！限制最大寬高，讓它自動適應螢幕，不超出範圍
+          // - h-auto & w-auto: 讓瀏覽器自己算
+          className="relative aspect-[4/3] max-h-full max-w-full w-auto h-auto bg-white border-2 border-gray-800 shadow-xl z-10"
         >
           <svg className="absolute inset-0 w-full h-full pointer-events-none z-40">
             {selectedPalace !== null &&
@@ -638,7 +649,11 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
           </div>
         </div>
 
-        <div className="w-full max-w-[1200px] flex flex-col border-x-2 border-b-2 border-gray-800 bg-gray-100 mt-[-2px] z-0 shrink-0">
+        {/* 修改 5: 底部按鈕區塊
+            - shrink-0: 禁止被壓縮，保證高度
+            - z-50: 確保在最上層 (如果不小心重疊)
+        */}
+        <div className="w-full max-w-[1200px] flex flex-col border-x-2 border-b-2 border-gray-800 bg-gray-100 mt-[-2px] z-50 shrink-0">
           <div className="flex w-full overflow-x-auto scrollbar-hide border-b border-gray-300">
             {daXianList.map((limit) => {
               const isActive = daXianSeq === limit.seq;
