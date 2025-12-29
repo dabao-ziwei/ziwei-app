@@ -19,7 +19,9 @@ interface PalaceCardProps {
   flyingStars?: Record<string, SiHuaType>;
   
   // 新增 props
-  isReverse?: boolean;
+  isTwinMode?: boolean; // 資料層：決定「本體」是誰
+  isReverse?: boolean;  // 檢視層：決定是否「並排顯示對宮」
+  
   reverseDaName?: string;
   reverseLiuName?: string;
 }
@@ -37,6 +39,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   isXiaoXianMingPalace,
   onTriggerClick,
   flyingStars,
+  isTwinMode,
   isReverse,
   reverseDaName,
   reverseLiuName,
@@ -56,6 +59,16 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
     ...palace.miscStars,
     ...palace.limitStars,
   ];
+
+  // 1. 決定本命宮位顯示名稱 (Red Text)
+  // 如果是雙胞胎模式，直接替換成對宮名稱
+  const baseName = isTwinMode ? PALACE_REVERSE_MAP[palace.name] : palace.name;
+
+  // 2. 決定顛倒盤顯示名稱 (Purple Text)
+  // 顛倒盤永遠顯示「目前紅色文字的對宮」
+  // 如果是正常模式：顯示遷移 (相對於命宮)
+  // 如果是雙胞胎模式：顯示命宮 (相對於遷移)
+  const reverseBaseName = isReverse ? PALACE_REVERSE_MAP[baseName] : null;
 
   // 飛化標籤 (Chips)
   const renderFlyingChips = () => {
@@ -214,21 +227,20 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
       >
         <div className="flex flex-col-reverse items-end leading-tight pointer-events-none">
           <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right">
-              {/* 1. 本命盤顛倒 (查表) */}
-              {isReverse && PALACE_REVERSE_MAP[palace.name] && (
+              {/* 顛倒盤顯示 (紫色) */}
+              {reverseBaseName && (
                   <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none">
-                      {PALACE_REVERSE_MAP[palace.name]}
+                      {reverseBaseName}
                   </span>
               )}
-              {/* 原本宮位名稱 (紅色) */}
+              {/* 本命宮位顯示 (紅色，可能是原名或雙胞胎名) */}
               <span className="text-[13px] font-bold text-red-600 whitespace-nowrap leading-none">
-                {palace.name}
+                {baseName}
               </span>
           </div>
 
           {daName && (
             <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right">
-                {/* 2. 大限盤顛倒 (動態計算) */}
                 {isReverse && reverseDaName && (
                     <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none mb-[1px]">
                         {reverseDaName}
@@ -242,7 +254,6 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
 
           {liuName && (
             <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right">
-                {/* 3. 流年盤顛倒 (動態計算) */}
                 {isReverse && reverseLiuName && (
                     <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none mb-[1px]">
                         {reverseLiuName}
