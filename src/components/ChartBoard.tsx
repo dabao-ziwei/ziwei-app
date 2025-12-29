@@ -68,7 +68,91 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
 
   const baseChartData = useMemo(() => engine?.getChartData(), [engine]);
 
-  if (loading || !client || !baseChartData || !engine) {
+  // 【修正重點 1】將 daXianList 包入 useMemo
+  const daXianList = useMemo(() => {
+    if (!baseChartData || !engine) return [];
+    const list = [];
+    const startPos = engine.getMingPos();
+    const direction = baseChartData.direction || 1;
+
+    for (let i = 0; i < 10; i++) {
+      const offset = i * direction;
+      const palaceIdx = (startPos + offset + 120) % 12;
+      const palace = baseChartData.palaces[palaceIdx];
+      if (palace) {
+        const startYear = baseChartData.lunarYear + palace.ages[0];
+        list.push({
+          seq: i,
+          name: `${['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'][i]}限`,
+          ganZhi: `${GAN[palace.ganIndex]}${ZHI[palace.zhiIndex]}`,
+          palaceIdx: palaceIdx,
+          startAge: palace.ages[0],
+          endAge: palace.ages[1],
+          startYear: startYear,
+        });
+      }
+    }
+    return list;
+  }, [baseChartData, engine]);
+
+  // 【修正重點 2】將 liuNianList 包入 useMemo
+  const liuNianList = useMemo(() => {
+    const targetSeq = daXianSeq === -1 ? 0 : daXianSeq;
+    const targetDaXian = daXianList[targetSeq];
+    if (!targetDaXian) return [];
+
+    const list = [];
+    for (let i = 0; i < 10; i++) {
+      const year = targetDaXian.startYear + i;
+      const age = targetDaXian.startAge + i;
+      const gan = (year - 4) % 10;
+      const zhi = (year - 4) % 12;
+      list.push({ year, age, label: `${year}${GAN[gan]}${ZHI[zhi]} ${age}` });
+    }
+    return list;
+  }, [daXianSeq, daXianList]);
+
+  // 【修正重點 3】將 xiaoXianMingIdx 包入 useMemo
+  const xiaoXianMingIdx = useMemo(() => {
+    if (!liuNianYear || !baseChartData || !engine) return -1;
+    const virtualAge = liuNianYear - baseChartData.lunarYear + 1;
+    return engine.getXiaoXianPos(virtualAge);
+  }, [liuNianYear, baseChartData, engine]);
+
+  // 【修正重點 4】將 chartData 包入 useMemo，解決 #310 錯誤
+  const chartData = useMemo(() => {
+    if (!engine || !baseChartData) return baseChartData; // Fallback
+
+    let daGan = -1;
+    let liuGan = -1;
+    let liuZhi = -1;
+    let xiaoGan = -1;
+
+    if (daXianSeq >= 0) {
+      const target = daXianList[daXianSeq];
+      if (target && baseChartData.palaces[target.palaceIdx]) {
+        daGan = baseChartData.palaces[target.palaceIdx].ganIndex;
+      }
+    }
+
+    if (liuNianYear) {
+      liuGan = (liuNianYear - 4) % 10;
+      liuZhi = (liuNianYear - 4) % 12;
+    }
+
+    if (xiaoXianMingIdx >= 0 && showXiaoXian) {
+      xiaoGan = baseChartData.palaces[xiaoXianMingIdx].ganIndex;
+    }
+
+    // 這些會修改 engine 內部狀態，必須包在 useMemo 裡以避免 render loop
+    engine.computeLimitStars(daGan, liuGan, liuZhi, xiaoGan, showXiaoXian);
+    engine.computeSiHua(daGan, liuGan, xiaoGan);
+
+    return engine.getChartData();
+  }, [engine, baseChartData, daXianSeq, daXianList, liuNianYear, xiaoXianMingIdx, showXiaoXian]);
+
+  // Loading 檢查移到 Hooks 之後
+  if (loading || !client || !baseChartData || !engine || !chartData) {
     return (
         <div className="flex h-[100dvh] w-full items-center justify-center bg-gray-100">
             <Loader2 className="animate-spin text-gray-500" size={48} />
@@ -133,82 +217,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
       console.error('Download failed:', err);
     }
   };
-
-  const daXianList = (() => {
-    if (!baseChartData) return [];
-    const list = [];
-    const startPos = engine.getMingPos();
-    const direction = baseChartData.direction || 1;
-
-    for (let i = 0; i < 10; i++) {
-      const offset = i * direction;
-      const palaceIdx = (startPos + offset + 120) % 12;
-      const palace = baseChartData.palaces[palaceIdx];
-      if (palace) {
-        const startYear = baseChartData.lunarYear + palace.ages[0];
-        list.push({
-          seq: i,
-          name: `${['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'][i]}限`,
-          ganZhi: `${GAN[palace.ganIndex]}${ZHI[palace.zhiIndex]}`,
-          palaceIdx: palaceIdx,
-          startAge: palace.ages[0],
-          endAge: palace.ages[1],
-          startYear: startYear,
-        });
-      }
-    }
-    return list;
-  })();
-
-  const liuNianList = (() => {
-    const targetSeq = daXianSeq === -1 ? 0 : daXianSeq;
-    const targetDaXian = daXianList[targetSeq];
-    if (!targetDaXian) return [];
-
-    const list = [];
-    for (let i = 0; i < 10; i++) {
-      const year = targetDaXian.startYear + i;
-      const age = targetDaXian.startAge + i;
-      const gan = (year - 4) % 10;
-      const zhi = (year - 4) % 12;
-      list.push({ year, age, label: `${year}${GAN[gan]}${ZHI[zhi]} ${age}` });
-    }
-    return list;
-  })();
-
-  const xiaoXianMingIdx = (() => {
-    if (!liuNianYear) return -1;
-    const virtualAge = liuNianYear - baseChartData.lunarYear + 1;
-    return engine.getXiaoXianPos(virtualAge);
-  })();
-
-  const chartData = (() => {
-    let daGan = -1;
-    let liuGan = -1;
-    let liuZhi = -1;
-    let xiaoGan = -1;
-
-    if (daXianSeq >= 0) {
-      const target = daXianList[daXianSeq];
-      if (target && baseChartData.palaces[target.palaceIdx]) {
-        daGan = baseChartData.palaces[target.palaceIdx].ganIndex;
-      }
-    }
-
-    if (liuNianYear) {
-      liuGan = (liuNianYear - 4) % 10;
-      liuZhi = (liuNianYear - 4) % 12;
-    }
-
-    if (xiaoXianMingIdx >= 0 && showXiaoXian) {
-      xiaoGan = baseChartData.palaces[xiaoXianMingIdx].ganIndex;
-    }
-
-    engine.computeLimitStars(daGan, liuGan, liuZhi, xiaoGan, showXiaoXian);
-    engine.computeSiHua(daGan, liuGan, xiaoGan);
-
-    return engine.getChartData();
-  })();
 
   const getRelativeNames = (currentIdx: number) => {
     let daName = undefined;
@@ -341,10 +349,11 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
 
   const isLimitActive = daXianSeq >= 0 || liuNianYear !== null || showXiaoXian;
 
-  // 計算命宮主星字串
+  // 計算命宮主星字串 (這部分就是剛剛引發錯誤的源頭，現在 chartData 穩定了，這裡就不會報錯了)
   const benMingMajorStarsStr = useMemo(() => {
+      if (!chartData) return '';
       const p = chartData.palaces[benMingPos];
-      if (p.majorStars.length > 0) {
+      if (p && p.majorStars.length > 0) {
           return `(${p.majorStars.map(s => s.name).join('、')})`;
       }
       return '(無主星)';
