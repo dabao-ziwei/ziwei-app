@@ -18,12 +18,14 @@ interface PalaceCardProps {
   onTriggerClick?: () => void;
   flyingStars?: Record<string, SiHuaType>;
   
-  // 新增 props
-  isTwinMode?: boolean; // 資料層：決定「本體」是誰
-  isReverse?: boolean;  // 檢視層：決定是否「並排顯示對宮」
+  isTwinMode?: boolean; 
+  isReverse?: boolean;
   
   reverseDaName?: string;
   reverseLiuName?: string;
+  
+  // 新增：紫占專用名稱
+  divinationName?: string;
 }
 
 export const PalaceCard: React.FC<PalaceCardProps> = ({
@@ -43,6 +45,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   isReverse,
   reverseDaName,
   reverseLiuName,
+  divinationName, // 接收參數
 }) => {
   const palaceGanZhi = `${GAN[palace.ganIndex]}${ZHI[palace.zhiIndex]}`;
   const isBenMing = !daName && !liuName && !xiaoName;
@@ -61,13 +64,16 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   ];
 
   // 1. 決定本命宮位顯示名稱 (Red Text)
-  // 如果是雙胞胎模式，直接替換成對宮名稱
-  const baseName = isTwinMode ? PALACE_REVERSE_MAP[palace.name] : palace.name;
+  // 優先順序：紫占名稱 > 雙胞胎名稱 > 原本名稱
+  let baseName = palace.name;
+  if (divinationName) {
+      baseName = divinationName;
+  } else if (isTwinMode) {
+      baseName = PALACE_REVERSE_MAP[palace.name];
+  }
 
   // 2. 決定顛倒盤顯示名稱 (Purple Text)
   // 顛倒盤永遠顯示「目前紅色文字的對宮」
-  // 如果是正常模式：顯示遷移 (相對於命宮)
-  // 如果是雙胞胎模式：顯示命宮 (相對於遷移)
   const reverseBaseName = isReverse ? PALACE_REVERSE_MAP[baseName] : null;
 
   // 飛化標籤 (Chips)
@@ -233,7 +239,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
                       {reverseBaseName}
                   </span>
               )}
-              {/* 本命宮位顯示 (紅色，可能是原名或雙胞胎名) */}
+              {/* 本命宮位顯示 (紅色，包含紫占、雙胞胎、本命) */}
               <span className="text-[13px] font-bold text-red-600 whitespace-nowrap leading-none">
                 {baseName}
               </span>
