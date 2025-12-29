@@ -7,7 +7,9 @@ import { ZHI } from '../logic/constants';
 import { UserManagementModal } from '../components/UserManagementModal'; 
 
 const CATEGORIES = ["我", "家人", "朋友", "客戶", "名人", "其他"];
-const STORAGE_KEY = 'ziwei_expanded_cats';
+const STORAGE_KEY_CATS = 'ziwei_expanded_cats';
+const STORAGE_KEY_FILTER = 'ziwei_filter_only_mine';
+const SUPER_ADMIN_EMAIL = 'stephenwu.0926@gmail.com';
 
 interface ClientListProps {
   onAdd: () => void;
@@ -17,12 +19,25 @@ interface ClientListProps {
 export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const [clients, setClients] = useState<Client[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // 分類展開狀態
   const [expandedCats, setExpandedCats] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(STORAGE_KEY_CATS);
       return saved ? JSON.parse(saved) : CATEGORIES;
     } catch (e) {
       return CATEGORIES;
+    }
+  });
+
+  // 【新增】過濾開關狀態 (預設為 true: 只看自己)
+  const [showOnlyMine, setShowOnlyMine] = useState<boolean>(() => {
+    try {
+        const saved = localStorage.getItem(STORAGE_KEY_FILTER);
+        // 如果沒有紀錄，預設回傳 true
+        return saved !== null ? JSON.parse(saved) : true;
+    } catch (e) {
+        return true;
     }
   });
 
@@ -35,13 +50,17 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
 
   const navigate = useNavigate();
 
+  // 儲存狀態變更
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(expandedCats));
+    localStorage.setItem(STORAGE_KEY_CATS, JSON.stringify(expandedCats));
   }, [expandedCats]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_FILTER, JSON.stringify(showOnlyMine));
+  }, [showOnlyMine]);
 
   const refreshData = async () => {
     setLoading(true);
-    
     try {
         const data = await loadClients(); 
         setClients(Array.isArray(data) ? data : []);
@@ -87,13 +106,23 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     return `${hour}:${minuteStr}(${zhiStr}時)`;
   };
 
+  // 【修改】過濾邏輯：加入 showOnlyMine 判斷
   const filtered = clients.filter(c => {
+    // 1. 搜尋過濾
     const term = searchTerm.toLowerCase();
     const nameMatch = (c.name || '').toLowerCase().includes(term);
     const yearMatch = (c.birthYear || 0).toString().includes(term);
     const starMatch = (c.majorStars || '').includes(term);
     const creatorMatch = (c.creatorEmail || '').toLowerCase().includes(term);
-    return nameMatch || yearMatch || starMatch || creatorMatch;
+    const isSearchMatch = nameMatch || yearMatch || starMatch || creatorMatch;
+
+    // 2. 權限過濾 (如果是超級管理員且開啟了「只看自己」，則過濾掉別人的)
+    let isOwnerMatch = true;
+    if (userProfile?.email === SUPER_ADMIN_EMAIL && showOnlyMine) {
+        isOwnerMatch = c.user_id === userProfile.id;
+    }
+
+    return isSearchMatch && isOwnerMatch;
   });
 
   const grouped: Record<string, Client[]> = {};
@@ -121,14 +150,11 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
 
   const quotaDisplay = userProfile ? `[${usedCount}/${userProfile.maxCharts}]` : '';
   const isOverQuota = userProfile && usedCount >= userProfile.maxCharts && userProfile.role !== 'admin';
+  const isSuperAdmin = userProfile?.email === SUPER_ADMIN_EMAIL;
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 w-full max-w-6xl mx-auto shadow-xl overflow-hidden font-sans border-x border-slate-200 relative">
       
-      <div className="hidden">
-        Debug Info: Role={userProfile?.role}, ID={userProfile?.id}
-      </div>
-
       <header className="flex justify-between px-6 py-4 bg-white border-b border-slate-100 shrink-0 items-center relative z-20">
         <div className="flex items-center gap-4">
           
@@ -167,24 +193,41 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
           </div>
         </div>
 
-        <div className="flex gap-2 items-center">
-            <span className={`text-xs font-bold font-mono mr-1 ${isOverQuota ? 'text-red-500' : 'text-slate-400'}`}>
-                {quotaDisplay}
-            </span>
+        <div className="flex gap-4 items-center">
+            
+            {/* 【新增】超級管理員專用：隱藏他人命盤開關 */}
+            {isSuperAdmin && (
+                <div 
+                    className="flex items-center gap-2 cursor-pointer select-none bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-200 transition-colors"
+                    onClick={() => setShowOnlyMine(!showOnlyMine)}
+                    title={showOnlyMine ? "目前只顯示您建立的資料" : "目前顯示所有使用者的資料"}
+                >
+                    <span className="text-xs font-bold text-gray-600">只看我的</span>
+                    <div className={`w-9 h-5 rounded-full p-0.5 transition-colors duration-200 ease-in-out ${showOnlyMine ? 'bg-blue-600' : 'bg-gray-400'}`}>
+                        <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-200 ease-in-out ${showOnlyMine ? 'translate-x-4' : 'translate-x-0'}`} />
+                    </div>
+                </div>
+            )}
 
-            <button 
-                onClick={onAdd} 
-                disabled={isOverQuota && userProfile?.role !== 'admin'}
-                className={`px-4 py-2.5 rounded-xl shadow-lg transition-all flex items-center gap-2 font-bold text-sm
-                    ${(isOverQuota && userProfile?.role !== 'admin')
-                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200'
-                    }
-                `}
-            >
-                <Plus size={18} />
-                <span className="hidden sm:inline">新增命盤</span>
-            </button>
+            <div className="flex items-center gap-2">
+                <span className={`text-xs font-bold font-mono ${isOverQuota ? 'text-red-500' : 'text-slate-400'}`}>
+                    {quotaDisplay}
+                </span>
+
+                <button 
+                    onClick={onAdd} 
+                    disabled={isOverQuota && userProfile?.role !== 'admin'}
+                    className={`px-4 py-2.5 rounded-xl shadow-lg transition-all flex items-center gap-2 font-bold text-sm
+                        ${(isOverQuota && userProfile?.role !== 'admin')
+                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200'
+                        }
+                    `}
+                >
+                    <Plus size={18} />
+                    <span className="hidden sm:inline">新增命盤</span>
+                </button>
+            </div>
         </div>
       </header>
 
@@ -193,7 +236,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
           <input 
             type="text" 
-            placeholder="搜尋姓名、年份、主星..." 
+            placeholder="搜尋姓名、年份、主星、建立者..." 
             className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all text-slate-700 shadow-sm" 
             value={searchTerm} 
             onChange={e=>setSearchTerm(e.target.value)} 
@@ -232,7 +275,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                       <div className="p-8 text-center text-slate-400 text-sm italic">此分類尚無資料</div>
                     ) : (
                       items.map(c => {
-                        // 判斷是否為自己建立的命盤
                         const isMine = c.user_id === userProfile?.id;
                         
                         return (
@@ -256,12 +298,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                                       {c.majorStars}
                                     </span>
                                   )}
-                                  {/* 如果不是自己的，顯示建立者標籤 */}
-                                  {!isMine && c.creatorEmail && (
-                                    <span className="flex items-center gap-1 text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full border border-gray-200">
-                                        <User size={10} /> 建立者: {c.creatorEmail}
-                                    </span>
-                                  )}
                                 </div>
                                 <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-500 font-mono">
                                   <span className="hidden sm:inline text-slate-300">|</span>
@@ -276,34 +312,47 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                               </div>
                             </div>
 
-                            <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
-                              {/* 編輯按鈕：必須是自己建立的才能按 */}
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); if(isMine) onEdit(c); }} 
-                                className={`p-2 rounded-full transition-colors 
-                                  ${isMine && (!userProfile || userProfile.role === 'admin' || c.editCount < userProfile.maxEditsPerChart) 
-                                      ? 'text-slate-400 hover:text-blue-600 hover:bg-blue-100' 
-                                      : 'text-gray-200 cursor-not-allowed'
-                                  }`}
-                                title={isMine ? `編輯 (已修 ${c.editCount}/${userProfile?.role === 'admin' ? '∞' : userProfile?.maxEditsPerChart})` : '非本人建立，無法編輯'}
-                                disabled={!isMine || (userProfile?.role !== 'admin' && c.editCount >= (userProfile?.maxEditsPerChart || 3))}
-                              >
-                                <Edit2 size={18}/>
-                              </button>
-                              
-                              {/* 刪除按鈕：必須是自己建立的才能按 */}
-                              <button 
-                                onClick={(e) => { if(isMine) handleDelete(e, c.id); else e.stopPropagation(); }} 
-                                className={`p-2 rounded-full transition-colors ${
-                                    isMine 
-                                    ? 'text-slate-400 hover:text-red-600 hover:bg-red-100' 
-                                    : 'text-gray-200 cursor-not-allowed'
-                                }`}
-                                title={isMine ? "刪除" : "非本人建立，無法刪除"}
-                                disabled={!isMine}
-                              >
-                                <Trash2 size={18}/>
-                              </button>
+                            {/* 右側操作區：建立者資訊 (在按鈕左側) + 按鈕 */}
+                            <div className="flex items-center gap-2 shrink-0">
+                                
+                                {/* 【修改】建立者資訊：移動到這裡，位於按鈕左側，且只有非本人建立時才顯示 */}
+                                {!isMine && c.creatorEmail && (
+                                    <div className="hidden sm:flex items-center gap-1 text-[10px] text-gray-400 bg-gray-50 px-2 py-1 rounded border border-gray-100 select-none mr-1">
+                                        <User size={10} /> 
+                                        <span>建立者:</span> 
+                                        <span className="max-w-[120px] truncate" title={c.creatorEmail}>{c.creatorEmail}</span>
+                                    </div>
+                                )}
+
+                                <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                  {/* 編輯按鈕 */}
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); if(isMine) onEdit(c); }} 
+                                    className={`p-2 rounded-full transition-colors 
+                                      ${isMine && (!userProfile || userProfile.role === 'admin' || c.editCount < userProfile.maxEditsPerChart) 
+                                          ? 'text-slate-400 hover:text-blue-600 hover:bg-blue-100' 
+                                          : 'text-gray-200 cursor-not-allowed'
+                                      }`}
+                                    title={isMine ? `編輯 (已修 ${c.editCount}/${userProfile?.role === 'admin' ? '∞' : userProfile?.maxEditsPerChart})` : '非本人建立，無法編輯'}
+                                    disabled={!isMine || (userProfile?.role !== 'admin' && c.editCount >= (userProfile?.maxEditsPerChart || 3))}
+                                  >
+                                    <Edit2 size={18}/>
+                                  </button>
+                                  
+                                  {/* 刪除按鈕 */}
+                                  <button 
+                                    onClick={(e) => { if(isMine) handleDelete(e, c.id); else e.stopPropagation(); }} 
+                                    className={`p-2 rounded-full transition-colors ${
+                                        isMine 
+                                        ? 'text-slate-400 hover:text-red-600 hover:bg-red-100' 
+                                        : 'text-gray-200 cursor-not-allowed'
+                                    }`}
+                                    title={isMine ? "刪除" : "非本人建立，無法刪除"}
+                                    disabled={!isMine}
+                                  >
+                                    <Trash2 size={18}/>
+                                  </button>
+                                </div>
                             </div>
                           </div>
                         );
