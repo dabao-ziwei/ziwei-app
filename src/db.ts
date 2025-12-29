@@ -1,7 +1,7 @@
 import { supabase } from './supabase'; 
 
 // --- 設定 ---
-// 定義超級管理員 Email (僅此帳號可看全部)
+// 定義超級管理員 Email (僅此帳號可看全部、可接收過戶資料)
 const SUPER_VIEW_EMAIL = 'stephenwu.0926@gmail.com';
 
 // --- 介面定義 ---
@@ -13,7 +13,7 @@ export interface UserProfile {
   maxCharts: number;
   maxEditsPerChart: number;
   isBanned: boolean;
-  can_use_divination: boolean; // 新增：紫占功能權限
+  can_use_divination: boolean;
   activeCount?: number;
   deletedCount?: number;
 }
@@ -32,8 +32,8 @@ export interface Client {
   type?: string; 
   majorStars?: string;
   editCount?: number;
-  // 新增：建立者 Email (給超級管理員看用)
   creatorEmail?: string;
+  is_deleted?: boolean; // 新增：讓前端知道這是否為軟刪除資料
 }
 
 // --- 一般使用者功能 ---
@@ -57,7 +57,7 @@ export const getMyProfile = async (): Promise<UserProfile | null> => {
     maxCharts: data.max_charts,
     maxEditsPerChart: data.max_edits_per_chart,
     isBanned: data.is_banned || false,
-    can_use_divination: data.can_use_divination ?? true // 預設開啟
+    can_use_divination: data.can_use_divination ?? true
   };
 };
 
@@ -70,12 +70,14 @@ export const loadClients = async (): Promise<Client[]> => {
   let query = supabase
     .from('clients')
     .select('*')
-    .eq('is_deleted', false)
     .order('created_at', { ascending: false });
 
-  // 如果不是超級檢視者，只能看自己的
-  if (!isSuperViewer) {
-    query = query.eq('user_id', user.id);
+  if (isSuperViewer) {
+      // 超級管理員：可以看到所有資料 (包含 is_deleted = true)
+      // 不加 .eq('is_deleted', false) 濾條件
+  } else {
+      // 一般使用者：只能看自己的，且看不到已刪除的
+      query = query.eq('user_id', user.id).eq('is_deleted', false);
   }
 
   const { data, error } = await query;
@@ -85,7 +87,7 @@ export const loadClients = async (): Promise<Client[]> => {
     return [];
   }
 
-  // 如果是超級檢視者，需要額外抓取所有使用者的 Email 來對應顯示
+  // 抓取 Email 對應 (僅管理員需要)
   let userIdToEmailMap: Record<string, string> = {};
   if (isSuperViewer) {
       const { data: profiles } = await supabase.from('profiles').select('id, email');
@@ -110,17 +112,34 @@ export const loadClients = async (): Promise<Client[]> => {
     type: item.type,
     majorStars: item.major_stars,
     editCount: item.edit_count ?? 0,
-    creatorEmail: userIdToEmailMap[item.user_id] || '' 
+    creatorEmail: userIdToEmailMap[item.user_id] || '',
+    is_deleted: item.is_deleted // 回傳刪除狀態
   }));
 };
 
 export const getClients = loadClients;
 
+// 【修改】刪除命盤邏輯
+// 一般人 -> 軟刪除 (標記)
+// 管理員 -> 硬刪除 (清空)
 export const deleteClient = async (id: string): Promise<boolean> => {
-    const { error } = await supabase
-        .from('clients')
-        .update({ is_deleted: true })
-        .eq('id', id);
+    const { data: { user } } = await supabase.auth.getUser();
+    const isSuperAdmin = user?.email === SUPER_VIEW_EMAIL;
+
+    let error;
+
+    if (isSuperAdmin) {
+        // 管理員：執行真正的物理刪除
+        const res = await supabase.from('clients').delete().eq('id', id);
+        error = res.error;
+    } else {
+        // 一般使用者：執行軟刪除
+        const res = await supabase
+            .from('clients')
+            .update({ is_deleted: true })
+            .eq('id', id);
+        error = res.error;
+    }
 
     if (error) {
         console.error('Error deleting client:', error);
@@ -162,7 +181,8 @@ export const getClient = async (id: string): Promise<Client | null> => {
     created_at: data.created_at,
     type: data.type, 
     majorStars: data.major_stars,
-    editCount: data.edit_count ?? 0
+    editCount: data.edit_count ?? 0,
+    is_deleted: data.is_deleted
   };
 };
 
@@ -259,25 +279,45 @@ export const updateProfile = async (id: string, updates: Partial<UserProfile>): 
   return !error;
 };
 
-export const deleteUserProfile = async (id: string): Promise<boolean> => {
-    const { error: err1 } = await supabase.from('clients').delete().eq('user_id', id);
-    if (err1) return false;
-    const { error: err2 } = await supabase.from('profiles').delete().eq('id', id);
-    if (err2) return false;
+// 【修改】刪除使用者邏輯
+// 先過戶 (Transfer) -> 再刪除 (Delete)
+export const deleteUserProfile = async (targetUserId: string): Promise<boolean> => {
+    // 1. 取得超級管理員 (自己) 的 ID
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    
+    // 安全檢查：只有超級管理員可以執行此操作
+    if (currentUser?.email !== SUPER_VIEW_EMAIL) return false;
+
+    // 2. 將該使用者的所有命盤 (包含軟刪除的) 轉移給超級管理員
+    const { error: transferError } = await supabase
+        .from('clients')
+        .update({ user_id: currentUser.id })
+        .eq('user_id', targetUserId);
+
+    if (transferError) {
+        console.error('Transfer clients failed:', transferError);
+        return false; // 轉移失敗則中止，保護資料
+    }
+
+    // 3. 轉移成功後，才刪除使用者 Profile
+    // (注意：Auth User 的刪除通常需透過 Supabase 後台或 Edge Function，
+    // 這裡刪除 profiles 雖然無法完全刪除登入帳號，但會切斷其與系統的連結)
+    const { error: deleteError } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', targetUserId);
+
+    if (deleteError) {
+        console.error('Delete profile failed:', deleteError);
+        return false;
+    }
+
     return true;
 };
 
-// 新增：邀請使用者 (發送 Magic Link)
 export const inviteUserByEmail = async (email: string): Promise<{ success: boolean; msg: string }> => {
-    // 注意：Client-side 只能用 signInWithOtp 模擬邀請，或者 redirect 到註冊頁
-    // 這裡我們只回傳成功，實際的 Email 發送需透過 Supabase Auth UI 或 Edge Function
-    // 但為了滿足 "管理者輸入信箱，發送邀請信" 的流程，我們使用 resetPasswordForEmail
-    // 這會發送一封 "重設密碼" 的信，使用者點擊後可以直接設定密碼並登入，達到邀請效果
-    
-    // 檢查是否已存在 (略，Supabase 會處理)
-    
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin + '/login', // 導向登入頁
+        redirectTo: window.location.origin + '/login',
     });
 
     if (error) {
