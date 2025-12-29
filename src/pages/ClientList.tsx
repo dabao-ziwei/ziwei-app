@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, Shield, UserCog, LogOut } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, UserCog, LogOut } from 'lucide-react';
 import { loadClients, deleteClient, getMyProfile, getUsedChartCount, type Client, type UserProfile } from '../db';
 import { supabase } from '../supabase';
 import { useNavigate } from 'react-router-dom';
@@ -42,14 +42,11 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const refreshData = async () => {
     setLoading(true);
     
-    // 1. 列表
-    const data = await loadClients(); 
-    setClients(data);
-
-    // 2. Profile
     try {
+        const data = await loadClients(); 
+        setClients(Array.isArray(data) ? data : []);
+
         const profile = await getMyProfile();
-        console.log("Debug: Loaded Profile", profile); // 可以在 F12 Console 看到
         setUserProfile(profile);
 
         if (profile) {
@@ -57,10 +54,11 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
             setUsedCount(count);
         }
     } catch (e) {
-        console.error("Debug: Profile Load Error", e);
+        console.error("Debug: Load Error", e);
+        setClients([]);
+    } finally {
+        setLoading(false);
     }
-
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -77,21 +75,25 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     };
   }, []);
 
-  const getTimeDisplay = (hour: number, minute: number) => {
+  const getTimeDisplay = (hour?: number, minute?: number) => {
+    if (hour === undefined || minute === undefined) return '--:--';
+
     const minuteStr = minute.toString().padStart(2, '0');
     const zhiIdx = Math.floor((hour + 1) / 2) % 12;
-    let zhiStr = ZHI[zhiIdx];
+    let zhiStr = ZHI[zhiIdx] || '';
     if (zhiIdx === 0) {
       zhiStr = hour === 23 ? '晚子' : '早子';
     }
     return `${hour}:${minuteStr}(${zhiStr}時)`;
   };
 
-  const filtered = clients.filter(c => 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    c.birthYear.toString().includes(searchTerm) ||
-    c.majorStars?.includes(searchTerm)
-  );
+  const filtered = clients.filter(c => {
+    const term = searchTerm.toLowerCase();
+    const nameMatch = (c.name || '').toLowerCase().includes(term);
+    const yearMatch = (c.birthYear || 0).toString().includes(term);
+    const starMatch = (c.majorStars || '').includes(term);
+    return nameMatch || yearMatch || starMatch;
+  });
 
   const grouped: Record<string, Client[]> = {};
   CATEGORIES.forEach(c => grouped[c] = []);
@@ -122,12 +124,10 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   return (
     <div className="flex flex-col h-screen bg-slate-50 w-full max-w-6xl mx-auto shadow-xl overflow-hidden font-sans border-x border-slate-200 relative">
       
-      {/* 臨時偵錯工具：顯示當前身分 (正式版請移除) */}
       <div className="hidden">
         Debug Info: Role={userProfile?.role}, ID={userProfile?.id}
       </div>
 
-      {/* Header */}
       <header className="flex justify-between px-6 py-4 bg-white border-b border-slate-100 shrink-0 items-center relative z-20">
         <div className="flex items-center gap-4">
           
@@ -146,7 +146,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                             onClick={() => { setIsUserMgmtOpen(true); setIsMenuOpen(false); }}
                             className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-2 text-gray-700 font-medium"
                         >
-                            <UserCog size={16} /> 管理使用者
+                            <UserCog size={16} /> 使用者管理
                         </button>
                     )}
                     <button 
@@ -187,7 +187,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         </div>
       </header>
 
-      {/* Search Bar */}
       <div className="p-4 bg-white/50 backdrop-blur-sm border-b border-slate-100 shrink-0 sticky top-0 z-10">
         <div className="relative max-w-2xl mx-auto">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
@@ -201,7 +200,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         </div>
       </div>
 
-      {/* List Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {loading ? (
           <div className="flex justify-center py-10 text-slate-400 animate-pulse">載入中...</div>

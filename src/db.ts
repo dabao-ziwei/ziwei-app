@@ -8,10 +8,9 @@ export interface UserProfile {
   role: string;
   maxCharts: number;
   maxEditsPerChart: number;
-  // 新增欄位
   isBanned: boolean; 
-  activeCount?: number; // 從 View 來的統計
-  deletedCount?: number; // 從 View 來的統計
+  activeCount?: number;
+  deletedCount?: number;
 }
 
 export interface Client {
@@ -54,7 +53,6 @@ export const getMyProfile = async (): Promise<UserProfile | null> => {
   };
 };
 
-// 【重要修改】只讀取未刪除的命盤
 export const loadClients = async (): Promise<Client[]> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
@@ -63,7 +61,7 @@ export const loadClients = async (): Promise<Client[]> => {
     .from('clients')
     .select('*')
     .eq('user_id', user.id)
-    .eq('is_deleted', false) // <--- 關鍵：過濾掉已刪除的
+    .eq('is_deleted', false)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -90,11 +88,10 @@ export const loadClients = async (): Promise<Client[]> => {
 
 export const getClients = loadClients;
 
-// 【重要修改】改為軟刪除 (Soft Delete)
 export const deleteClient = async (id: string): Promise<boolean> => {
     const { error } = await supabase
         .from('clients')
-        .update({ is_deleted: true }) // <--- 變成更新狀態
+        .update({ is_deleted: true })
         .eq('id', id);
 
     if (error) {
@@ -104,22 +101,16 @@ export const deleteClient = async (id: string): Promise<boolean> => {
     return true;
 };
 
-// 計算已使用數量 (改為只算未刪除的)
 export const getUsedChartCount = async (userId: string): Promise<number> => {
     const { count, error } = await supabase
         .from('clients')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', userId)
-        .eq('is_deleted', false); // <--- 只算活著的
+        .eq('is_deleted', false);
     
     if (error) return 0;
     return count || 0;
 };
-
-// ... (以下 getClient, addClient, updateClient, saveClient 保持不變，照舊) ...
-// 為了篇幅省略重複代碼，請保留你原有的 addClient, updateClient, getClient, saveClient
-// 只要確認 deleteClient 和 loadClients 有改成上面的樣子即可
-// (為防萬一，下面補上完整的 add/update/get/save 以免你複製錯)
 
 export const getClient = async (id: string): Promise<Client | null> => {
   const { data, error } = await supabase
@@ -196,10 +187,9 @@ export const saveClient = async (clientData: any): Promise<string | null> => {
 
 // --- 管理員專用功能 ---
 
-// 1. 取得統計列表 (使用新的 View)
 export const getAllProfilesWithStats = async (): Promise<UserProfile[]> => {
   const { data, error } = await supabase
-    .from('user_statistics') // <--- 讀取我們剛建立的 View
+    .from('user_statistics')
     .select('*')
     .order('created_at', { ascending: false });
 
@@ -220,7 +210,6 @@ export const getAllProfilesWithStats = async (): Promise<UserProfile[]> => {
   }));
 };
 
-// 2. 切換停權狀態
 export const toggleUserBan = async (id: string, currentStatus: boolean): Promise<boolean> => {
   const { error } = await supabase
     .from('profiles')
@@ -230,7 +219,6 @@ export const toggleUserBan = async (id: string, currentStatus: boolean): Promise
   return !error;
 };
 
-// 3. 更新設定 (原有功能)
 export const updateProfile = async (id: string, updates: Partial<UserProfile>): Promise<boolean> => {
   const dbUpdates: any = {};
   if (updates.role) dbUpdates.role = updates.role;
@@ -239,4 +227,23 @@ export const updateProfile = async (id: string, updates: Partial<UserProfile>): 
 
   const { error } = await supabase.from('profiles').update(dbUpdates).eq('id', id);
   return !error;
+};
+
+// 新增：完全刪除使用者資料 (包含 Profile 與其所有命盤)
+export const deleteUserProfile = async (id: string): Promise<boolean> => {
+    // 1. 先刪除該使用者的所有命盤 (Hard Delete)
+    const { error: err1 } = await supabase.from('clients').delete().eq('user_id', id);
+    if (err1) {
+        console.error('Error deleting user clients:', err1);
+        return false;
+    }
+
+    // 2. 刪除 Profile
+    const { error: err2 } = await supabase.from('profiles').delete().eq('id', id);
+    if (err2) {
+        console.error('Error deleting user profile:', err2);
+        return false;
+    }
+    
+    return true;
 };
