@@ -5,7 +5,7 @@ import { PalaceCard } from './PalaceCard';
 import { getClient, type Client } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
 import { GAN, ZHI, PALACE_NAMES } from '../logic/constants';
-import { Loader2 } from 'lucide-react';
+import { Loader2, RefreshCw } from 'lucide-react';
 
 interface ChartBoardProps {
   client?: Client;
@@ -16,7 +16,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   
-  // 1. 優化 State 初始化：如果有傳入 propClient，直接設定 currentHour，避免 useEffect 二次更新
   const [client, setClient] = useState<Client | null>(propClient || null);
   const [currentHour, setCurrentHour] = useState<number>(() => propClient ? propClient.birthHour : -1);
   const [loading, setLoading] = useState(!propClient);
@@ -27,12 +26,13 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const [daXianSeq, setDaXianSeq] = useState<number>(-1);
   const [liuNianYear, setLiuNianYear] = useState<number | null>(null);
   const [showXiaoXian, setShowXiaoXian] = useState<boolean>(false);
+  
+  // 新增：顛倒盤狀態
+  const [isReverse, setIsReverse] = useState<boolean>(false);
 
   const chartRef = useRef<HTMLDivElement>(null);
 
-  // 2. 修正 useEffect：單純負責「沒有資料時去抓取」，抓到後一次更新所有 State
   useEffect(() => {
-    // 如果已經有 client (不管是 props 傳的還是已經抓完了)，就不做事
     if (client) return;
 
     const fetchData = async () => {
@@ -41,7 +41,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
         try {
             const data = await getClient(id);
             if (data) {
-                // 這裡一次更新兩個 State，React 會自動批次處理，不會報錯
                 setClient(data);
                 setCurrentHour(data.birthHour);
             } else {
@@ -59,7 +58,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     fetchData();
   }, [id, client, navigate]);
 
-  // 排盤引擎
   const engine = useMemo(() => {
     if (!client || currentHour === -1) return null;
     return new ZiWeiEngine(
@@ -74,7 +72,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
 
   const baseChartData = useMemo(() => engine?.getChartData(), [engine]);
 
-  // Loading 檢查
   if (loading || !client || !baseChartData || !engine) {
     return (
         <div className="flex h-screen w-full items-center justify-center bg-gray-100">
@@ -91,6 +88,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     setShowXiaoXian(false);
     setSelectedPalace(null);
     setFlyingPalace(null);
+    setIsReverse(false); // 重置時也關閉顛倒盤
   };
 
   const changeHour = (delta: number) => {
@@ -108,7 +106,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
 
   const isTimeModified = currentHour !== client.birthHour;
 
-  // 3. 移除 useMemo，直接計算顯示用的時辰字串 (修正 React #310 風險)
   let currentHourZhi = ZHI[Math.floor((currentHour + 1) / 2) % 12];
   if (Math.floor((currentHour + 1) / 2) % 12 === 0) {
      currentHourZhi = currentHour === 23 ? '晚子' : '早子';
@@ -118,7 +115,8 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     daXianSeq === -1 &&
     liuNianYear === null &&
     selectedPalace === null &&
-    flyingPalace === null;
+    flyingPalace === null &&
+    !isReverse;
 
   const handleDownload = async () => {
     if (!chartRef.current) return;
@@ -126,9 +124,16 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
       const dataUrl = await toPng(chartRef.current, {
         cacheBust: true,
         backgroundColor: '#ffffff',
+        // 過濾掉 class 包含 'no-screenshot' 的元素 (例如雙胞胎按鈕)
+        filter: (node) => {
+            if (node.classList && node.classList.contains('no-screenshot')) {
+                return false;
+            }
+            return true;
+        }
       });
       const link = document.createElement('a');
-      link.download = `${client.name}_本命盤.png`;
+      link.download = `${client.name}_${isReverse ? '顛倒盤' : '本命盤'}.png`;
       link.href = dataUrl;
       link.click();
     } catch (err) {
@@ -255,6 +260,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     setShowXiaoXian(false);
     setFlyingPalace(null);
     setSelectedPalace(null);
+    setIsReverse(false);
   };
 
   const handleLiuNianClick = (year: number) => {
@@ -263,6 +269,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     setShowXiaoXian(false);
     setFlyingPalace(null);
     setSelectedPalace(null);
+    setIsReverse(false);
   };
 
   const toggleXiaoXian = () => {
@@ -285,6 +292,10 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     } else {
       setFlyingPalace(palaceIdx);
     }
+  };
+
+  const toggleReverse = () => {
+      setIsReverse(!isReverse);
   };
 
   const flyingStarsLookup = (() => {
@@ -336,6 +347,9 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
       if (onBack) onBack();
       else navigate('/');
   };
+
+  // 判斷是否為「限盤」(大限、流年、小限)
+  const isLimitActive = daXianSeq >= 0 || liuNianYear !== null || showXiaoXian;
 
   return (
     <div className="flex flex-col h-full w-full bg-white overflow-hidden relative">
@@ -496,25 +510,49 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                         </div>
                       </div>
 
-                      {liuNianYear && (
-                        <div className="absolute top-3 right-3 flex flex-col items-center gap-1 scale-110">
-                          <span className="text-[10px] text-gray-500 font-bold">
-                            小限盤
-                          </span>
-                          <button
-                            onClick={toggleXiaoXian}
-                            className={`w-10 h-5 rounded-full p-0.5 transition-colors ${
-                              showXiaoXian ? 'bg-green-500' : 'bg-gray-300'
-                            }`}
-                          >
-                            <div
-                              className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${
-                                showXiaoXian ? 'translate-x-5' : 'translate-x-0'
-                              }`}
-                            />
-                          </button>
+                      {/* 右上角控制區：小限盤開關 + 顛倒盤按鈕 */}
+                      <div className="absolute top-3 right-3 flex items-start gap-4 scale-110 z-50">
+                        
+                        {/* 顛倒盤/雙胞胎按鈕 (截圖忽略) */}
+                        <div className="flex flex-col items-center gap-1 no-screenshot">
+                            <span className="text-[10px] text-gray-500 font-bold">
+                                {isLimitActive ? '顛倒盤' : '雙胞胎'}
+                            </span>
+                            <button
+                                onClick={toggleReverse}
+                                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors shadow-md border
+                                    ${isReverse 
+                                        ? 'bg-purple-600 text-white border-purple-700' 
+                                        : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'
+                                    }`}
+                                title={isReverse ? "還原" : (isLimitActive ? "開啟顛倒盤" : "開啟雙胞胎盤")}
+                            >
+                                <RefreshCw size={16} className={isReverse ? "animate-spin-slow" : ""} />
+                            </button>
                         </div>
-                      )}
+
+                        {/* 小限盤開關 (僅在有流年時顯示) */}
+                        {liuNianYear && (
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="text-[10px] text-gray-500 font-bold">
+                                小限盤
+                              </span>
+                              <button
+                                onClick={toggleXiaoXian}
+                                className={`w-10 h-5 rounded-full p-0.5 transition-colors mt-1.5 ${
+                                  showXiaoXian ? 'bg-green-500' : 'bg-gray-300'
+                                }`}
+                              >
+                                <div
+                                  className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${
+                                    showXiaoXian ? 'translate-x-5' : 'translate-x-0'
+                                  }`}
+                                />
+                              </button>
+                            </div>
+                        )}
+                      </div>
+
                     </div>
                   );
                 return null;
@@ -578,6 +616,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                     }
                     onTriggerClick={() => handleTriggerClick(palaceIdx)}
                     flyingStars={flyingStarsLookup}
+                    isReverse={isReverse} // 傳遞顛倒盤狀態
                   />
                   {isDaXianMing && isDaXianActive && (
                     <div className="absolute inset-0 border-[3px] border-gray-600 pointer-events-none z-20 opacity-70"></div>

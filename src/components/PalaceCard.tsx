@@ -1,6 +1,6 @@
 import React from 'react';
 import { type Palace, type Star, type SiHuaType } from '../logic/types';
-import { GAN, ZHI, STAR_ABBR_MAP } from '../logic/constants';
+import { GAN, ZHI, STAR_ABBR_MAP, PALACE_REVERSE_MAP } from '../logic/constants';
 
 interface PalaceCardProps {
   palace: Palace;
@@ -17,6 +17,9 @@ interface PalaceCardProps {
 
   onTriggerClick?: () => void;
   flyingStars?: Record<string, SiHuaType>;
+  
+  // 新增 props
+  isReverse?: boolean;
 }
 
 export const PalaceCard: React.FC<PalaceCardProps> = ({
@@ -32,6 +35,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   isXiaoXianMingPalace,
   onTriggerClick,
   flyingStars,
+  isReverse,
 }) => {
   const palaceGanZhi = `${GAN[palace.ganIndex]}${ZHI[palace.zhiIndex]}`;
   const isBenMing = !daName && !liuName && !xiaoName;
@@ -193,8 +197,6 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
             )}
           </div>
         </div>
-
-        {/* 原本右側的 Trigger 佔位區已移除，改用下方的 Absolute Layer */}
       </div>
 
       {/* 飛化觸發區 (Trigger Zone) - 獨立的 Absolute Layer */}
@@ -207,9 +209,19 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
         title="點擊查看此宮位之飛化 (四化)"
       >
         <div className="flex flex-col-reverse items-end leading-tight pointer-events-none">
-          <span className="text-[13px] font-bold text-red-600 whitespace-nowrap leading-none group-hover:scale-105 transition-transform">
-            {palace.name}
-          </span>
+          <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right">
+              {/* 顛倒盤宮位名稱 (紫色) */}
+              {isReverse && (
+                  <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none">
+                      {PALACE_REVERSE_MAP[palace.name]}
+                  </span>
+              )}
+              {/* 原本宮位名稱 (紅色) */}
+              <span className="text-[13px] font-bold text-red-600 whitespace-nowrap leading-none">
+                {palace.name}
+              </span>
+          </div>
+
           {daName && (
             <span className="text-[13px] font-bold text-gray-500 whitespace-nowrap leading-none mb-[1px]">
               {daName}
@@ -294,4 +306,3 @@ const SiHuaSlot = ({
   }
   return <div className="w-3.5 h-3.5 mb-[1px]" />;
 };
-
