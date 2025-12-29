@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, UserCog, LogOut, User, Sparkles } from 'lucide-react';
-import { loadClients, deleteClient, getMyProfile, getUsedChartCount, saveClient, type Client, type UserProfile } from '../db';
+import { loadClients, deleteClient, getMyProfile, getUsedChartCount, type Client, type UserProfile } from '../db';
 import { supabase } from '../supabase';
 import { useNavigate } from 'react-router-dom';
 import { ZHI } from '../logic/constants';
@@ -122,6 +122,8 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const grouped: Record<string, Client[]> = {};
   CATEGORIES.forEach(c => grouped[c] = []);
   
+  // 紫占不應該出現在列表中，但為了相容舊資料，若有舊資料仍顯示
+  // 新邏輯不會產生 type='紫占' 的 DB 資料
   const hasDivination = filtered.some(c => c.type === '紫占');
   if (hasDivination) grouped['紫占'] = [];
 
@@ -145,16 +147,16 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     }
   };
 
+  // 【核心修正】紫占不存檔，直接傳遞資料並跳轉
   const handleCreateDivination = async (data: any) => {
-      try {
-          const savedId = await saveClient(data);
-          if (savedId) {
-              navigate(`/divination/${savedId}`);
-          }
-      } catch (err) {
-          console.error(err);
-          alert('建立失敗');
-      }
+      // 隨機產生一個暫時 ID，避免元件 key 報錯 (雖然不存 DB)
+      const tempClient = { 
+          ...data, 
+          id: `temp-${Date.now()}`,
+          user_id: userProfile?.id 
+      };
+      
+      navigate('/divination', { state: { client: tempClient } });
   };
 
   const quotaDisplay = userProfile ? `[${usedCount}/${userProfile.maxCharts}]` : '';
@@ -177,7 +179,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
 
             {isMenuOpen && (
                 <div className="absolute top-12 left-0 w-52 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
-                    {/* 1. 紫微占卜按鈕 (移到這裡，位於使用者管理上方) */}
+                    {/* 紫微占卜按鈕 */}
                     {userProfile?.can_use_divination && (
                         <button 
                             onClick={() => { setIsDivinationModalOpen(true); setIsMenuOpen(false); }} 
@@ -214,7 +216,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         </div>
 
         <div className="flex gap-4 items-center">
-            
             {isSuperAdmin && (
                 <div 
                     className="hidden sm:flex items-center gap-2 cursor-pointer select-none bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-200 transition-colors"

@@ -98,8 +98,8 @@ function App() {
           } 
         />
         <Route path="/chart/:id" element={<ChartBoard />} />
-        {/* 新增紫占模式路由 */}
-        <Route path="/divination/:id" element={<ChartBoard mode="divination" />} />
+        {/* 修改：紫占路由不需要 ID */}
+        <Route path="/divination" element={<ChartBoard mode="divination" />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

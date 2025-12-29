@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { toPng } from 'html-to-image';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom'; // 引入 useLocation
 import { PalaceCard } from './PalaceCard';
 import { getClient, type Client } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
@@ -16,12 +16,24 @@ interface ChartBoardProps {
 const HOUR_SEQUENCE = [23, 0, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21];
 
 export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBack, mode = 'standard' }) => {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams<{ id?: string }>(); // id 是可選的
   const navigate = useNavigate();
+  const location = useLocation();
   
-  const [client, setClient] = useState<Client | null>(propClient || null);
-  const [currentHour, setCurrentHour] = useState<number>(() => propClient ? propClient.birthHour : -1);
-  const [loading, setLoading] = useState(!propClient);
+  // 優先順序：Prop > Location State > Null (等待 DB 讀取)
+  const [client, setClient] = useState<Client | null>(
+      propClient || location.state?.client || null
+  );
+
+  const [currentHour, setCurrentHour] = useState<number>(() => {
+      // 初始化時辰
+      if (propClient) return propClient.birthHour;
+      if (location.state?.client) return location.state.client.birthHour;
+      return -1;
+  });
+
+  // 如果有資料(state/prop)，loading 設為 false，否則 true
+  const [loading, setLoading] = useState(!client);
   
   const [selectedPalace, setSelectedPalace] = useState<number | null>(null);
   const [flyingPalace, setFlyingPalace] = useState<number | null>(null);
@@ -31,7 +43,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const [isReverse, setIsReverse] = useState<boolean>(false);
   const [isTwinMode, setIsTwinMode] = useState<boolean>(false);
 
-  // 紫占數字狀態
   const [divNum, setDivNum] = useState<string[]>(['', '', '', '']);
   const [isDivinationReady, setIsDivinationReady] = useState(false);
 
@@ -45,7 +56,12 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const chartRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (client) return;
+    // 如果 client 已經透過 state/prop 取得了，就不需要 fetch
+    if (client) {
+        setLoading(false);
+        return;
+    }
+
     const fetchData = async () => {
       if (id) {
         setLoading(true);
@@ -64,6 +80,9 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
         } finally {
             setLoading(false);
         }
+      } else {
+          // 沒有 ID 也沒有 client state，導回首頁
+          navigate('/');
       }
     };
     fetchData();
@@ -75,7 +94,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
       }
   }, [mode, isDivinationReady, loading]);
 
-  // 1. 基礎引擎：加入錯誤防護
   const baseEngine = useMemo(() => {
     if (!client || currentHour === -1) return null;
     try {
@@ -99,7 +117,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
 
   const baseChartData = useMemo(() => baseEngine?.getChartData(), [baseEngine]);
 
-  // 2. ChartData 計算
   const chartData = useMemo(() => {
     if (!client || currentHour === -1) return null;
 
@@ -120,42 +137,37 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     if (mode === 'divination') {
         const data = displayEngine.getChartData();
         
-        // 修正後的紫占邏輯：大於12才相加
         if (isDivinationReady && divNum.every(d => d !== '')) {
             const n1 = parseInt(divNum[0]);
             const n2 = parseInt(divNum[1]);
             const n3 = parseInt(divNum[2]);
             const n4 = parseInt(divNum[3]);
 
-            // 1. 計算命宮數字 (AB)
             let mingNum = parseInt(divNum[0] + divNum[1], 10);
             while (mingNum > 12) {
                 const s = mingNum.toString();
                 mingNum = parseInt(s[0]) + parseInt(s[1]);
             }
             
-            // 2. 計算四化數字 (CD)
             let sihuaNum = parseInt(divNum[2] + divNum[3], 10);
             while (sihuaNum > 12) {
                 const s = sihuaNum.toString();
                 sihuaNum = parseInt(s[0]) + parseInt(s[1]);
             }
             
-            // 查表取天干 index
             let ganIdx = -1;
-            if (sihuaNum === 3) ganIdx = 0; // 甲
-            else if (sihuaNum === 4) ganIdx = 1; // 乙
-            else if (sihuaNum === 5) ganIdx = 2; // 丙
-            else if (sihuaNum === 6) ganIdx = 3; // 丁
-            else if (sihuaNum === 7) ganIdx = 4; // 戊
-            else if (sihuaNum === 8) ganIdx = 5; // 己
-            else if (sihuaNum === 9) ganIdx = 6; // 庚
-            else if (sihuaNum === 10 || sihuaNum === 0) ganIdx = 7; // 辛
-            else if (sihuaNum === 11 || sihuaNum === 1) ganIdx = 8; // 壬
-            else if (sihuaNum === 12 || sihuaNum === 2) ganIdx = 9; // 癸
+            if (sihuaNum === 3) ganIdx = 0;
+            else if (sihuaNum === 4) ganIdx = 1;
+            else if (sihuaNum === 5) ganIdx = 2;
+            else if (sihuaNum === 6) ganIdx = 3;
+            else if (sihuaNum === 7) ganIdx = 4;
+            else if (sihuaNum === 8) ganIdx = 5;
+            else if (sihuaNum === 9) ganIdx = 6;
+            else if (sihuaNum === 10 || sihuaNum === 0) ganIdx = 7;
+            else if (sihuaNum === 11 || sihuaNum === 1) ganIdx = 8;
+            else if (sihuaNum === 12 || sihuaNum === 2) ganIdx = 9;
 
             if (ganIdx !== -1) {
-                // 強制覆寫四化
                 data.palaces.forEach(p => {
                     [...p.majorStars, ...p.minorStars, ...p.miscStars].forEach(s => {
                         s.sihua = [];
@@ -181,7 +193,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
         return data;
     }
 
-    // Standard Mode
+    // Standard Mode Logic
     let daGan = -1;
     let liuGan = -1;
     let liuZhi = -1;
@@ -217,7 +229,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     return displayEngine.getChartData();
   }, [client, currentHour, daXianSeq, liuNianYear, showXiaoXian, mode, isDivinationReady, divNum]);
 
-  // 3. UI 顯示用變數
   const divMingIndex = useMemo(() => {
       if (mode !== 'divination') return -1;
       if (!isDivinationReady) return -1;
@@ -300,9 +311,9 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   }
 
   const benMingPos = baseEngine.getMingPos();
+  
   const isLimitActive = daXianSeq >= 0 || liuNianYear !== null || showXiaoXian;
   
-  // 【修正】紫占模式下不顯示截圖按鈕 (mode !== 'divination')
   const isCleanState =
     daXianSeq === -1 &&
     liuNianYear === null &&
@@ -400,11 +411,9 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   };
 
   const handleDivKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
-      // Backspace 倒退
       if (e.key === 'Backspace' && divNum[index] === '' && index > 0) {
           divRefs[index - 1].current?.focus();
       }
-      // 【新增】Enter 鍵觸發占卜
       if (e.key === 'Enter') {
           handleStartDivination();
       }
@@ -412,8 +421,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
 
   const handleStartDivination = () => {
       if (divNum.some(d => d === '')) {
-          // 如果數字沒填滿，不動作 (或可選擇 alert 提示)
-          // 為了 UX 順暢，如果使用者按 Enter 但未填滿，通常保持原狀或 focus 到空格較好
+          alert('請輸入完整 4 個數字');
           return;
       }
       setIsDivinationReady(true);
@@ -645,7 +653,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                 if (gridPos === 5)
                 return (
                     <div key="center" className="col-span-2 row-span-2 flex flex-col items-center justify-center p-2 border border-gray-300 bg-white z-10 relative">
-                        {/* 1. 時辰切換：紫占模式隱藏箭頭與互動 */}
+                        {/* 1. 時辰切換 */}
                         <div className="flex w-full justify-center gap-6 items-center mb-1 mt-2">
                             {mode !== 'divination' && (
                                 <button onClick={() => changeHour(-1)} className="text-gray-400 hover:text-gray-800 font-bold text-2xl select-none">&lt;</button>
@@ -777,7 +785,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                     daName={daName}
                     liuName={liuName}
                     xiaoName={xiaoName}
-                    isBody={mode !== 'divination' && chartData.palaces[palaceIdx].isBody} // 修正：紫占不顯示身宮
+                    isBody={mode !== 'divination' && chartData.palaces[palaceIdx].isBody} // 紫占不顯示身宮
                     isXiaoXianMing={showXiaoXianSeal}
                     isBenMingMing={isBenMingMing}
                     isDaXianMing={isDaXianMing && isDaXianActive}
