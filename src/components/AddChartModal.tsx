@@ -13,7 +13,8 @@ interface AddChartModalProps {
 const CATEGORIES = ['我', '家人', '朋友', '客戶', '名人', '其他'];
 
 export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, onSave, editData }) => {
-  const [gender, setGender] = useState<'男' | '女'>('男');
+  // 修改 1: 預設值改為 '女'
+  const [gender, setGender] = useState<'男' | '女'>('女');
   const [name, setName] = useState('');
   
   const [year, setYear] = useState('');
@@ -43,7 +44,8 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
         setMinute(editData.birthMinute.toString().padStart(2, '0'));
         setCategory(editData.type);
       } else {
-        setGender('男');
+        // 修改 2: 新增模式預設設為 '女'
+        setGender('女');
         setName('');
         setYear('');
         setMonth('');
@@ -160,8 +162,9 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
           <div className="space-y-2">
             <label className="text-xs font-bold text-gray-500 block">性別</label>
             <div className="flex gap-4">
-              <button onClick={() => setGender('男')} className={`flex-1 py-2 rounded border transition-all ${gender === '男' ? 'border-blue-500 text-blue-600 bg-blue-50 font-bold ring-1 ring-blue-500' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>♂ 男</button>
+              {/* 修改 3: 交換按鈕順序，女在前 */}
               <button onClick={() => setGender('女')} className={`flex-1 py-2 rounded border transition-all ${gender === '女' ? 'border-pink-500 text-pink-600 bg-pink-50 font-bold ring-1 ring-pink-500' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>♀ 女</button>
+              <button onClick={() => setGender('男')} className={`flex-1 py-2 rounded border transition-all ${gender === '男' ? 'border-blue-500 text-blue-600 bg-blue-50 font-bold ring-1 ring-blue-500' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>♂ 男</button>
             </div>
           </div>
           <div className="space-y-2">

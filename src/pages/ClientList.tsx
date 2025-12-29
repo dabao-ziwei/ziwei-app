@@ -1,21 +1,24 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, User, Users, Star } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu } from 'lucide-react';
 import { loadClients, deleteClient, type Client } from '../db';
 import { supabase } from '../supabase';
+import { useNavigate } from 'react-router-dom'; // 1. 引入 useNavigate
 
 const CATEGORIES = ["我", "家人", "朋友", "客戶", "名人", "其他"];
 
 interface ClientListProps {
   onAdd: () => void;
   onEdit: (client: Client) => void;
-  onSelect: (client: Client) => void;
+  // onSelect 已經不再需要，改用路由跳轉
 }
 
-export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit, onSelect }) => {
+// 移除 onSelect props
+export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const [clients, setClients] = useState<Client[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedCats, setExpandedCats] = useState<string[]>(CATEGORIES);
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate(); // 2. 初始化導航
 
   // 讀取資料
   const refreshData = async () => {
@@ -28,7 +31,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit, onSelect 
   useEffect(() => {
     refreshData();
     
-    // 訂閱資料庫變更 (可選，讓多視窗同步)
+    // 訂閱資料庫變更
     const channel = supabase
       .channel('client_list_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => {
@@ -84,13 +87,22 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit, onSelect 
             <p className="text-xs text-slate-400 font-medium">總計 {clients.length} 筆資料</p>
           </div>
         </div>
-        <button 
-          onClick={onAdd} 
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl shadow-lg shadow-blue-200 transition-all flex items-center gap-2 font-bold text-sm"
-        >
-          <Plus size={18} />
-          <span className="hidden sm:inline">新增命盤</span>
-        </button>
+        <div className="flex gap-2">
+            <button 
+            onClick={onAdd} 
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl shadow-lg shadow-blue-200 transition-all flex items-center gap-2 font-bold text-sm"
+            >
+            <Plus size={18} />
+            <span className="hidden sm:inline">新增命盤</span>
+            </button>
+            <button
+              onClick={() => supabase.auth.signOut()}
+              className="bg-gray-200 hover:bg-gray-300 text-gray-700 w-10 h-10 rounded-xl flex items-center justify-center shadow-md transition-colors"
+              title="登出"
+           >
+             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+           </button>
+        </div>
       </header>
 
       {/* Search Bar */}
@@ -141,7 +153,8 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit, onSelect 
                       items.map(c => (
                         <div 
                           key={c.id} 
-                          onClick={() => onSelect(c)} 
+                          // 3. 修改點擊事件：跳轉到 /chart/:id
+                          onClick={() => navigate(`/chart/${c.id}`)} 
                           className="group relative p-4 hover:bg-blue-50/50 cursor-pointer transition-colors flex items-center justify-between gap-4"
                         >
                           {/* 左側：頭像 + 資訊 */}
@@ -152,7 +165,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit, onSelect 
                               {c.gender}
                             </div>
 
-                            {/* 文字資訊區：使用 flex-wrap 或 RWD 調整排列 */}
+                            {/* 文字資訊區 */}
                             <div className="flex flex-col md:flex-row md:items-center md:gap-4 flex-1 min-w-0">
                               
                               {/* 第一行：姓名 + 主星 */}
@@ -165,8 +178,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit, onSelect 
                                 )}
                               </div>
 
-                              {/* 第二行(手機) / 同行右側(電腦)：日期資訊 */}
-                              {/* 關鍵：md:ml-auto 會在電腦版把這塊推到右邊，填滿中間空白 */}
+                              {/* 第二行/右側：日期資訊 */}
                               <div className="text-sm text-slate-400 font-mono flex items-center gap-2 md:ml-auto md:mr-8 mt-1 md:mt-0">
                                 <span>{c.birthYear}.{c.birthMonth}.{c.birthDay}</span>
                                 <span className="hidden sm:inline text-slate-300">|</span>
@@ -175,7 +187,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit, onSelect 
                             </div>
                           </div>
 
-                          {/* 右側：操作按鈕 (hover 顯示) */}
+                          {/* 右側：操作按鈕 */}
                           <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
                             <button 
                               onClick={(e) => { e.stopPropagation(); onEdit(c); }} 

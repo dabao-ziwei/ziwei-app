@@ -55,6 +55,39 @@ export const loadClients = async (includeDeleted: boolean = false): Promise<Clie
   }));
 };
 
+// 新增：透過 ID 讀取單一客戶 (為了支援網址直接進入 /chart/:id)
+export const getClient = async (id: string): Promise<Client | null> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+  
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .eq('id', id)
+      .single();
+  
+    if (error || !data) {
+      console.error('Fetch client error:', error);
+      return null;
+    }
+  
+    return {
+      id: data.id,
+      name: data.name,
+      gender: data.gender as '男' | '女',
+      birthYear: data.birth_year,
+      birthMonth: data.birth_month,
+      birthDay: data.birth_day,
+      birthHour: data.birth_hour,
+      birthMinute: data.birth_minute,
+      type: data.type || '其他',
+      majorStars: data.major_stars || '',
+      isDeleted: data.is_deleted,
+      ownerId: data.user_id,
+      createdAt: new Date(data.created_at).getTime(),
+    };
+  };
+
 // 3. 儲存/更新資料
 export const saveClient = async (client: Omit<Client, 'id' | 'createdAt' | 'ownerId'> & { id?: string }): Promise<string> => {
   const { data: { user } } = await supabase.auth.getUser();
