@@ -2,23 +2,38 @@ import React, { useEffect, useState } from 'react';
 import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu } from 'lucide-react';
 import { loadClients, deleteClient, type Client } from '../db';
 import { supabase } from '../supabase';
-import { useNavigate } from 'react-router-dom'; // 1. 引入 useNavigate
+import { useNavigate } from 'react-router-dom';
 
 const CATEGORIES = ["我", "家人", "朋友", "客戶", "名人", "其他"];
+const STORAGE_KEY = 'ziwei_expanded_cats'; // 定義儲存的 Key
 
 interface ClientListProps {
   onAdd: () => void;
   onEdit: (client: Client) => void;
-  // onSelect 已經不再需要，改用路由跳轉
 }
 
-// 移除 onSelect props
 export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const [clients, setClients] = useState<Client[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [expandedCats, setExpandedCats] = useState<string[]>(CATEGORIES);
+  
+  // 修改 1: 初始化時優先讀取 LocalStorage，如果沒有才全部展開
+  const [expandedCats, setExpandedCats] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved) : CATEGORIES;
+    } catch (e) {
+      console.warn('讀取分類狀態失敗，回復預設值', e);
+      return CATEGORIES;
+    }
+  });
+
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate(); // 2. 初始化導航
+  const navigate = useNavigate();
+
+  // 修改 2: 當 expandedCats 改變時，自動存入 LocalStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(expandedCats));
+  }, [expandedCats]);
 
   // 讀取資料
   const refreshData = async () => {
@@ -153,7 +168,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                       items.map(c => (
                         <div 
                           key={c.id} 
-                          // 3. 修改點擊事件：跳轉到 /chart/:id
                           onClick={() => navigate(`/chart/${c.id}`)} 
                           className="group relative p-4 hover:bg-blue-50/50 cursor-pointer transition-colors flex items-center justify-between gap-4"
                         >
