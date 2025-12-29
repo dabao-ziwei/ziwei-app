@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu } from 'lucide-react';
-import { loadClients, deleteClient, type Client } from '../db';
+import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, Shield, UserCog, LogOut } from 'lucide-react';
+import { loadClients, deleteClient, getMyProfile, getUsedChartCount, type Client, type UserProfile } from '../db';
 import { supabase } from '../supabase';
 import { useNavigate } from 'react-router-dom';
-import { ZHI } from '../logic/constants'; // 1. 引入 ZHI 常數
+import { ZHI } from '../logic/constants';
+import { UserManagementModal } from '../components/UserManagementModal'; // 引入管理視窗
 
 const CATEGORIES = ["我", "家人", "朋友", "客戶", "名人", "其他"];
 const STORAGE_KEY = 'ziwei_expanded_cats';
@@ -16,7 +17,6 @@ interface ClientListProps {
 export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const [clients, setClients] = useState<Client[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  
   const [expandedCats, setExpandedCats] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -27,17 +27,37 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   });
 
   const [loading, setLoading] = useState(false);
+  
+  // 新增：User Profile 與 額度狀態
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [usedCount, setUsedCount] = useState(0);
+  const [isMenuOpen, setIsMenuOpen] = useState(false); // 選單開關
+  const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false); // 管理視窗開關
+
   const navigate = useNavigate();
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(expandedCats));
   }, [expandedCats]);
 
-  // 讀取資料
+  // 讀取資料與權限
   const refreshData = async () => {
     setLoading(true);
-    const data = await loadClients();
+    
+    // 1. 讀取命盤列表
+    const data = await loadClients(); // 預設只讀取未刪除的顯示在列表
     setClients(data);
+
+    // 2. 讀取個人 Profile
+    const profile = await getMyProfile();
+    setUserProfile(profile);
+
+    // 3. 讀取已用額度 (需計算包含已刪除的)
+    if (profile) {
+        const count = await getUsedChartCount(profile.id);
+        setUsedCount(count);
+    }
+
     setLoading(false);
   };
 
@@ -55,17 +75,13 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     };
   }, []);
 
-  // 2. 輔助函式：取得顯示用的時辰字串 (含早晚子判斷)
   const getTimeDisplay = (hour: number, minute: number) => {
-    const minuteStr = minute.toString().padStart(2, '0'); // 分鐘補零
+    const minuteStr = minute.toString().padStart(2, '0');
     const zhiIdx = Math.floor((hour + 1) / 2) % 12;
     let zhiStr = ZHI[zhiIdx];
-    
-    // 判斷早晚子
     if (zhiIdx === 0) {
       zhiStr = hour === 23 ? '晚子' : '早子';
     }
-
     return `${hour}:${minuteStr}(${zhiStr}時)`;
   };
 
@@ -92,41 +108,81 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (confirm('確定要刪除此命盤嗎？')) {
+    if (confirm('確定要刪除此命盤嗎？(注意：刪除後仍會佔用您的命盤建立額度)')) {
       await deleteClient(id);
       refreshData();
     }
   };
 
+  // 額度顯示字串
+  const quotaDisplay = userProfile ? `[${usedCount}/${userProfile.maxCharts}]` : '';
+  const isOverQuota = userProfile && usedCount >= userProfile.maxCharts && userProfile.role !== 'admin';
+
   return (
     <div className="flex flex-col h-screen bg-slate-50 w-full max-w-6xl mx-auto shadow-xl overflow-hidden font-sans border-x border-slate-200">
       
       {/* Header */}
-      <header className="flex justify-between px-6 py-4 bg-white border-b border-slate-100 shrink-0 items-center">
+      <header className="flex justify-between px-6 py-4 bg-white border-b border-slate-100 shrink-0 items-center relative z-20">
         <div className="flex items-center gap-4">
-          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-blue-200 shadow-md">
-            <Menu size={20} />
+          
+          {/* 左上角選單 (含下拉功能) */}
+          <div className="relative">
+            <button 
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                className="w-10 h-10 bg-blue-600 hover:bg-blue-700 transition-colors rounded-xl flex items-center justify-center text-white shadow-blue-200 shadow-md"
+            >
+                <Menu size={20} />
+            </button>
+
+            {/* 下拉選單 */}
+            {isMenuOpen && (
+                <div className="absolute top-12 left-0 w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                    {userProfile?.role === 'admin' && (
+                        <button 
+                            onClick={() => { setIsUserMgmtOpen(true); setIsMenuOpen(false); }}
+                            className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-2 text-gray-700 font-medium"
+                        >
+                            <UserCog size={16} /> 管理使用者
+                        </button>
+                    )}
+                    <button 
+                        onClick={() => supabase.auth.signOut()}
+                        className="w-full text-left px-4 py-3 hover:bg-red-50 flex items-center gap-2 text-red-600 font-medium border-t border-gray-100"
+                    >
+                        <LogOut size={16} /> 登出系統
+                    </button>
+                </div>
+            )}
+            {/* 點擊外部關閉遮罩 */}
+            {isMenuOpen && <div className="fixed inset-0 z-[-1]" onClick={() => setIsMenuOpen(false)}></div>}
           </div>
+
           <div>
             <h1 className="text-xl font-bold text-slate-800 tracking-tight">命盤列表</h1>
             <p className="text-xs text-slate-400 font-medium">總計 {clients.length} 筆資料</p>
           </div>
         </div>
-        <div className="flex gap-2">
+
+        <div className="flex gap-2 items-center">
+            {/* 額度顯示 */}
+            <span className={`text-xs font-bold font-mono mr-1 ${isOverQuota ? 'text-red-500' : 'text-slate-400'}`}>
+                {quotaDisplay}
+            </span>
+
             <button 
-            onClick={onAdd} 
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl shadow-lg shadow-blue-200 transition-all flex items-center gap-2 font-bold text-sm"
+                onClick={onAdd} 
+                // 如果不是 admin 且超過額度，按鈕變灰
+                disabled={isOverQuota && userProfile?.role !== 'admin'}
+                className={`px-4 py-2.5 rounded-xl shadow-lg transition-all flex items-center gap-2 font-bold text-sm
+                    ${(isOverQuota && userProfile?.role !== 'admin')
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200'
+                    }
+                `}
             >
-            <Plus size={18} />
-            <span className="hidden sm:inline">新增命盤</span>
+                <Plus size={18} />
+                <span className="hidden sm:inline">新增命盤</span>
             </button>
-            <button
-              onClick={() => supabase.auth.signOut()}
-              className="bg-gray-200 hover:bg-gray-300 text-gray-700 w-10 h-10 rounded-xl flex items-center justify-center shadow-md transition-colors"
-              title="登出"
-           >
-             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-           </button>
         </div>
       </header>
 
@@ -181,18 +237,13 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                           onClick={() => navigate(`/chart/${c.id}`)} 
                           className="group relative p-3 sm:p-4 hover:bg-blue-50/50 cursor-pointer transition-colors flex items-center justify-between gap-3"
                         >
-                          {/* 左側內容區：頭像 + 所有文字資訊 (線性排列) */}
+                          {/* 左側內容區 */}
                           <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0 overflow-hidden">
-                            {/* 頭像 */}
                             <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-sm shrink-0
                               ${c.gender === '男' ? 'bg-gradient-to-br from-blue-400 to-blue-600' : 'bg-gradient-to-br from-pink-400 to-pink-600'}`}>
                               {c.gender}
                             </div>
-
-                            {/* 線性排列的資訊區：手機版可能會自動換行，電腦版盡量一直線 */}
                             <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 flex-1 min-w-0">
-                              
-                              {/* 第一組：姓名 + 主星 */}
                               <div className="flex items-center gap-2">
                                 <span className="font-bold text-base sm:text-lg text-slate-700 truncate max-w-[120px] sm:max-w-none">
                                   {c.name}
@@ -203,32 +254,31 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                                   </span>
                                 )}
                               </div>
-
-                              {/* 第二組：日期時間 (電腦版顯示 | 分隔，手機版換行顯示) */}
                               <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-500 font-mono">
-                                {/* 電腦版的分隔線 */}
                                 <span className="hidden sm:inline text-slate-300">|</span>
-                                
                                 <span className="whitespace-nowrap">
                                   {c.birthYear}.{c.birthMonth}.{c.birthDay}
                                 </span>
-                                
                                 <span className="text-slate-300">|</span>
-                                
                                 <span className="whitespace-nowrap">
                                   {getTimeDisplay(c.birthHour, c.birthMinute)}
                                 </span>
                               </div>
-
                             </div>
                           </div>
 
-                          {/* 右側：操作按鈕 (hover 顯示) */}
+                          {/* 右側：操作按鈕 (含編輯次數防呆顯示) */}
                           <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
+                            {/* 僅管理者或未達編輯上限者可見/可按，這裡做視覺提示 */}
                             <button 
                               onClick={(e) => { e.stopPropagation(); onEdit(c); }} 
-                              className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-100 rounded-full transition-colors"
-                              title="編輯"
+                              className={`p-2 rounded-full transition-colors 
+                                ${(!userProfile || userProfile.role === 'admin' || c.editCount < userProfile.maxEditsPerChart) 
+                                    ? 'text-slate-400 hover:text-blue-600 hover:bg-blue-100' 
+                                    : 'text-gray-200 cursor-not-allowed'
+                                }`}
+                              title={`編輯 (已修 ${c.editCount}/${userProfile?.role === 'admin' ? '∞' : userProfile?.maxEditsPerChart})`}
+                              disabled={userProfile?.role !== 'admin' && c.editCount >= (userProfile?.maxEditsPerChart || 3)}
                             >
                               <Edit2 size={18}/>
                             </button>
@@ -251,6 +301,12 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         )}
         <div className="h-10"></div>
       </div>
+      
+      {/* 使用者管理視窗 (Admin Only) */}
+      <UserManagementModal 
+        isOpen={isUserMgmtOpen} 
+        onClose={() => setIsUserMgmtOpen(false)} 
+      />
     </div>
   );
 };
