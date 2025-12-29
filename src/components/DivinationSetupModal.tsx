@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { X, Loader2, Dices } from 'lucide-react';
 import { supabase } from '../supabase';
 
@@ -29,6 +29,32 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
   const hourRef = useRef<HTMLInputElement>(null);
   const minuteRef = useRef<HTMLInputElement>(null);
 
+  // 監聽模式切換：如果是管理員切換到手動模式，自動帶入預設值
+  useEffect(() => {
+      if (isOpen && mode === 'manual') {
+          supabase.auth.getUser().then(({ data: { user } }) => {
+              if (user?.email === SUPER_ADMIN_EMAIL) {
+                  // 管理員預設值
+                  setYear('1979');
+                  setMonth('09');
+                  setDay('26');
+                  setHour('18');
+                  setMinute('26');
+                  setGender('男');
+              } else {
+                  // 一般使用者切換過來時保持空白 (或可選擇不清除，看需求，這裡重置為空比較乾淨)
+                  // 若希望保留使用者上次輸入的，可註解掉下面這段
+                  setYear('');
+                  setMonth('');
+                  setDay('');
+                  setHour('');
+                  setMinute('');
+                  setGender('女');
+              }
+          });
+      }
+  }, [isOpen, mode]);
+
   const handleInput = (
     e: React.ChangeEvent<HTMLInputElement>,
     setter: (v: string) => void,
@@ -37,9 +63,14 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
   ) => {
       const val = e.target.value.replace(/\D/g, '').slice(0, maxLen);
       setter(val);
-      if (val.length === maxLen && nextRef?.current) {
-          nextRef.current.focus();
-          nextRef.current.select();
+      
+      if (val.length === maxLen && nextRef && nextRef.current) {
+          // 【關鍵修正】使用 setTimeout 將 focus 動作推遲到 Event Loop 的下一個 Tick
+          // 這能確保當前的按鍵事件 (Keyup/Keydown) 不會傳遞到下一個輸入框
+          setTimeout(() => {
+              nextRef.current?.focus();
+              nextRef.current?.select();
+          }, 0);
       }
   };
 
@@ -48,6 +79,7 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
     currentVal: string,
     prevRef?: React.RefObject<HTMLInputElement>
   ) => {
+      // 處理 Backspace 倒退
       if (e.key === 'Backspace' && currentVal === '' && prevRef?.current) {
           e.preventDefault();
           prevRef.current.focus();
@@ -63,37 +95,24 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
             name: '紫微占卜',
         };
 
-        const { data: { user } } = await supabase.auth.getUser();
-        const isSuperAdmin = user?.email === SUPER_ADMIN_EMAIL;
-
+        // 亂數模式邏輯 (純隨機，不再有管理員覆寫)
         if (mode === 'random') {
-            if (isSuperAdmin) {
-                finalData = {
-                    ...finalData,
-                    gender: '男', // Admin 測試固定
-                    birthYear: 1979,
-                    birthMonth: 9,
-                    birthDay: 26,
-                    birthHour: 18,
-                    birthMinute: 26,
-                };
-            } else {
-                const rndYear = Math.floor(Math.random() * (2023 - 1950 + 1)) + 1950;
-                const rndMonth = Math.floor(Math.random() * 12) + 1;
-                const rndDay = Math.floor(Math.random() * 28) + 1; 
-                const rndHour = Math.floor(Math.random() * 24);
-                const rndMinute = Math.floor(Math.random() * 60);
+            const rndYear = Math.floor(Math.random() * (2023 - 1950 + 1)) + 1950;
+            const rndMonth = Math.floor(Math.random() * 12) + 1;
+            const rndDay = Math.floor(Math.random() * 28) + 1; 
+            const rndHour = Math.floor(Math.random() * 24);
+            const rndMinute = Math.floor(Math.random() * 60);
 
-                finalData = {
-                    ...finalData,
-                    birthYear: rndYear,
-                    birthMonth: rndMonth,
-                    birthDay: rndDay,
-                    birthHour: rndHour,
-                    birthMinute: rndMinute,
-                };
-            }
+            finalData = {
+                ...finalData,
+                birthYear: rndYear,
+                birthMonth: rndMonth,
+                birthDay: rndDay,
+                birthHour: rndHour,
+                birthMinute: rndMinute,
+            };
         } else {
+            // 手動模式邏輯 (直接使用狀態值)
             if (!year || !month || !day || !hour || !minute) {
                 alert("請填寫完整時間");
                 setLoading(false);
