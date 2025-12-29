@@ -16,25 +16,32 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   
+  // 1. 優化 State 初始化：如果有傳入 propClient，直接設定 currentHour，避免 useEffect 二次更新
   const [client, setClient] = useState<Client | null>(propClient || null);
+  const [currentHour, setCurrentHour] = useState<number>(() => propClient ? propClient.birthHour : -1);
   const [loading, setLoading] = useState(!propClient);
   
+  // 內部狀態
   const [selectedPalace, setSelectedPalace] = useState<number | null>(null);
   const [flyingPalace, setFlyingPalace] = useState<number | null>(null);
   const [daXianSeq, setDaXianSeq] = useState<number>(-1);
   const [liuNianYear, setLiuNianYear] = useState<number | null>(null);
   const [showXiaoXian, setShowXiaoXian] = useState<boolean>(false);
-  const [currentHour, setCurrentHour] = useState<number>(-1);
 
   const chartRef = useRef<HTMLDivElement>(null);
 
+  // 2. 修正 useEffect：單純負責「沒有資料時去抓取」，抓到後一次更新所有 State
   useEffect(() => {
+    // 如果已經有 client (不管是 props 傳的還是已經抓完了)，就不做事
+    if (client) return;
+
     const fetchData = async () => {
-      if (!client && id) {
+      if (id) {
         setLoading(true);
         try {
             const data = await getClient(id);
             if (data) {
+                // 這裡一次更新兩個 State，React 會自動批次處理，不會報錯
                 setClient(data);
                 setCurrentHour(data.birthHour);
             } else {
@@ -47,13 +54,12 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
         } finally {
             setLoading(false);
         }
-      } else if (client && currentHour === -1) {
-          setCurrentHour(client.birthHour);
       }
     };
     fetchData();
   }, [id, client, navigate]);
 
+  // 排盤引擎
   const engine = useMemo(() => {
     if (!client || currentHour === -1) return null;
     return new ZiWeiEngine(
@@ -68,6 +74,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
 
   const baseChartData = useMemo(() => engine?.getChartData(), [engine]);
 
+  // Loading 檢查
   if (loading || !client || !baseChartData || !engine) {
     return (
         <div className="flex h-screen w-full items-center justify-center bg-gray-100">
@@ -75,6 +82,8 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
         </div>
     );
   }
+
+  // --- 邏輯開始 ---
 
   const resetAllStates = () => {
     setDaXianSeq(-1);
@@ -99,14 +108,11 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
 
   const isTimeModified = currentHour !== client.birthHour;
 
-  // 修改：顯示「早子」或「晚子」
-  const currentHourZhi = useMemo(() => {
-    const zhi = ZHI[Math.floor((currentHour + 1) / 2) % 12];
-    if (zhi === '子') {
-      return currentHour === 23 ? '晚子' : '早子';
-    }
-    return zhi;
-  }, [currentHour]);
+  // 3. 移除 useMemo，直接計算顯示用的時辰字串 (修正 React #310 風險)
+  let currentHourZhi = ZHI[Math.floor((currentHour + 1) / 2) % 12];
+  if (Math.floor((currentHour + 1) / 2) % 12 === 0) {
+     currentHourZhi = currentHour === 23 ? '晚子' : '早子';
+  }
 
   const isCleanState =
     daXianSeq === -1 &&
