@@ -27,7 +27,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const [liuNianYear, setLiuNianYear] = useState<number | null>(null);
   const [showXiaoXian, setShowXiaoXian] = useState<boolean>(false);
   
-  // 新增：顛倒盤狀態
+  // 顛倒盤狀態
   const [isReverse, setIsReverse] = useState<boolean>(false);
 
   const chartRef = useRef<HTMLDivElement>(null);
@@ -88,7 +88,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     setShowXiaoXian(false);
     setSelectedPalace(null);
     setFlyingPalace(null);
-    setIsReverse(false); // 重置時也關閉顛倒盤
+    setIsReverse(false);
   };
 
   const changeHour = (delta: number) => {
@@ -124,7 +124,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
       const dataUrl = await toPng(chartRef.current, {
         cacheBust: true,
         backgroundColor: '#ffffff',
-        // 過濾掉 class 包含 'no-screenshot' 的元素 (例如雙胞胎按鈕)
         filter: (node) => {
             if (node.classList && node.classList.contains('no-screenshot')) {
                 return false;
@@ -260,7 +259,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     setShowXiaoXian(false);
     setFlyingPalace(null);
     setSelectedPalace(null);
-    setIsReverse(false);
+    setIsReverse(false); // 切換大限時重置顛倒盤
   };
 
   const handleLiuNianClick = (year: number) => {
@@ -269,13 +268,14 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     setShowXiaoXian(false);
     setFlyingPalace(null);
     setSelectedPalace(null);
-    setIsReverse(false);
+    setIsReverse(false); // 切換流年時重置顛倒盤
   };
 
   const toggleXiaoXian = () => {
     setShowXiaoXian(!showXiaoXian);
     setFlyingPalace(null);
     setSelectedPalace(null);
+    // 注意：切換小限盤不重置顛倒盤狀態
   };
 
   const handlePalaceClick = (palaceIdx: number) => {
@@ -572,7 +572,13 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
               const isLiuNianActive = liuNianYear !== null;
               const isXiaoXianActive = showXiaoXian;
 
+              // 1. 取得當前宮位的相對名稱
               const { daName, liuName, xiaoName } = getRelativeNames(palaceIdx);
+              
+              // 2. 【新增】取得對宮的相對名稱 (為了顛倒盤功能)
+              const oppPalaceIdx = (palaceIdx + 6) % 12;
+              const { daName: reverseDaName, liuName: reverseLiuName } = getRelativeNames(oppPalaceIdx);
+
               const isConnected =
                 selectedPalace !== null &&
                 Object.values(connections).includes(palaceIdx);
@@ -617,6 +623,8 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                     onTriggerClick={() => handleTriggerClick(palaceIdx)}
                     flyingStars={flyingStarsLookup}
                     isReverse={isReverse} // 傳遞顛倒盤狀態
+                    reverseDaName={reverseDaName} // 傳遞對宮大限名
+                    reverseLiuName={reverseLiuName} // 傳遞對宮流年名
                   />
                   {isDaXianMing && isDaXianActive && (
                     <div className="absolute inset-0 border-[3px] border-gray-600 pointer-events-none z-20 opacity-70"></div>

@@ -20,6 +20,8 @@ interface PalaceCardProps {
   
   // 新增 props
   isReverse?: boolean;
+  reverseDaName?: string;
+  reverseLiuName?: string;
 }
 
 export const PalaceCard: React.FC<PalaceCardProps> = ({
@@ -36,6 +38,8 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   onTriggerClick,
   flyingStars,
   isReverse,
+  reverseDaName,
+  reverseLiuName,
 }) => {
   const palaceGanZhi = `${GAN[palace.ganIndex]}${ZHI[palace.zhiIndex]}`;
   const isBenMing = !daName && !liuName && !xiaoName;
@@ -210,8 +214,8 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
       >
         <div className="flex flex-col-reverse items-end leading-tight pointer-events-none">
           <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right">
-              {/* 顛倒盤宮位名稱 (紫色) */}
-              {isReverse && (
+              {/* 1. 本命盤顛倒 (查表) */}
+              {isReverse && PALACE_REVERSE_MAP[palace.name] && (
                   <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none">
                       {PALACE_REVERSE_MAP[palace.name]}
                   </span>
@@ -223,15 +227,33 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
           </div>
 
           {daName && (
-            <span className="text-[13px] font-bold text-gray-500 whitespace-nowrap leading-none mb-[1px]">
-              {daName}
-            </span>
+            <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right">
+                {/* 2. 大限盤顛倒 (動態計算) */}
+                {isReverse && reverseDaName && (
+                    <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none mb-[1px]">
+                        {reverseDaName}
+                    </span>
+                )}
+                <span className="text-[13px] font-bold text-gray-500 whitespace-nowrap leading-none mb-[1px]">
+                  {daName}
+                </span>
+            </div>
           )}
+
           {liuName && (
-            <span className="text-[13px] font-bold text-blue-600 whitespace-nowrap leading-none mb-[1px]">
-              {liuName}
-            </span>
+            <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right">
+                {/* 3. 流年盤顛倒 (動態計算) */}
+                {isReverse && reverseLiuName && (
+                    <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none mb-[1px]">
+                        {reverseLiuName}
+                    </span>
+                )}
+                <span className="text-[13px] font-bold text-blue-600 whitespace-nowrap leading-none mb-[1px]">
+                  {liuName}
+                </span>
+            </div>
           )}
+
           {xiaoName && (
             <span className="text-[13px] font-bold text-green-600 whitespace-nowrap leading-none mb-[1px]">
               {xiaoName}
