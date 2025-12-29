@@ -25,10 +25,8 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const [daXianSeq, setDaXianSeq] = useState<number>(-1);
   const [liuNianYear, setLiuNianYear] = useState<number | null>(null);
   const [showXiaoXian, setShowXiaoXian] = useState<boolean>(false);
-  
-  // 顯示控制狀態
-  const [isReverse, setIsReverse] = useState<boolean>(false); // 顛倒盤 (檢視層)
-  const [isTwinMode, setIsTwinMode] = useState<boolean>(false); // 雙胞胎 (資料層)
+  const [isReverse, setIsReverse] = useState<boolean>(false);
+  const [isTwinMode, setIsTwinMode] = useState<boolean>(false); // 新增雙胞胎模式狀態
 
   const chartRef = useRef<HTMLDivElement>(null);
 
@@ -90,12 +88,10 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     let liuZhi = -1;
     let xiaoGan = -1;
 
-    // 為了效能，重用 displayEngine 的基礎數據來定位
     const tempBaseData = displayEngine.getChartData();
     const startPos = displayEngine.getMingPos();
     const direction = tempBaseData.direction || 1;
 
-    // 定位大限
     let daXianPalaceIdx = -1;
     if (daXianSeq >= 0) {
         const offset = daXianSeq * direction;
@@ -202,7 +198,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     setSelectedPalace(null);
     setFlyingPalace(null);
     setIsReverse(false);
-    setIsTwinMode(false); // 換時辰(換人)時，重置雙胞胎模式
+    setIsTwinMode(false);
   };
 
   const changeHour = (delta: number) => {
@@ -232,6 +228,12 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     flyingPalace === null &&
     !isReverse &&
     !isTwinMode;
+
+  // 【修復】這裡加回了 handleBack
+  const handleBack = () => {
+      if (onBack) onBack();
+      else navigate('/');
+  };
 
   const handleDownload = async () => {
     if (!chartRef.current) return;
@@ -297,7 +299,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     setShowXiaoXian(false);
     setFlyingPalace(null);
     setSelectedPalace(null);
-    setIsReverse(false); // 切換大限時，重置顛倒檢視，但保留雙胞胎模式
+    setIsReverse(false);
   };
 
   const handleLiuNianClick = (year: number) => {
@@ -306,7 +308,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     setShowXiaoXian(false);
     setFlyingPalace(null);
     setSelectedPalace(null);
-    setIsReverse(false); // 切換流年時，重置顛倒檢視，但保留雙胞胎模式
+    setIsReverse(false);
   };
 
   const toggleXiaoXian = () => {
@@ -333,13 +335,10 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
 
   const isLimitActive = daXianSeq >= 0 || liuNianYear !== null || showXiaoXian;
 
-  // 切換 雙胞胎/顛倒盤
   const toggleViewMode = () => {
       if (isLimitActive) {
-          // 如果是限盤，切換「顛倒檢視」
           setIsReverse(!isReverse);
       } else {
-          // 如果是本命盤，切換「雙胞胎模式」
           setIsTwinMode(!isTwinMode);
       }
   };
@@ -444,7 +443,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                 if (gridPos === 5)
                 return (
                     <div key="center" className="col-span-2 row-span-2 flex flex-col items-center justify-center p-2 border border-gray-300 bg-white z-10 relative">
-                        {/* 1. 時辰切換 - 往中間靠攏 */}
                         <div className="flex w-full justify-center gap-6 items-center mb-1 mt-2">
                             <button onClick={() => changeHour(-1)} className="text-gray-400 hover:text-gray-800 font-bold text-2xl select-none">&lt;</button>
                             <div onClick={isTimeModified ? resetTime : undefined} className={`text-lg font-bold select-none ${isTimeModified ? 'text-blue-600 cursor-pointer underline' : 'text-gray-600'}`} title={isTimeModified ? '點擊還原出生時辰' : ''}>
@@ -453,7 +451,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                             <button onClick={() => changeHour(1)} className="text-gray-400 hover:text-gray-800 font-bold text-2xl select-none">&gt;</button>
                         </div>
 
-                        {/* 2. 名字 + 本命主星 */}
                         <div className="flex flex-col items-center gap-1 mb-2">
                             <div className="text-3xl sm:text-4xl font-bold text-black tracking-widest text-center">
                                 {client.name}
@@ -463,7 +460,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                             </div>
                         </div>
 
-                        {/* 3. 命主資訊 - 對齊優化 */}
                         <div className="flex flex-col items-center w-full leading-tight gap-1">
                             <div className="text-gray-700 text-sm sm:text-base font-medium">
                                 {client.gender} {chartData.bureau}
@@ -476,9 +472,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                             </div>
                         </div>
 
-                        {/* 4. 右上角開關 */}
                         <div className="absolute top-2 right-2 flex flex-col items-center gap-2 z-50">
-                            {/* 雙胞/顛倒 按鈕 */}
                             <div className="flex flex-col items-center gap-0.5 no-screenshot">
                                 <span className="text-[9px] text-gray-400 font-bold transform scale-90">
                                     {isLimitActive ? '顛倒' : '雙胞'}
@@ -499,7 +493,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                                 </button>
                             </div>
 
-                            {/* 小限按鈕 */}
                             {liuNianYear && (
                                 <div className="flex flex-col items-center gap-0.5">
                                   <span className="text-[9px] text-gray-400 font-bold transform scale-90">小限</span>
@@ -549,10 +542,8 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                     isXiaoXianMingPalace={isXiaoXianMingPalace && (isLiuNianActive || isXiaoXianActive)}
                     onTriggerClick={() => handleTriggerClick(palaceIdx)}
                     flyingStars={flyingStarsLookup}
-                    
-                    isTwinMode={isTwinMode} // 資料層模式
-                    isReverse={isReverse}   // 檢視層模式
-                    
+                    isTwinMode={isTwinMode}
+                    isReverse={isReverse}
                     reverseDaName={reverseDaName}
                     reverseLiuName={reverseLiuName}
                 />
