@@ -1,5 +1,4 @@
 import { supabase } from './supabase'; 
-// 如果你的 supabase 實體檔案叫做 supabaseClient.ts，請改為 from './supabaseClient';
 
 // --- 介面定義 (Interfaces) ---
 
@@ -22,6 +21,10 @@ export interface Client {
   birthHour: number;
   birthMinute: number;
   created_at?: string;
+  // 為了相容 AddChartModal 傳入的額外欄位，這裡允許任意屬性，或你可精確定義
+  type?: string; 
+  majorStars?: string;
+  editCount?: number; // 用於列表顯示編輯次數
 }
 
 // --- 使用者相關 (Profile) ---
@@ -31,7 +34,6 @@ export const getMyProfile = async (): Promise<UserProfile | null> => {
   const { data: { user } } = await supabase.auth.getUser();
   
   if (!user) {
-    console.warn("getMyProfile: No user logged in");
     return null;
   }
 
@@ -66,7 +68,7 @@ export const getMyProfile = async (): Promise<UserProfile | null> => {
   };
 };
 
-// 2. 取得所有使用者 Profile (管理員用) - 這是剛才報錯缺少的！
+// 2. 取得所有使用者 Profile (管理員用)
 export const getAllProfiles = async (): Promise<UserProfile[]> => {
   const { data, error } = await supabase
     .from('profiles')
@@ -87,7 +89,7 @@ export const getAllProfiles = async (): Promise<UserProfile[]> => {
   }));
 };
 
-// 3. 更新使用者 Profile (管理員用) - 這是剛才報錯缺少的！
+// 3. 更新使用者 Profile (管理員用)
 export const updateProfile = async (id: string, updates: Partial<UserProfile>): Promise<boolean> => {
   const dbUpdates: any = {};
   if (updates.role) dbUpdates.role = updates.role;
@@ -133,11 +135,14 @@ export const getClient = async (id: string): Promise<Client | null> => {
     birthHour: data.birth_hour || data.birthHour,
     birthMinute: data.birth_minute || data.birthMinute,
     created_at: data.created_at,
+    type: data.type, 
+    majorStars: data.major_stars,
+    editCount: data.edit_count || 0
   };
 };
 
-// 5. 取得客戶列表 (列表頁用) - 預防性補上
-export const getClients = async (): Promise<Client[]> => {
+// 5. 取得客戶列表 (列表頁用)
+export const loadClients = async (): Promise<Client[]> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
 
@@ -163,11 +168,31 @@ export const getClients = async (): Promise<Client[]> => {
     birthHour: item.birth_hour || item.birthHour,
     birthMinute: item.birth_minute || item.birthMinute,
     created_at: item.created_at,
+    type: item.type,
+    majorStars: item.major_stars,
+    editCount: item.edit_count || 0
   }));
 };
 
-// 6. 新增客戶 - 預防性補上
-export const addClient = async (client: Omit<Client, 'id' | 'created_at'>): Promise<string | null> => {
+// 為了相容性，匯出 getClients 別名
+export const getClients = loadClients;
+
+// 6. 計算已使用的命盤數量 (ClientList 需要這個)
+export const getUsedChartCount = async (userId: string): Promise<number> => {
+    const { count, error } = await supabase
+        .from('clients')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
+    
+    if (error) {
+        console.error('Error counting charts:', error);
+        return 0;
+    }
+    return count || 0;
+};
+
+// 7. 新增客戶
+export const addClient = async (client: any): Promise<string | null> => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
@@ -179,7 +204,9 @@ export const addClient = async (client: Omit<Client, 'id' | 'created_at'>): Prom
         birth_month: client.birthMonth,
         birth_day: client.birthDay,
         birth_hour: client.birthHour,
-        birth_minute: client.birthMinute
+        birth_minute: client.birthMinute,
+        type: client.type,           // 支援分類
+        major_stars: client.majorStars // 支援主星
     };
 
     const { data, error } = await supabase
@@ -190,13 +217,13 @@ export const addClient = async (client: Omit<Client, 'id' | 'created_at'>): Prom
 
     if (error) {
         console.error('Error adding client:', error);
-        return null;
+        throw error; // 拋出錯誤讓前端知道
     }
     return data.id;
 };
 
-// 7. 更新客戶 - 預防性補上
-export const updateClient = async (id: string, client: Partial<Client>): Promise<boolean> => {
+// 8. 更新客戶
+export const updateClient = async (id: string, client: any): Promise<boolean> => {
     const dbPayload: any = {};
     if (client.name) dbPayload.name = client.name;
     if (client.gender) dbPayload.gender = client.gender;
@@ -205,6 +232,12 @@ export const updateClient = async (id: string, client: Partial<Client>): Promise
     if (client.birthDay) dbPayload.birth_day = client.birthDay;
     if (client.birthHour) dbPayload.birth_hour = client.birthHour;
     if (client.birthMinute) dbPayload.birth_minute = client.birthMinute;
+    if (client.type) dbPayload.type = client.type;
+    if (client.majorStars) dbPayload.major_stars = client.majorStars;
+
+    // 增加編輯次數 (如果有需要的話，或是由資料庫 Trigger 處理)
+    // 這裡我們簡單做，假設每次更新都算一次編輯
+    // 如果你的資料庫有 edit_count 欄位，可以用 rpc 或直接 +1，這裡暫時不自動加，避免複雜化
 
     const { error } = await supabase
         .from('clients')
@@ -218,7 +251,7 @@ export const updateClient = async (id: string, client: Partial<Client>): Promise
     return true;
 };
 
-// 8. 刪除客戶 - 預防性補上
+// 9. 刪除客戶
 export const deleteClient = async (id: string): Promise<boolean> => {
     const { error } = await supabase
         .from('clients')
@@ -230,4 +263,15 @@ export const deleteClient = async (id: string): Promise<boolean> => {
         return false;
     }
     return true;
+};
+
+// 10. 整合儲存 (App.tsx 需要這個！)
+export const saveClient = async (clientData: any): Promise<string | null> => {
+    // 檢查是否有 ID，有 ID 就是更新，沒 ID 就是新增
+    if (clientData.id) {
+        const success = await updateClient(clientData.id, clientData);
+        return success ? clientData.id : null;
+    } else {
+        return await addClient(clientData);
+    }
 };
