@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, Save, Trash2, Shield, User, Loader2, Edit2 } from 'lucide-react'; // 修正：Edit2 必須在這裡引入
+import { X, Save, Trash2, Shield, User, Loader2, Edit2 } from 'lucide-react'; // 這裡已經引入了
 import { getAllProfiles, updateProfile, type UserProfile } from '../db';
 
 interface Props {
@@ -98,7 +98,8 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                           <select 
                             className="border rounded px-2 py-1 text-sm bg-white"
                             value={editForm.role}
-                            onChange={e => setEditForm({...editForm, role: e.target.value as any})}
+                            // 這裡使用 as 轉型來避免 TS 檢查錯誤
+                            onChange={e => setEditForm({...editForm, role: e.target.value as 'admin' | 'user'})}
                           >
                             <option value="user">User</option>
                             <option value="admin">Admin</option>
