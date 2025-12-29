@@ -5,7 +5,7 @@ import { PalaceCard } from './PalaceCard';
 import { getClient, type Client } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
 import { GAN, ZHI, PALACE_NAMES } from '../logic/constants';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 interface ChartBoardProps {
   client?: Client;
@@ -30,7 +30,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
 
   const chartRef = useRef<HTMLDivElement>(null);
 
-  // 1. 資料讀取 Effect
   useEffect(() => {
     if (client) return;
     const fetchData = async () => {
@@ -56,7 +55,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     fetchData();
   }, [id, client, navigate]);
 
-  // 2. 基礎引擎 UseMemo
   const baseEngine = useMemo(() => {
     if (!client || currentHour === -1) return null;
     return new ZiWeiEngine(
@@ -71,11 +69,9 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
 
   const baseChartData = useMemo(() => baseEngine?.getChartData(), [baseEngine]);
 
-  // 3. 顯示引擎與 ChartData UseMemo (解決 #310 副作用)
   const chartData = useMemo(() => {
     if (!client || currentHour === -1) return null;
 
-    // 每次渲染創建獨立引擎，避免副作用汙染
     const displayEngine = new ZiWeiEngine(
       client.birthYear,
       client.birthMonth,
@@ -120,7 +116,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     return displayEngine.getChartData();
   }, [client, currentHour, daXianSeq, liuNianYear, showXiaoXian]);
 
-  // 4. 列表數據 UseMemos
   const daXianList = useMemo(() => {
     if (!baseChartData || !baseEngine) return [];
     const list = [];
@@ -179,7 +174,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
       return '(無主星)';
   }, [baseEngine, baseChartData]);
 
-  // 5. Loading Guard
   if (loading || !client || !baseChartData || !baseEngine || !chartData) {
     return (
         <div className="flex h-[100dvh] w-full items-center justify-center bg-gray-100">
@@ -188,17 +182,18 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     );
   }
 
-  // 6. 【關鍵修正】變數宣告 - 移到這裡保證安全
   const benMingPos = baseEngine.getMingPos();
   const isLimitActive = daXianSeq >= 0 || liuNianYear !== null || showXiaoXian;
   
+  // 【修改重點】定義何時顯示截圖按鈕
+  // 只要是在本命盤狀態（無大限流年），且畫面乾淨（無選取、無飛化、無顛倒檢視），就允許截圖。
+  // 這包含了「普通本命盤」和「雙胞胎本命盤」。
   const isCleanState =
     daXianSeq === -1 &&
     liuNianYear === null &&
     selectedPalace === null &&
     flyingPalace === null &&
-    !isReverse &&
-    !isTwinMode;
+    !isReverse;
 
   const isTimeModified = currentHour !== client.birthHour;
 
@@ -207,7 +202,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
      currentHourZhi = currentHour === 23 ? '晚子' : '早子';
   }
 
-  // 7. Helper Functions
   const resetAllStates = () => {
     setDaXianSeq(-1);
     setLiuNianYear(null);
@@ -250,6 +244,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
         }
       });
       const link = document.createElement('a');
+      // 根據檔名邏輯，雙胞胎模式優先於本命盤
       const suffix = isTwinMode ? '_雙胞胎' : (isReverse ? '_顛倒盤' : '_本命盤');
       link.download = `${client.name}${suffix}.png`;
       link.href = dataUrl;
@@ -446,7 +441,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                 if (gridPos === 5)
                 return (
                     <div key="center" className="col-span-2 row-span-2 flex flex-col items-center justify-center p-2 border border-gray-300 bg-white z-10 relative">
-                        {/* 1. 時辰切換 - 往中間靠攏 */}
+                        {/* 1. 時辰切換 */}
                         <div className="flex w-full justify-center gap-6 items-center mb-1 mt-2">
                             <button onClick={() => changeHour(-1)} className="text-gray-400 hover:text-gray-800 font-bold text-2xl select-none">&lt;</button>
                             <div onClick={isTimeModified ? resetTime : undefined} className={`text-lg font-bold select-none ${isTimeModified ? 'text-blue-600 cursor-pointer underline' : 'text-gray-600'}`} title={isTimeModified ? '點擊還原出生時辰' : ''}>
@@ -465,7 +460,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                             </div>
                         </div>
 
-                        {/* 3. 命主資訊 - 對齊優化 */}
+                        {/* 3. 命主資訊 */}
                         <div className="flex flex-col items-center w-full leading-tight gap-1">
                             <div className="text-gray-700 text-sm sm:text-base font-medium">
                                 {client.gender} {chartData.bureau}
@@ -478,33 +473,49 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                             </div>
                         </div>
 
-                        {/* 4. 右上角開關 */}
+                        {/* 4. 右上角開關：統一使用 Toggle 樣式 */}
                         <div className="absolute top-2 right-2 flex flex-col items-center gap-2 z-50">
+                            
+                            {/* 雙胞/顛倒 按鈕 (紫色系) */}
                             <div className="flex flex-col items-center gap-0.5 no-screenshot">
                                 <span className="text-[9px] text-gray-400 font-bold transform scale-90">
-                                    {isLimitActive ? '顛倒' : '雙胞'}
+                                    {isLimitActive ? '顛倒盤' : '雙胞胎'}
                                 </span>
                                 <button 
                                     onClick={toggleViewMode} 
-                                    className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors shadow-sm border 
+                                    className={`w-9 h-5 rounded-full p-0.5 transition-colors duration-200 ease-in-out
                                         ${(isLimitActive ? isReverse : isTwinMode) 
-                                            ? 'bg-purple-600 text-white border-purple-700' 
-                                            : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
-                                        }`} 
+                                            ? 'bg-purple-600' 
+                                            : 'bg-gray-300'
+                                        }`}
                                     title={isLimitActive 
                                         ? (isReverse ? "關閉顛倒" : "開啟顛倒") 
                                         : (isTwinMode ? "關閉雙胞胎" : "開啟雙胞胎")
                                     }
                                 >
-                                    <RefreshCw size={14} className={(isLimitActive ? isReverse : isTwinMode) ? "animate-spin-slow" : ""} />
+                                    <div 
+                                        className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-200 ease-in-out
+                                            ${(isLimitActive ? isReverse : isTwinMode) 
+                                                ? 'translate-x-4' 
+                                                : 'translate-x-0'
+                                            }`}
+                                    />
                                 </button>
                             </div>
 
+                            {/* 小限按鈕 (綠色系) */}
                             {liuNianYear && (
                                 <div className="flex flex-col items-center gap-0.5">
-                                  <span className="text-[9px] text-gray-400 font-bold transform scale-90">小限</span>
-                                  <button onClick={toggleXiaoXian} className={`w-9 h-5 rounded-full p-0.5 transition-colors ${showXiaoXian ? 'bg-green-500' : 'bg-gray-200'}`}>
-                                    <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${showXiaoXian ? 'translate-x-4' : 'translate-x-0'}`} />
+                                  <span className="text-[9px] text-gray-400 font-bold transform scale-90">小限盤</span>
+                                  <button 
+                                    onClick={toggleXiaoXian} 
+                                    className={`w-9 h-5 rounded-full p-0.5 transition-colors duration-200 ease-in-out
+                                        ${showXiaoXian ? 'bg-green-500' : 'bg-gray-300'}`}
+                                  >
+                                    <div 
+                                        className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-200 ease-in-out
+                                            ${showXiaoXian ? 'translate-x-4' : 'translate-x-0'}`} 
+                                    />
                                   </button>
                                 </div>
                             )}
