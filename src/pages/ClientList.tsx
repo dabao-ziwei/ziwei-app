@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { ZHI } from '../logic/constants';
 import { UserManagementModal } from '../components/UserManagementModal'; 
 import { DivinationSetupModal } from '../components/DivinationSetupModal';
-import { RelationshipModal } from '../components/RelationshipModal'; // 新增引用
+import { RelationshipModal } from '../components/RelationshipModal';
 
 const CATEGORIES = ["我", "家人", "朋友", "客戶", "名人", "其他"];
 const STORAGE_KEY_CATS = 'ziwei_expanded_cats';
@@ -47,7 +47,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false); 
   const [isDivinationModalOpen, setIsDivinationModalOpen] = useState(false);
   
-  // 關係管理 Modal
   const [relationClient, setRelationClient] = useState<Client | null>(null);
 
   const navigate = useNavigate();
@@ -341,7 +340,10 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                               </div>
                             </div>
 
+                            {/* 操作按鈕區 */}
                             <div className="flex items-center gap-2 shrink-0">
+                                
+                                {/* 建立者標籤 */}
                                 {!isMine && c.creatorEmail && (
                                     <div className="hidden sm:flex items-center gap-1 text-[10px] text-gray-400 bg-gray-50 px-2 py-1 rounded border border-gray-100 select-none mr-1">
                                         <User size={10} /> 
@@ -350,18 +352,19 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                                     </div>
                                 )}
 
-                                <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                                  {/* 新增：關係管理按鈕 (紫占不顯示) */}
+                                <div className="flex gap-1">
+                                  {/* 1. 關係網按鈕 (綠色，常駐顯示) */}
                                   {!isZiZhan && isMine && (
                                       <button 
                                         onClick={(e) => { e.stopPropagation(); setRelationClient(c); }} 
                                         className="p-2 rounded-full text-slate-400 hover:text-green-600 hover:bg-green-100 transition-colors"
-                                        title="人際關係"
+                                        title="設定人際關係"
                                       >
                                         <Network size={18}/>
                                       </button>
                                   )}
 
+                                  {/* 2. 編輯按鈕 */}
                                   {!isZiZhan && (
                                       <button 
                                         onClick={(e) => { e.stopPropagation(); if(isMine) onEdit(c); }} 
@@ -376,6 +379,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                                       </button>
                                   )}
                                   
+                                  {/* 3. 刪除按鈕 */}
                                   <button 
                                     onClick={(e) => { if(isMine) handleDelete(e, c.id); else e.stopPropagation(); }} 
                                     className={`p-2 rounded-full transition-colors ${
