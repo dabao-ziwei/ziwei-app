@@ -341,11 +341,20 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
 
   const isLimitActive = daXianSeq >= 0 || liuNianYear !== null || showXiaoXian;
 
+  // 計算命宮主星字串
+  const benMingMajorStarsStr = useMemo(() => {
+      const p = chartData.palaces[benMingPos];
+      if (p.majorStars.length > 0) {
+          return `(${p.majorStars.map(s => s.name).join('、')})`;
+      }
+      return '(無主星)';
+  }, [chartData, benMingPos]);
+
   return (
-    // 1. 最外層 Layout：App 式固定佈局
+    // 1. 最外層：鎖定螢幕高度
     <div className="flex flex-col h-[100dvh] w-full bg-white relative overflow-hidden">
       
-      {/* A. 固定 Header：只放列表、截圖 */}
+      {/* Header */}
       <div className="flex justify-between items-center px-4 py-2 bg-white border-b border-gray-200 shadow-sm shrink-0 z-50 h-[56px]">
         <button
           onClick={handleBack}
@@ -370,13 +379,12 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
         )}
       </div>
 
-      {/* B. 中間 Main：液態滿版命盤 (無邊距) */}
+      {/* Main Content */}
       <div className="flex-1 min-h-0 w-full relative">
         <div
             ref={chartRef}
             className="w-full h-full bg-white border-2 border-gray-800 shadow-xl z-10 grid grid-cols-4 grid-rows-4"
         >
-            {/* SVG 線條層：加入 vector-effect="non-scaling-stroke" 抗變形 */}
             <svg className="absolute inset-0 w-full h-full pointer-events-none z-40">
             {selectedPalace !== null &&
                 (() => {
@@ -400,8 +408,8 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                 if (gridPos === 5)
                 return (
                     <div key="center" className="col-span-2 row-span-2 flex flex-col items-center justify-center p-2 border border-gray-300 bg-white z-10 relative">
-                        {/* 中間功能區 1: 時辰切換 */}
-                        <div className="flex w-full justify-between items-center mb-1 px-4 mt-2">
+                        {/* 1. 時辰切換 - 往中間靠攏 (justify-center + gap-6) */}
+                        <div className="flex w-full justify-center gap-6 items-center mb-1 mt-2">
                             <button onClick={() => changeHour(-1)} className="text-gray-400 hover:text-gray-800 font-bold text-2xl select-none">&lt;</button>
                             <div onClick={isTimeModified ? resetTime : undefined} className={`text-lg font-bold select-none ${isTimeModified ? 'text-blue-600 cursor-pointer underline' : 'text-gray-600'}`} title={isTimeModified ? '點擊還原出生時辰' : ''}>
                                 {currentHourZhi}時
@@ -409,20 +417,30 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                             <button onClick={() => changeHour(1)} className="text-gray-400 hover:text-gray-800 font-bold text-2xl select-none">&gt;</button>
                         </div>
 
-                        {/* 中間功能區 2: 名字 */}
-                        <div className="flex items-center gap-2 mb-2">
-                            <div className="text-3xl sm:text-4xl font-bold text-black tracking-widest truncate max-w-[200px] text-center">{client.name}</div>
+                        {/* 2. 名字 + 本命主星 */}
+                        <div className="flex flex-col items-center gap-1 mb-2">
+                            <div className="text-3xl sm:text-4xl font-bold text-black tracking-widest text-center">
+                                {client.name}
+                            </div>
+                            <div className="text-sm font-bold text-gray-500 tracking-wide">
+                                {benMingMajorStarsStr}
+                            </div>
                         </div>
 
-                        {/* 中間功能區 3: 命主資訊 */}
-                        <div className="flex flex-col gap-0.5 text-sm sm:text-base items-center text-center w-full leading-tight">
-                            <div className="text-gray-700">{client.gender} {chartData.bureau}</div>
-                            <div className="text-gray-600">西元：{chartData.solarDate}</div>
-                            <div className="text-gray-600">農曆：{chartData.lunarDate}</div>
-                            <div className="text-gray-700 font-medium mt-1">命主：{chartData.mingZhu} 身主：{chartData.shenZhu}</div>
+                        {/* 3. 命主資訊 - 置中顯示但文字開頭對齊 */}
+                        <div className="flex flex-col items-center w-full leading-tight gap-1">
+                            <div className="text-gray-700 text-sm sm:text-base font-medium">
+                                {client.gender} {chartData.bureau}
+                            </div>
+                            
+                            <div className="flex flex-col items-start text-sm sm:text-base text-gray-600">
+                                <div>西元：{chartData.solarDate}</div>
+                                <div>農曆：{chartData.lunarDate}</div>
+                                <div className="text-gray-700 font-medium">命主：{chartData.mingZhu} 身主：{chartData.shenZhu}</div>
+                            </div>
                         </div>
 
-                        {/* 中間功能區 4: 右上角開關 (顛倒盤 / 小限盤) */}
+                        {/* 4. 右上角開關 (顛倒盤 / 小限盤) */}
                         <div className="absolute top-2 right-2 flex flex-col items-center gap-2 z-50">
                             <div className="flex flex-col items-center gap-0.5 no-screenshot">
                                 <span className="text-[9px] text-gray-400 font-bold transform scale-90">{isLimitActive ? '顛倒' : '雙胞'}</span>
@@ -491,7 +509,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
         </div>
       </div>
 
-      {/* C. 固定 Footer：只放切換按鈕 */}
+      {/* Footer */}
       <div className="w-full shrink-0 border-t-2 border-gray-800 bg-gray-100 z-50">
         <div className="w-full">
             <div className="flex w-full overflow-x-auto scrollbar-hide border-b border-gray-300">
