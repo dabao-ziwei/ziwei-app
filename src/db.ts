@@ -1,6 +1,7 @@
 import { supabase } from './supabase'; 
 
 // --- 設定 ---
+// 定義超級管理員 Email
 const SUPER_VIEW_EMAIL = 'stephenwu.0926@gmail.com';
 
 // --- 介面定義 ---
@@ -42,8 +43,8 @@ export interface Relationship {
   relation_type: string;
   related_client?: Client;
   is_reverse?: boolean; 
-  is_inferred?: boolean; // 新增：標記這是否為系統推導出的關係
-  inferred_from?: string; // 記錄是從誰推導過來的 (姓名)
+  is_inferred?: boolean; 
+  inferred_from?: string; 
 }
 
 // --- 核心功能 ---
@@ -68,8 +69,13 @@ export const loadClients = async (): Promise<Client[]> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
   const isSuperViewer = user.email === SUPER_VIEW_EMAIL;
+  
   let query = supabase.from('clients').select('*').order('created_at', { ascending: false });
-  if (!isSuperViewer) query = query.eq('user_id', user.id).eq('is_deleted', false);
+  
+  if (!isSuperViewer) {
+      query = query.eq('user_id', user.id).eq('is_deleted', false);
+  }
+
   const { data, error } = await query;
   if (error) return [];
   
@@ -79,8 +85,21 @@ export const loadClients = async (): Promise<Client[]> => {
       if (profiles) profiles.forEach(p => userIdToEmailMap[p.id] = p.email);
   }
 
+  // 【修正重點】確保 user_id 位於第一層，讓 ClientList.tsx 的 isOwnerMatch 邏輯能正確執行
   return data.map((item: any) => ({
-    ...mapClientData(item),
+    id: item.id,
+    user_id: item.user_id, // 關鍵：明確移至第一層
+    name: item.name,
+    gender: item.gender,
+    birthYear: item.birth_year ?? item.birthYear,
+    birthMonth: item.birth_month ?? item.birthMonth,
+    birthDay: item.birth_day ?? item.birthDay,
+    birthHour: item.birth_hour ?? item.birthHour,
+    birthMinute: item.birth_minute ?? item.birthMinute,
+    created_at: item.created_at,
+    type: item.type,
+    majorStars: item.major_stars,
+    editCount: item.edit_count ?? 0,
     creatorEmail: userIdToEmailMap[item.user_id] || '',
     is_deleted: item.is_deleted
   }));
@@ -89,13 +108,25 @@ export const loadClients = async (): Promise<Client[]> => {
 export const getClient = async (id: string): Promise<Client | null> => {
   const { data, error } = await supabase.from('clients').select('*').eq('id', id).single();
   if (error) return null;
-  return { ...mapClientData(data), is_deleted: data.is_deleted };
+  return {
+    id: data.id,
+    user_id: data.user_id,
+    name: data.name,
+    gender: data.gender,
+    birthYear: data.birth_year ?? data.birthYear,
+    birthMonth: data.birth_month ?? data.birthMonth,
+    birthDay: data.birth_day ?? data.birthDay,
+    birthHour: data.birth_hour ?? data.birthHour,
+    birthMinute: data.birth_minute ?? data.birthMinute,
+    created_at: data.created_at,
+    type: data.type, 
+    majorStars: data.major_stars,
+    editCount: data.edit_count ?? 0,
+    is_deleted: data.is_deleted
+  };
 };
 
-// --- 【重頭戲】雙向且具備自動推導功能的關係抓取 ---
-
 export const getRelationships = async (clientId: string): Promise<Relationship[]> => {
-    // 1. 抓取直接關係 (我連別人 & 別人連我)
     const { data: directRels, error } = await supabase
         .from('relationships')
         .select(`
@@ -111,24 +142,21 @@ export const getRelationships = async (clientId: string): Promise<Relationship[]
     const spouseIds: string[] = [];
     const spouseNames: Record<string, string> = {};
 
-    // 處理第一層：直接關係
     directRels.forEach((r: any) => {
         const isReverse = r.to_client_id === clientId;
         const relatedData = isReverse ? r.from_c : r.to_c;
         
         if (relatedData) {
-            const rel = {
+            result.push({
                 id: r.id,
                 from_client_id: r.from_client_id,
                 to_client_id: r.to_client_id,
                 relation_type: r.relation_type,
                 is_reverse: isReverse,
                 is_inferred: false,
-                related_client: mapClientData(relatedData)
-            };
-            result.push(rel);
+                related_client: mapClientToEntity(relatedData)
+            });
 
-            // 記錄配偶 ID 用於後續推導
             if (r.relation_type === '配偶') {
                 spouseIds.push(relatedData.id);
                 spouseNames[relatedData.id] = relatedData.name;
@@ -136,41 +164,38 @@ export const getRelationships = async (clientId: string): Promise<Relationship[]
         }
     });
 
-    // 2. 第二層推導：找配偶的子女
     if (spouseIds.length > 0) {
         const { data: spouseChildren, error: err2 } = await supabase
             .from('relationships')
             .select(`*, child:clients!to_client_id (*)`)
             .in('from_client_id', spouseIds)
-            .eq('relation_type', '母子'); // 或者您可以擴充為包含 '子女'、'父子' 等關鍵字
+            .eq('relation_type', '母子'); 
 
         if (!err2 && spouseChildren) {
             spouseChildren.forEach((r: any) => {
-                // 如果這個孩子還沒在我的直接關係列表裡，就推導進去
                 const alreadyExists = result.some(exist => exist.related_client?.id === r.to_client_id);
                 if (!alreadyExists && r.child) {
                     result.push({
                         id: `inferred-${r.id}`,
                         from_client_id: clientId,
                         to_client_id: r.to_client_id,
-                        relation_type: r.relation_type, // 沿用原關係稱謂，或是統一改為 '子女'
+                        relation_type: '子女', 
                         is_reverse: false,
                         is_inferred: true,
                         inferred_from: spouseNames[r.from_client_id],
-                        related_client: mapClientData(r.child)
+                        related_client: mapClientToEntity(r.child)
                     });
                 }
             });
         }
     }
-
     return result;
 };
 
-// --- 其他輔助功能 ---
-
-const mapClientData = (data: any): Client => ({
+// 內部轉換用
+const mapClientToEntity = (data: any): Client => ({
     id: data.id,
+    user_id: data.user_id,
     name: data.name,
     gender: data.gender,
     birthYear: data.birth_year ?? data.birthYear,
@@ -196,9 +221,8 @@ export const deleteRelationship = async (relId: string): Promise<boolean> => {
     return !error;
 };
 
-// ... 其他原本 db.ts 的 updateProfile, deleteClient 等保持不變 ...
 export const saveClient = async (clientData: any): Promise<string | null> => {
-    if (clientData.id && !clientData.id.startsWith('temp-')) {
+    if (clientData.id && !clientData.id.toString().startsWith('temp-')) {
         const success = await updateClient(clientData.id, clientData);
         return success ? clientData.id : null;
     } else {
@@ -275,12 +299,12 @@ export const toggleUserBan = async (id: string, currentStatus: boolean): Promise
 };
 
 export const updateProfile = async (id: string, updates: Partial<UserProfile>): Promise<boolean> => {
-  const dbUpdates: any = {
-    role: updates.role,
-    max_charts: updates.maxCharts,
-    max_edits_per_chart: updates.maxEditsPerChart,
-    can_use_divination: updates.can_use_divination
-  };
+  const dbUpdates: any = {};
+  if (updates.role) dbUpdates.role = updates.role;
+  if (updates.maxCharts !== undefined) dbUpdates.max_charts = updates.maxCharts;
+  if (updates.maxEditsPerChart !== undefined) dbUpdates.max_edits_per_chart = updates.maxEditsPerChart;
+  if (updates.can_use_divination !== undefined) dbUpdates.can_use_divination = updates.can_use_divination;
+
   const { error } = await supabase.from('profiles').update(dbUpdates).eq('id', id);
   return !error;
 };
