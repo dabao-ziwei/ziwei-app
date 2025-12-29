@@ -26,10 +26,11 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const [liuNianYear, setLiuNianYear] = useState<number | null>(null);
   const [showXiaoXian, setShowXiaoXian] = useState<boolean>(false);
   const [isReverse, setIsReverse] = useState<boolean>(false);
-  const [isTwinMode, setIsTwinMode] = useState<boolean>(false); // 新增雙胞胎模式狀態
+  const [isTwinMode, setIsTwinMode] = useState<boolean>(false);
 
   const chartRef = useRef<HTMLDivElement>(null);
 
+  // 1. 資料讀取 Effect
   useEffect(() => {
     if (client) return;
     const fetchData = async () => {
@@ -55,7 +56,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     fetchData();
   }, [id, client, navigate]);
 
-  // 1. 基礎引擎：只負責提供「原始」的命盤結構
+  // 2. 基礎引擎 UseMemo
   const baseEngine = useMemo(() => {
     if (!client || currentHour === -1) return null;
     return new ZiWeiEngine(
@@ -70,10 +71,11 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
 
   const baseChartData = useMemo(() => baseEngine?.getChartData(), [baseEngine]);
 
-  // 2. 顯示數據計算：使用獨立引擎實體避免副作用
+  // 3. 顯示引擎與 ChartData UseMemo (解決 #310 副作用)
   const chartData = useMemo(() => {
     if (!client || currentHour === -1) return null;
 
+    // 每次渲染創建獨立引擎，避免副作用汙染
     const displayEngine = new ZiWeiEngine(
       client.birthYear,
       client.birthMonth,
@@ -92,10 +94,9 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     const startPos = displayEngine.getMingPos();
     const direction = tempBaseData.direction || 1;
 
-    let daXianPalaceIdx = -1;
     if (daXianSeq >= 0) {
         const offset = daXianSeq * direction;
-        daXianPalaceIdx = (startPos + offset + 120) % 12;
+        const daXianPalaceIdx = (startPos + offset + 120) % 12;
         const p = tempBaseData.palaces[daXianPalaceIdx];
         if (p) daGan = p.ganIndex;
     }
@@ -119,8 +120,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     return displayEngine.getChartData();
   }, [client, currentHour, daXianSeq, liuNianYear, showXiaoXian]);
 
-
-  // 生成大限列表
+  // 4. 列表數據 UseMemos
   const daXianList = useMemo(() => {
     if (!baseChartData || !baseEngine) return [];
     const list = [];
@@ -169,7 +169,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     return baseEngine.getXiaoXianPos(virtualAge);
   }, [liuNianYear, baseChartData, baseEngine]);
 
-  // 計算命宮主星字串
   const benMingMajorStarsStr = useMemo(() => {
       if (!baseEngine || !baseChartData) return '';
       const pos = baseEngine.getMingPos();
@@ -180,7 +179,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
       return '(無主星)';
   }, [baseEngine, baseChartData]);
 
-
+  // 5. Loading Guard
   if (loading || !client || !baseChartData || !baseEngine || !chartData) {
     return (
         <div className="flex h-[100dvh] w-full items-center justify-center bg-gray-100">
@@ -189,8 +188,26 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     );
   }
 
-  // --- 狀態控制與事件 ---
+  // 6. 【關鍵修正】變數宣告 - 移到這裡保證安全
+  const benMingPos = baseEngine.getMingPos();
+  const isLimitActive = daXianSeq >= 0 || liuNianYear !== null || showXiaoXian;
+  
+  const isCleanState =
+    daXianSeq === -1 &&
+    liuNianYear === null &&
+    selectedPalace === null &&
+    flyingPalace === null &&
+    !isReverse &&
+    !isTwinMode;
 
+  const isTimeModified = currentHour !== client.birthHour;
+
+  let currentHourZhi = ZHI[Math.floor((currentHour + 1) / 2) % 12];
+  if (Math.floor((currentHour + 1) / 2) % 12 === 0) {
+     currentHourZhi = currentHour === 23 ? '晚子' : '早子';
+  }
+
+  // 7. Helper Functions
   const resetAllStates = () => {
     setDaXianSeq(-1);
     setLiuNianYear(null);
@@ -214,22 +231,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     resetAllStates();
   };
 
-  const isTimeModified = currentHour !== client.birthHour;
-
-  let currentHourZhi = ZHI[Math.floor((currentHour + 1) / 2) % 12];
-  if (Math.floor((currentHour + 1) / 2) % 12 === 0) {
-     currentHourZhi = currentHour === 23 ? '晚子' : '早子';
-  }
-
-  const isCleanState =
-    daXianSeq === -1 &&
-    liuNianYear === null &&
-    selectedPalace === null &&
-    flyingPalace === null &&
-    !isReverse &&
-    !isTwinMode;
-
-  // 【修復】這裡加回了 handleBack
   const handleBack = () => {
       if (onBack) onBack();
       else navigate('/');
@@ -333,14 +334,16 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     }
   };
 
-  const isLimitActive = daXianSeq >= 0 || liuNianYear !== null || showXiaoXian;
-
   const toggleViewMode = () => {
       if (isLimitActive) {
           setIsReverse(!isReverse);
       } else {
           setIsTwinMode(!isTwinMode);
       }
+  };
+
+  const toggleReverse = () => {
+      setIsReverse(!isReverse);
   };
 
   const flyingStarsLookup = (() => {
@@ -443,6 +446,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                 if (gridPos === 5)
                 return (
                     <div key="center" className="col-span-2 row-span-2 flex flex-col items-center justify-center p-2 border border-gray-300 bg-white z-10 relative">
+                        {/* 1. 時辰切換 - 往中間靠攏 */}
                         <div className="flex w-full justify-center gap-6 items-center mb-1 mt-2">
                             <button onClick={() => changeHour(-1)} className="text-gray-400 hover:text-gray-800 font-bold text-2xl select-none">&lt;</button>
                             <div onClick={isTimeModified ? resetTime : undefined} className={`text-lg font-bold select-none ${isTimeModified ? 'text-blue-600 cursor-pointer underline' : 'text-gray-600'}`} title={isTimeModified ? '點擊還原出生時辰' : ''}>
@@ -451,6 +455,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                             <button onClick={() => changeHour(1)} className="text-gray-400 hover:text-gray-800 font-bold text-2xl select-none">&gt;</button>
                         </div>
 
+                        {/* 2. 名字 + 本命主星 */}
                         <div className="flex flex-col items-center gap-1 mb-2">
                             <div className="text-3xl sm:text-4xl font-bold text-black tracking-widest text-center">
                                 {client.name}
@@ -460,6 +465,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                             </div>
                         </div>
 
+                        {/* 3. 命主資訊 - 對齊優化 */}
                         <div className="flex flex-col items-center w-full leading-tight gap-1">
                             <div className="text-gray-700 text-sm sm:text-base font-medium">
                                 {client.gender} {chartData.bureau}
@@ -472,6 +478,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                             </div>
                         </div>
 
+                        {/* 4. 右上角開關 */}
                         <div className="absolute top-2 right-2 flex flex-col items-center gap-2 z-50">
                             <div className="flex flex-col items-center gap-0.5 no-screenshot">
                                 <span className="text-[9px] text-gray-400 font-bold transform scale-90">
