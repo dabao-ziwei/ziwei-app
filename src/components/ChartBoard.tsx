@@ -20,17 +20,21 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const [currentHour, setCurrentHour] = useState<number>(() => propClient ? propClient.birthHour : -1);
   const [loading, setLoading] = useState(!propClient);
   
+  // 內部狀態
   const [selectedPalace, setSelectedPalace] = useState<number | null>(null);
   const [flyingPalace, setFlyingPalace] = useState<number | null>(null);
   const [daXianSeq, setDaXianSeq] = useState<number>(-1);
   const [liuNianYear, setLiuNianYear] = useState<number | null>(null);
   const [showXiaoXian, setShowXiaoXian] = useState<boolean>(false);
+  
+  // 顛倒盤狀態
   const [isReverse, setIsReverse] = useState<boolean>(false);
 
   const chartRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (client) return;
+
     const fetchData = async () => {
       if (id) {
         setLoading(true);
@@ -70,11 +74,13 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
 
   if (loading || !client || !baseChartData || !engine) {
     return (
-        <div className="flex h-[100dvh] w-full items-center justify-center bg-gray-100">
+        <div className="flex h-screen w-full items-center justify-center bg-gray-100">
             <Loader2 className="animate-spin text-gray-500" size={48} />
         </div>
     );
   }
+
+  // --- 邏輯開始 ---
 
   const resetAllStates = () => {
     setDaXianSeq(-1);
@@ -148,7 +154,9 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
         const startYear = baseChartData.lunarYear + palace.ages[0];
         list.push({
           seq: i,
-          name: `${['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'][i]}限`,
+          name: `${
+            ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'][i]
+          }限`,
           ganZhi: `${GAN[palace.ganIndex]}${ZHI[palace.zhiIndex]}`,
           palaceIdx: palaceIdx,
           startAge: palace.ages[0],
@@ -342,17 +350,25 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const isLimitActive = daXianSeq >= 0 || liuNianYear !== null || showXiaoXian;
 
   return (
-    // 1. 最外層：鎖定螢幕高度 (h-[100dvh])，確保網址列不影響佈局
-    <div className="flex flex-col h-[100dvh] w-full bg-white relative overflow-hidden">
-      
-      {/* 左上角按鈕：絕對定位 */}
-      <div className="absolute top-4 left-4 z-50 flex flex-col gap-2 items-start pointer-events-auto">
+    <div className="flex flex-col h-full w-full bg-white overflow-hidden relative">
+      <div className="absolute top-4 left-4 z-50 flex flex-col gap-2 items-start">
         <button
           onClick={handleBack}
           className="bg-white text-gray-700 px-3 py-2 rounded-lg shadow-md hover:bg-gray-100 flex items-center gap-1.5 transition-all border border-gray-300"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-4 w-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2.5}
+              d="M10 19l-7-7m0 0l7-7m-7 7h18"
+            />
           </svg>
           <span className="text-sm font-bold">列表</span>
         </button>
@@ -362,155 +378,279 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
             onClick={handleDownload}
             className="bg-white text-gray-700 px-3 py-2 rounded-lg shadow-md hover:bg-gray-100 flex items-center gap-1.5 transition-all border border-gray-300"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+              />
             </svg>
             <span className="text-sm font-bold">截圖</span>
           </button>
         )}
       </div>
 
-      {/* 2. 內容容器 (雙軌制核心)
-          - 手機/直板 (Default): overflow-y-auto (允許捲動), w-full (寬度撐滿)
-          - 電腦/橫板 (lg): overflow-hidden (鎖定不捲動), max-w-[1400px] (限制寬度), mx-auto (置中)
-      */}
-      <div className="flex-1 flex flex-col w-full overflow-y-auto lg:overflow-hidden lg:max-w-[1400px] lg:mx-auto">
-        
-        {/* 3. 命盤區域
-            - 手機/直板: w-full (撐滿寬度), flex-none (不強制壓縮高度，隨寬度長高)
-            - 電腦/橫板: flex-1 (佔滿剩餘高度), min-h-0 (允許縮小), justify-center (垂直置中)
-        */}
-        <div className="w-full flex-none lg:flex-1 lg:min-h-0 flex items-center justify-center p-0 lg:p-2">
-            <div
-              ref={chartRef}
-              // 4. 命盤本體
-              // - 手機/直板: w-full (撐滿), h-auto (高度自動) -> 這會造成 image_5266a9.jpg 的效果 (大、滿、可捲動)
-              // - 電腦/橫板: h-auto w-auto max-h-full max-w-full (受限於容器高度) -> 這會造成 image_52666c.png 的「修正版」 (不跑版，置中)
-              className="relative aspect-[4/3] bg-white border-2 border-gray-800 shadow-xl z-10 w-full h-auto lg:w-auto lg:h-auto lg:max-h-full lg:max-w-full"
-            >
-              <svg className="absolute inset-0 w-full h-full pointer-events-none z-40">
-                {selectedPalace !== null &&
-                  (() => {
-                    const pSelf = getAnchorCoord(connections.self);
-                    const pTri1 = getAnchorCoord(connections.tri1);
-                    const pTri2 = getAnchorCoord(connections.tri2);
-                    const pOpp = getAnchorCoord(connections.opp);
-                    return (
-                      <>
-                        <line x1={`${pSelf.x}%`} y1={`${pSelf.y}%`} x2={`${pTri1.x}%`} y2={`${pTri1.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4"/>
-                        <line x1={`${pTri1.x}%`} y1={`${pTri1.y}%`} x2={`${pTri2.x}%`} y2={`${pTri2.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4"/>
-                        <line x1={`${pTri2.x}%`} y1={`${pTri2.y}%`} x2={`${pSelf.x}%`} y2={`${pSelf.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4"/>
-                        <line x1={`${pSelf.x}%`} y1={`${pSelf.y}%`} x2={`${pOpp.x}%`} y2={`${pOpp.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4"/>
-                      </>
-                    );
-                  })()}
-              </svg>
+      {/* 這裡恢復了最原始、最穩定的佈局邏輯 */}
+      <div className="flex-1 flex flex-col items-center w-full p-1 gap-0 overflow-hidden">
+        <div
+          ref={chartRef}
+          className="relative w-full max-w-[1200px] aspect-[4/3] bg-white border-2 border-gray-800 shadow-xl z-10 shrink-1 min-h-0 flex-1"
+        >
+          <svg className="absolute inset-0 w-full h-full pointer-events-none z-40">
+            {selectedPalace !== null &&
+              (() => {
+                const pSelf = getAnchorCoord(connections.self);
+                const pTri1 = getAnchorCoord(connections.tri1);
+                const pTri2 = getAnchorCoord(connections.tri2);
+                const pOpp = getAnchorCoord(connections.opp);
+                return (
+                  <>
+                    <line
+                      x1={`${pSelf.x}%`}
+                      y1={`${pSelf.y}%`}
+                      x2={`${pTri1.x}%`}
+                      y2={`${pTri1.y}%`}
+                      stroke="#4b5563"
+                      strokeWidth="1.5"
+                      strokeDasharray="4 4"
+                    />
+                    <line
+                      x1={`${pTri1.x}%`}
+                      y1={`${pTri1.y}%`}
+                      x2={`${pTri2.x}%`}
+                      y2={`${pTri2.y}%`}
+                      stroke="#4b5563"
+                      strokeWidth="1.5"
+                      strokeDasharray="4 4"
+                    />
+                    <line
+                      x1={`${pTri2.x}%`}
+                      y1={`${pTri2.y}%`}
+                      x2={`${pSelf.x}%`}
+                      y2={`${pSelf.y}%`}
+                      stroke="#4b5563"
+                      strokeWidth="1.5"
+                      strokeDasharray="4 4"
+                    />
+                    <line
+                      x1={`${pSelf.x}%`}
+                      y1={`${pSelf.y}%`}
+                      x2={`${pOpp.x}%`}
+                      y2={`${pOpp.y}%`}
+                      stroke="#4b5563"
+                      strokeWidth="1.5"
+                      strokeDasharray="4 4"
+                    />
+                  </>
+                );
+              })()}
+          </svg>
 
-              <div className="grid grid-cols-4 grid-rows-4 w-full h-full border-collapse">
-                {gridLayout.map((palaceIdx, gridPos) => {
-                  if (palaceIdx === null) {
-                    if (gridPos === 5)
-                      return (
-                        <div key="center" className="col-span-2 row-span-2 flex flex-col items-center justify-center p-4 border border-gray-300 bg-white z-10 relative">
-                          <div className="flex w-full justify-between items-center mb-2 px-10 mt-6">
-                            <button onClick={() => changeHour(-1)} className="text-gray-400 hover:text-gray-800 font-bold text-2xl select-none">&lt;</button>
-                            <div onClick={isTimeModified ? resetTime : undefined} className={`text-lg font-bold select-none ${isTimeModified ? 'text-blue-600 cursor-pointer underline' : 'text-gray-600'}`} title={isTimeModified ? '點擊還原出生時辰' : ''}>
-                              {currentHourZhi}時
-                            </div>
-                            <button onClick={() => changeHour(1)} className="text-gray-400 hover:text-gray-800 font-bold text-2xl select-none">&gt;</button>
-                          </div>
-
-                          <div className="flex items-center gap-2 mb-3">
-                            <div className="text-4xl font-bold text-black tracking-widest">{client.name}</div>
-                          </div>
-
-                          <div className="flex flex-col gap-1 text-base items-center text-center w-full leading-tight">
-                            <div className="text-gray-700">{client.gender} {chartData.bureau}</div>
-                            <div className="text-gray-600">西元：{chartData.solarDate}</div>
-                            <div className="text-gray-600">農曆：{chartData.lunarDate}</div>
-                            <div className="text-gray-700 font-medium mt-1">命主：{chartData.mingZhu} 身主：{chartData.shenZhu}</div>
-                          </div>
-
-                          <div className="absolute top-3 right-3 flex items-start gap-4 scale-110 z-50">
-                            <div className="flex flex-col items-center gap-1 no-screenshot">
-                                <span className="text-[10px] text-gray-500 font-bold">{isLimitActive ? '顛倒盤' : '雙胞胎'}</span>
-                                <button onClick={toggleReverse} className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors shadow-md border ${isReverse ? 'bg-purple-600 text-white border-purple-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'}`} title={isReverse ? "還原" : (isLimitActive ? "開啟顛倒盤" : "開啟雙胞胎盤")}>
-                                    <RefreshCw size={16} className={isReverse ? "animate-spin-slow" : ""} />
-                                </button>
-                            </div>
-                            {liuNianYear && (
-                                <div className="flex flex-col items-center gap-1">
-                                  <span className="text-[10px] text-gray-500 font-bold">小限盤</span>
-                                  <button onClick={toggleXiaoXian} className={`w-10 h-5 rounded-full p-0.5 transition-colors mt-1.5 ${showXiaoXian ? 'bg-green-500' : 'bg-gray-300'}`}>
-                                    <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${showXiaoXian ? 'translate-x-5' : 'translate-x-0'}`} />
-                                  </button>
-                                </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    return null;
-                  }
-
-                  const { daName, liuName, xiaoName } = getRelativeNames(palaceIdx);
-                  const oppPalaceIdx = (palaceIdx + 6) % 12;
-                  const { daName: reverseDaName, liuName: reverseLiuName } = getRelativeNames(oppPalaceIdx);
-
-                  const isBenMingMing = palaceIdx === benMingPos;
-                  const isDaXianMing = daXianSeq >= 0 && daXianList[daXianSeq].palaceIdx === palaceIdx;
-                  const isLiuNianMing = liuNianYear !== null && chartData.palaces[palaceIdx].zhiIndex === (liuNianYear - 4) % 12;
-                  const isXiaoXianMingPalace = liuNianYear !== null && palaceIdx === xiaoXianMingIdx;
-                  const isDaXianActive = daXianSeq >= 0;
-                  const isLiuNianActive = liuNianYear !== null;
-                  const isXiaoXianActive = showXiaoXian;
-                  const isConnected = selectedPalace !== null && Object.values(connections).includes(palaceIdx);
-                  const showXiaoXianSeal = isXiaoXianMingPalace && !showXiaoXian;
-                  const isFlyingSource = flyingPalace === palaceIdx;
-
+          <div className="grid grid-cols-4 grid-rows-4 w-full h-full border-collapse">
+            {gridLayout.map((palaceIdx, gridPos) => {
+              if (palaceIdx === null) {
+                if (gridPos === 5)
                   return (
-                    <div key={palaceIdx} onClick={() => handlePalaceClick(palaceIdx)} className={`relative cursor-pointer transition-all duration-200 border border-gray-300 box-border overflow-visible ${isConnected ? 'bg-red-50' : 'hover:bg-gray-50'} ${isFlyingSource ? 'ring-4 ring-purple-400 z-50 animate-pulse' : ''}`} style={isFlyingSource ? { animationIterationCount: 3 } : {}}>
-                      {isFlyingSource && (
-                        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-purple-600 text-white text-[11px] font-bold px-2 py-0.5 rounded-full shadow-lg z-50 whitespace-nowrap tracking-wide border border-white">
-                          {GAN[chartData.palaces[palaceIdx].ganIndex]}干飛化
+                    <div
+                      key="center"
+                      className="col-span-2 row-span-2 flex flex-col items-center justify-center p-4 border border-gray-300 bg-white z-10 relative"
+                    >
+                      <div className="flex w-full justify-between items-center mb-2 px-10 mt-6">
+                        <button
+                          onClick={() => changeHour(-1)}
+                          className="text-gray-400 hover:text-gray-800 font-bold text-2xl select-none"
+                        >
+                          &lt;
+                        </button>
+                        <div
+                          onClick={isTimeModified ? resetTime : undefined}
+                          className={`text-lg font-bold select-none ${
+                            isTimeModified
+                              ? 'text-blue-600 cursor-pointer underline'
+                              : 'text-gray-600'
+                          }`}
+                          title={isTimeModified ? '點擊還原出生時辰' : ''}
+                        >
+                          {currentHourZhi}時
                         </div>
-                      )}
-                      <PalaceCard
-                        palace={chartData.palaces[palaceIdx]}
-                        daName={daName}
-                        liuName={liuName}
-                        xiaoName={xiaoName}
-                        isBody={chartData.palaces[palaceIdx].isBody}
-                        isXiaoXianMing={showXiaoXianSeal}
-                        isBenMingMing={isBenMingMing}
-                        isDaXianMing={isDaXianMing && isDaXianActive}
-                        isLiuNianMing={isLiuNianMing && isLiuNianActive}
-                        isXiaoXianMingPalace={isXiaoXianMingPalace && (isLiuNianActive || isXiaoXianActive)}
-                        onTriggerClick={() => handleTriggerClick(palaceIdx)}
-                        flyingStars={flyingStarsLookup}
-                        isReverse={isReverse}
-                        reverseDaName={reverseDaName}
-                        reverseLiuName={reverseLiuName}
-                      />
-                      {isDaXianMing && isDaXianActive && <div className="absolute inset-0 border-[3px] border-gray-600 pointer-events-none z-20 opacity-70"></div>}
-                      {isConnected && <div className="absolute inset-0 border-2 border-red-500 pointer-events-none z-30"></div>}
+                        <button
+                          onClick={() => changeHour(1)}
+                          className="text-gray-400 hover:text-gray-800 font-bold text-2xl select-none"
+                        >
+                          &gt;
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="text-4xl font-bold text-black tracking-widest">
+                          {client.name}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-1 text-base items-center text-center w-full leading-tight">
+                        <div className="text-gray-700">
+                          {client.gender} {chartData.bureau}
+                        </div>
+                        <div className="text-gray-600">
+                          西元：{chartData.solarDate}
+                        </div>
+                        <div className="text-gray-600">
+                          農曆：{chartData.lunarDate}
+                        </div>
+                        <div className="text-gray-700 font-medium mt-1">
+                          命主：{chartData.mingZhu} 身主：{chartData.shenZhu}
+                        </div>
+                      </div>
+
+                      {/* 右上角控制區：小限盤開關 + 顛倒盤按鈕 */}
+                      <div className="absolute top-3 right-3 flex items-start gap-4 scale-110 z-50">
+                        
+                        {/* 顛倒盤/雙胞胎按鈕 (截圖忽略) */}
+                        <div className="flex flex-col items-center gap-1 no-screenshot">
+                            <span className="text-[10px] text-gray-500 font-bold">
+                                {isLimitActive ? '顛倒盤' : '雙胞胎'}
+                            </span>
+                            <button
+                                onClick={toggleReverse}
+                                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors shadow-md border
+                                    ${isReverse 
+                                        ? 'bg-purple-600 text-white border-purple-700' 
+                                        : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'
+                                    }`}
+                                title={isReverse ? "還原" : (isLimitActive ? "開啟顛倒盤" : "開啟雙胞胎盤")}
+                            >
+                                <RefreshCw size={16} className={isReverse ? "animate-spin-slow" : ""} />
+                            </button>
+                        </div>
+
+                        {/* 小限盤開關 (僅在有流年時顯示) */}
+                        {liuNianYear && (
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="text-[10px] text-gray-500 font-bold">
+                                小限盤
+                              </span>
+                              <button
+                                onClick={toggleXiaoXian}
+                                className={`w-10 h-5 rounded-full p-0.5 transition-colors mt-1.5 ${
+                                  showXiaoXian ? 'bg-green-500' : 'bg-gray-300'
+                                }`}
+                              >
+                                <div
+                                  className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${
+                                    showXiaoXian ? 'translate-x-5' : 'translate-x-0'
+                                  }`}
+                                />
+                              </button>
+                            </div>
+                        )}
+                      </div>
+
                     </div>
                   );
-                })}
-              </div>
-            </div>
+                return null;
+              }
+
+              const isBenMingMing = palaceIdx === benMingPos;
+              const isDaXianMing =
+                daXianSeq >= 0 && daXianList[daXianSeq].palaceIdx === palaceIdx;
+              const isLiuNianMing =
+                liuNianYear !== null &&
+                chartData.palaces[palaceIdx].zhiIndex ===
+                  (liuNianYear - 4) % 12;
+              const isXiaoXianMingPalace =
+                liuNianYear !== null && palaceIdx === xiaoXianMingIdx;
+
+              const isDaXianActive = daXianSeq >= 0;
+              const isLiuNianActive = liuNianYear !== null;
+              const isXiaoXianActive = showXiaoXian;
+
+              const { daName, liuName, xiaoName } = getRelativeNames(palaceIdx);
+              const oppPalaceIdx = (palaceIdx + 6) % 12;
+              const { daName: reverseDaName, liuName: reverseLiuName } = getRelativeNames(oppPalaceIdx);
+
+              const isConnected =
+                selectedPalace !== null &&
+                Object.values(connections).includes(palaceIdx);
+              const showXiaoXianSeal = isXiaoXianMingPalace && !showXiaoXian;
+
+              const isFlyingSource = flyingPalace === palaceIdx;
+
+              return (
+                <div
+                  key={palaceIdx}
+                  onClick={() => handlePalaceClick(palaceIdx)}
+                  className={`relative cursor-pointer transition-all duration-200 border border-gray-300 box-border overflow-visible 
+                      ${isConnected ? 'bg-red-50' : 'hover:bg-gray-50'}
+                      ${
+                        isFlyingSource
+                          ? 'ring-4 ring-purple-400 z-50 animate-pulse'
+                          : ''
+                      } 
+                  `}
+                  style={isFlyingSource ? { animationIterationCount: 3 } : {}}
+                >
+                  {isFlyingSource && (
+                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-purple-600 text-white text-[11px] font-bold px-2 py-0.5 rounded-full shadow-lg z-50 whitespace-nowrap tracking-wide border border-white">
+                      {GAN[chartData.palaces[palaceIdx].ganIndex]}干飛化
+                    </div>
+                  )}
+
+                  <PalaceCard
+                    palace={chartData.palaces[palaceIdx]}
+                    daName={daName}
+                    liuName={liuName}
+                    xiaoName={xiaoName}
+                    isBody={chartData.palaces[palaceIdx].isBody}
+                    isXiaoXianMing={showXiaoXianSeal}
+                    isBenMingMing={isBenMingMing}
+                    isDaXianMing={isDaXianMing && isDaXianActive}
+                    isLiuNianMing={isLiuNianMing && isLiuNianActive}
+                    isXiaoXianMingPalace={
+                      isXiaoXianMingPalace &&
+                      (isLiuNianActive || isXiaoXianActive)
+                    }
+                    onTriggerClick={() => handleTriggerClick(palaceIdx)}
+                    flyingStars={flyingStarsLookup}
+                    isReverse={isReverse}
+                    reverseDaName={reverseDaName}
+                    reverseLiuName={reverseLiuName}
+                  />
+                  {isDaXianMing && isDaXianActive && (
+                    <div className="absolute inset-0 border-[3px] border-gray-600 pointer-events-none z-20 opacity-70"></div>
+                  )}
+                  {isConnected && (
+                    <div className="absolute inset-0 border-2 border-red-500 pointer-events-none z-30"></div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
-        {/* 5. 底部按鈕
-            - shrink-0: 禁止壓縮
-            - w-full: 寬度跟隨父容器 (在電腦版會被 max-w-[1400px] 限制住，跟命盤對齊)
-        */}
-        <div className="w-full shrink-0 border-t-2 border-gray-800 bg-gray-100 z-50">
+        <div className="w-full max-w-[1200px] flex flex-col border-x-2 border-b-2 border-gray-800 bg-gray-100 mt-[-2px] z-50 shrink-0">
           <div className="flex w-full overflow-x-auto scrollbar-hide border-b border-gray-300">
             {daXianList.map((limit) => {
               const isActive = daXianSeq === limit.seq;
               return (
-                <button key={limit.seq} onClick={() => handleDaXianClick(limit.seq)} className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs ${isActive ? 'bg-gray-600 text-white font-bold' : 'hover:bg-gray-200 text-gray-700'}`}>
-                  <div>{limit.name} {limit.ganZhi}</div>
+                <button
+                  key={limit.seq}
+                  onClick={() => handleDaXianClick(limit.seq)}
+                  className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs ${
+                    isActive
+                      ? 'bg-gray-600 text-white font-bold'
+                      : 'hover:bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  <div>
+                    {limit.name} {limit.ganZhi}
+                  </div>
                 </button>
               );
             })}
@@ -519,14 +659,21 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
             {liuNianList.map((item) => {
               const isActive = liuNianYear === item.year;
               return (
-                <button key={item.year} onClick={() => handleLiuNianClick(item.year)} className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs ${isActive ? 'bg-blue-600 text-white font-bold' : 'hover:bg-blue-100 text-gray-600'}`}>
+                <button
+                  key={item.year}
+                  onClick={() => handleLiuNianClick(item.year)}
+                  className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs ${
+                    isActive
+                      ? 'bg-blue-600 text-white font-bold'
+                      : 'hover:bg-blue-100 text-gray-600'
+                  }`}
+                >
                   {item.label}
                 </button>
               );
             })}
           </div>
         </div>
-        
       </div>
     </div>
   );
