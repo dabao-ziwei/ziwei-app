@@ -8,6 +8,8 @@ interface Props {
 }
 
 const ITEMS_PER_PAGE = 10;
+// 定義超級管理員 Email (防止誤刪自己)
+const SUPER_ADMIN_EMAIL = 'stephenwu.0926@gmail.com';
 
 export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
@@ -73,6 +75,10 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
   };
 
   const handleBanToggle = async (user: UserProfile) => {
+    if (user.email === SUPER_ADMIN_EMAIL) {
+        alert("無法停權最高權限管理員！");
+        return;
+    }
     const action = user.isBanned ? '解除停權' : '停權';
     if (confirm(`確定要${action}此使用者 (${user.email}) 嗎？\n停權後該使用者將無法登入系統。`)) {
         await toggleUserBan(user.id, user.isBanned);
@@ -135,11 +141,13 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
               <tbody className="divide-y divide-gray-50">
                 {paginatedData.map(user => {
                   const isEditing = editingId === user.id;
+                  const isSuperAdmin = user.email === SUPER_ADMIN_EMAIL;
                   
                   return (
                     <tr key={user.id} className={`hover:bg-gray-50 group ${user.isBanned ? 'bg-red-50/50' : ''}`}>
                       <td className="py-3 px-4 text-sm font-bold text-gray-700 truncate max-w-[200px]" title={user.email}>
                         {user.email}
+                        {isSuperAdmin && <span className="ml-2 text-[10px] bg-yellow-100 text-yellow-700 px-1 py-0.5 rounded border border-yellow-200">你自己</span>}
                       </td>
                       
                       <td className="py-3 px-2 text-center">
@@ -156,6 +164,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                             className="border rounded px-2 py-1 text-sm bg-white"
                             value={editForm.role}
                             onChange={e => setEditForm({...editForm, role: e.target.value as any})}
+                            disabled={isSuperAdmin} // 禁止降級自己
                           >
                             <option value="user">User</option>
                             <option value="admin">Admin</option>
@@ -207,13 +216,16 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                           </div>
                         ) : (
                           <div className="flex justify-end gap-2">
-                            <button 
-                                onClick={() => handleBanToggle(user)}
-                                className={`p-1.5 rounded transition-colors ${user.isBanned ? 'text-green-600 hover:bg-green-100' : 'text-red-400 hover:bg-red-100 hover:text-red-600'}`}
-                                title={user.isBanned ? '解除停權' : '停權使用者'}
-                            >
-                                {user.isBanned ? <CheckCircle size={16} /> : <Ban size={16} />}
-                            </button>
+                            {/* 只有不是超級管理員時，才顯示停權按鈕 */}
+                            {!isSuperAdmin && (
+                                <button 
+                                    onClick={() => handleBanToggle(user)}
+                                    className={`p-1.5 rounded transition-colors ${user.isBanned ? 'text-green-600 hover:bg-green-100' : 'text-red-400 hover:bg-red-100 hover:text-red-600'}`}
+                                    title={user.isBanned ? '解除停權' : '停權使用者'}
+                                >
+                                    {user.isBanned ? <CheckCircle size={16} /> : <Ban size={16} />}
+                                </button>
+                            )}
                             <button 
                               onClick={() => handleEdit(user)}
                               className="text-gray-400 hover:text-blue-600 p-1.5 hover:bg-blue-50 rounded"
