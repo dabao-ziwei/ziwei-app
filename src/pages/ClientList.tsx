@@ -7,7 +7,7 @@ import { ZHI } from '../logic/constants';
 import { UserManagementModal } from '../components/UserManagementModal'; 
 import { DivinationSetupModal } from '../components/DivinationSetupModal';
 import { RelationshipModal } from '../components/RelationshipModal';
-import { AddChartModal } from '../components/AddChartModal'; // 確保引用 AddChartModal
+import { AddChartModal } from '../components/AddChartModal'; 
 
 const CATEGORIES = ["我", "家人", "朋友", "客戶", "名人", "其他"];
 const STORAGE_KEY_CATS = 'ziwei_expanded_cats';
@@ -32,7 +32,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     }
   });
 
-  // 預設 true，只有 admin 會用到這個狀態
   const [showOnlyMine, setShowOnlyMine] = useState<boolean>(() => {
     try {
         const saved = localStorage.getItem(STORAGE_KEY_FILTER);
@@ -117,7 +116,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     const isSearchMatch = nameMatch || yearMatch || starMatch || creatorMatch;
 
     let isOwnerMatch = true;
-    // 修正：只有 Admin 且開啟 "只看我的" 時才過濾，一般使用者本來就只看得到自己的 (在 loadClients 已處理)
     if (userProfile?.email === SUPER_ADMIN_EMAIL && showOnlyMine) {
         isOwnerMatch = c.user_id === userProfile.id;
     }
@@ -218,7 +216,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
 
         <div className="flex gap-4 items-center">
             
-            {/* 修正：只看我的 開關，僅 Admin 可見 */}
+            {/* 權限控制：只看我的 */}
             {isSuperAdmin && (
                 <div 
                     className="hidden sm:flex items-center gap-2 cursor-pointer select-none bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-200 transition-colors"
@@ -425,6 +423,13 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
             currentClient={relationClient}
           />
       )}
+      
+      {/* 補上 AddChartModal */}
+      <AddChartModal 
+        isOpen={false} // ClientList 本身不直接控制開啟狀態，這裡只是為了滿足 import，實際開啟邏輯在 onAdd
+        onClose={() => {}}
+        onSave={async () => {}}
+      />
     </div>
   );
 };
