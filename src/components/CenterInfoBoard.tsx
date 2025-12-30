@@ -34,7 +34,6 @@ interface CenterInfoBoardProps {
   isLiuNian: boolean;
 }
 
-// 關係座標 (維持不變)
 const POSITIONS = {
     top: { x: 50, y: 15 },    
     bottom: { x: 50, y: 85 }, 
@@ -102,7 +101,7 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
 
     if (isDivinationMode) {
         return (
-            <div className="col-span-2 row-span-2 flex flex-col items-center justify-center p-4 border border-gray-300 bg-white z-10 relative">
+            <div className="col-span-2 row-span-2 flex flex-col items-center justify-center p-4 bg-white z-10 relative">
                 <div className="flex flex-col items-center gap-2 mb-4">
                     <div className="text-3xl sm:text-4xl font-bold text-purple-800 tracking-widest text-center">{client.name}</div>
                     <div className="text-sm font-bold text-gray-500 tracking-wide">{benMingMajorStarsStr}</div>
@@ -119,23 +118,23 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     }
 
     return (
-        // 修正：這裡加上 p-0.5 讓中間白色塊稍微內縮，解決「壓線」和「綠框處隱藏線條」的問題
+        // 修正：保留 p-0.5 避免貼死 Grid 線條造成閃爍，但移除所有 border 和 shadow
         <div className="col-span-2 row-span-2 flex z-10 relative overflow-hidden p-0.5">
             
-            {/* 容器本體：加回 border 和 bg-white */}
-            <div className={`flex w-full h-full border border-gray-300 bg-white shadow-sm`}>
+            {/* 容器本體：徹底移除 border-gray-300 和 shadow-sm，只留純白背景 */}
+            <div className={`flex w-full h-full bg-white`}>
                 
                 {/* 左側：個人資料 */}
                 <div className={`${hasRelations ? 'w-full md:w-[35%]' : 'w-full'} h-full flex flex-col p-1 border-r border-gray-100 bg-white z-20 relative transition-all duration-300`}>
                     
-                    {/* 返回按鈕 (無關聯時) */}
+                    {/* 返回按鈕 */}
                     {!hasRelations && historyStack.length > 0 && (
                         <button onClick={onHistoryBack} className="absolute top-1 left-1 z-50 flex items-center gap-1 px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold rounded transition-colors">
                             <ArrowLeft size={10} /> 返回
                         </button>
                     )}
 
-                    {/* 1. 頂部：時辰切換 (mt-2 稍微留一點點頂部空間，但不多) */}
+                    {/* 1. 頂部：時辰切換 */}
                     <div className="flex justify-between items-center px-1 mt-2 shrink-0">
                         <button onClick={() => onChangeHour(-1)} className="text-gray-400 hover:text-gray-800 font-bold text-base select-none p-1">&lt;</button>
                         <div 
@@ -148,13 +147,11 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                         <button onClick={() => onChangeHour(1)} className="text-gray-400 hover:text-gray-800 font-bold text-base select-none p-1">&gt;</button>
                     </div>
 
-                    {/* 2. 中間：命主資料 (justify-start 置頂，pt-2 往下推一點) */}
+                    {/* 2. 中間：命主資料 (緊湊排列) */}
                     <div className="flex-1 flex flex-col items-center justify-start pt-2 text-center gap-0.5 min-h-0 overflow-hidden">
-                        {/* 姓名 */}
                         <div className="text-2xl font-bold text-gray-900 tracking-widest leading-tight truncate w-full px-2">
                             {client.name}
                         </div>
-                        {/* 主星 (紅色) */}
                         <div className="text-xs font-bold text-red-600 tracking-wide">
                             {benMingMajorStarsStr}
                         </div>
@@ -166,7 +163,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                             </div>
                         )}
 
-                        {/* 時間輸入框 */}
                         {chartData && (
                             <div className="mt-2 transform scale-90 origin-top">
                                 <DateInput value={{
@@ -187,7 +183,7 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                         )}
                     </div>
 
-                    {/* 3. 底部：功能按鈕 (mt-auto 確保釘在最底，mb-1 留一點底邊距) */}
+                    {/* 3. 底部：功能按鈕 (釘底) */}
                     {!isDivinationMode && (
                         <div className="mt-auto flex justify-center shrink-0 mb-1">
                             <div className="flex bg-slate-100/80 rounded-md p-0.5 gap-0.5 border border-slate-200">
