@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, Link as LinkIcon, Trash2, Plus, Users, HeartHandshake, ArrowRight, AlertCircle, Info } from 'lucide-react';
+import { X, Search, Link as LinkIcon, Trash2, Plus, Users, HeartHandshake, ArrowRight, AlertCircle, Info, Network } from 'lucide-react';
 import { getRelationships, addRelationship, deleteRelationship, loadClients, suggestTriangles, type Client, type Relationship } from '../db';
 import { TagSelect } from './TagSelect';
 import { GAN, SIHUA_TABLE } from '../logic/constants';
@@ -26,19 +26,22 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
   const [relationships, setRelationships] = useState<Relationship[]>([]);
   const [loading, setLoading] = useState(false);
   
+  // 新增模式狀態
   const [isAdding, setIsAdding] = useState(false);
   const [allClients, setAllClients] = useState<Client[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTarget, setSelectedTarget] = useState<Client | null>(null);
   const [relationType, setRelationType] = useState('配偶');
   
-  const [suggestion, setSuggestion] = useState<{targetId: string, targetName: string, suggestedType: string} | null>(null);
+  // 建議模式狀態
+  const [suggestion, setSuggestion] = useState<{spouseId: string, spouseName: string, childId: string, childName: string} | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       fetchRelationships();
       loadClients().then(data => setAllClients(data.filter(c => c.id !== currentClient.id && c.type !== '紫占')));
       
+      // 重置
       setIsAdding(false);
       setSearchTerm('');
       setSelectedTarget(null);
@@ -58,15 +61,18 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
     if (!selectedTarget || !relationType.trim()) return;
     
     setLoading(true);
+    // 1. 建立當前關係 (雙向)
     const success = await addRelationship(currentClient.id, selectedTarget.id, relationType.trim());
     
     if (success) {
+      // 2. 智慧偵測：是否有三角關係建議？(檢查配偶)
       const inferResult = await suggestTriangles(currentClient.id, selectedTarget.id, relationType.trim());
       
       await fetchRelationships();
       setIsAdding(false);
       setSearchTerm('');
       
+      // 3. 如果有建議，跳出詢問
       if (inferResult && inferResult.suggest) {
         setSuggestion(inferResult);
         setSelectedTarget(null);
@@ -80,10 +86,22 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
     setLoading(false);
   };
 
+  // 確認建立三角關係 (連結 配偶 與 子女)
   const handleConfirmSuggestion = async () => {
       if (!suggestion) return;
-      alert(`系統已自動偵測關係鏈！\n建議您也可以為 ${suggestion.targetName} 加入此關係。`);
-      setSuggestion(null);
+      setLoading(true);
+      
+      // 建立 配偶 -> 子女 (類型：子女)
+      // 系統會自動建立反向：子女 -> 配偶 (類型：父親/母親)
+      const success = await addRelationship(suggestion.spouseId, suggestion.childId, '子女');
+      
+      setLoading(false);
+      if (success) {
+          alert(`已成功連結 ${suggestion.spouseName} 與 ${suggestion.childName} 的親子關係！`);
+          setSuggestion(null);
+      } else {
+          alert('自動連結失敗，請手動設定。');
+      }
   };
 
   const handleDelete = async (id: string) => {
@@ -96,6 +114,7 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
     setLoading(false);
   };
 
+  // 搜尋過濾
   const filteredClients = allClients.filter(c => 
     c.name.includes(searchTerm) || 
     (c.birthYear.toString() === searchTerm)
@@ -107,6 +126,7 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-200">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]">
         
+        {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 flex justify-between items-center text-white shrink-0">
             <h2 className="text-lg font-bold flex items-center gap-2">
                 <Users size={20} />
@@ -117,27 +137,32 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
             </button>
         </div>
 
+        {/* Content */}
         <div className="p-4 flex-1 overflow-y-auto">
             
+            {/* 建議提示 (Triangle Suggestion) */}
             {suggestion && (
-                <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg flex items-start gap-3 animate-in slide-in-from-top-2">
-                    <AlertCircle className="text-orange-500 shrink-0 mt-0.5" size={20} />
+                <div className="mb-4 p-4 bg-orange-50 border border-orange-200 rounded-xl flex items-start gap-3 animate-in slide-in-from-top-2 shadow-sm">
+                    <div className="p-2 bg-orange-100 rounded-full text-orange-600 shrink-0">
+                        <Network size={20} />
+                    </div>
                     <div className="flex-1">
-                        <h4 className="text-sm font-bold text-orange-800 mb-1">智慧關聯建議</h4>
-                        <p className="text-xs text-orange-700 mb-2">
-                            系統偵測到 <b>{suggestion.targetName}</b> 是您的配偶。
-                            是否也要將剛剛新增的對象設為 <b>{suggestion.targetName}</b> 的 <b>{suggestion.suggestedType}</b>？
+                        <h4 className="text-sm font-bold text-orange-900 mb-1">偵測到家庭成員</h4>
+                        <p className="text-sm text-orange-800 mb-3 leading-relaxed">
+                            系統偵測到 <b>{suggestion.spouseName}</b> 是您的配偶。
+                            <br/>
+                            是否將剛剛新增的 <b>{suggestion.childName}</b> 也設為他的子女？
                         </p>
                         <div className="flex gap-2">
                             <button 
                                 onClick={handleConfirmSuggestion} 
-                                className="px-3 py-1 bg-orange-500 text-white text-xs rounded hover:bg-orange-600"
+                                className="px-4 py-1.5 bg-orange-500 text-white text-xs font-bold rounded-lg hover:bg-orange-600 shadow-sm"
                             >
-                                好的，手動去設定
+                                是，建立連結
                             </button>
                             <button 
                                 onClick={() => setSuggestion(null)}
-                                className="px-3 py-1 bg-white border border-orange-200 text-orange-600 text-xs rounded hover:bg-orange-50"
+                                className="px-4 py-1.5 bg-white border border-orange-200 text-orange-600 text-xs font-bold rounded-lg hover:bg-orange-50"
                             >
                                 忽略
                             </button>
@@ -146,6 +171,7 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
                 </div>
             )}
 
+            {/* 關係列表 */}
             <div className="space-y-3">
                 {relationships.length === 0 && !isAdding && (
                     <div className="text-center py-12 flex flex-col items-center gap-3 text-gray-400">
@@ -159,7 +185,8 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
                     return (
                         <div key={rel.id} className="flex items-center justify-between p-3 rounded-lg border bg-gray-50 border-gray-100 hover:border-blue-200 hover:bg-blue-50/30 transition-all group">
                             <div className="flex items-center gap-3">
-                                <div className="flex flex-col items-center min-w-[3rem]">
+                                {/* 關係標籤 (從 DB 直接讀取，現在已經是反向校正過的) */}
+                                <div className="flex flex-col items-center min-w-[3.5rem]">
                                     <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 text-blue-700">
                                         {rel.relation_type}
                                     </span>
@@ -176,6 +203,7 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
                                         <span className="text-gray-500 font-mono">
                                             {rel.related_client?.birthYear}年
                                         </span>
+                                        {/* 生年四化顯示 */}
                                         <span className="text-purple-600 bg-purple-50 px-1.5 rounded font-medium flex items-center gap-1" title="生年四化: 祿權科忌">
                                             <Info size={10} />
                                             {sihuaInfo}
@@ -196,6 +224,7 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
                 })}
             </div>
 
+            {/* 新增模式 */}
             {isAdding && (
                 <div className="mt-4 p-4 bg-white border-2 border-blue-100 rounded-xl shadow-sm animate-in slide-in-from-bottom-2">
                     <h3 className="text-sm font-bold text-blue-800 mb-3 flex items-center gap-1">
@@ -238,21 +267,21 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
                         <div className="space-y-4">
                             <div className="flex items-center justify-between bg-blue-50 p-3 rounded-lg border border-blue-100">
                                 <div className="flex items-center gap-2">
-                                    <span className="text-sm text-gray-500">建立與</span>
                                     <span className="font-bold text-gray-800 text-lg">{selectedTarget.name}</span>
-                                    <span className="text-sm text-gray-500">的關係</span>
+                                    <span className="text-sm text-gray-500">是我的...</span>
                                 </div>
                                 <button onClick={() => setSelectedTarget(null)} className="text-xs text-blue-500 hover:text-blue-700 font-medium">重選</button>
                             </div>
                             
                             <div className="space-y-2">
-                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">選擇關係類型</label>
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">關係類型</label>
                                 <TagSelect 
                                     options={DEFAULT_RELATIONS}
                                     value={relationType}
                                     onChange={setRelationType}
                                     allowCustom={true}
                                 />
+                                <p className="text-[10px] text-gray-400 text-right">*系統將自動為對方建立反向稱謂</p>
                             </div>
 
                             <div className="flex gap-3 pt-2">
@@ -268,6 +297,7 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
 
         </div>
 
+        {/* Footer Actions */}
         {!isAdding && (
             <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-center">
                 <button 
