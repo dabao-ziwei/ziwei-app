@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Eye, RefreshCw, X } from 'lucide-react';
 import type { Client, Relationship } from '../db';
@@ -39,18 +39,7 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
   // 1. 產生唯一的 marker ID
   const markerId = useMemo(() => `arrow-head-${Math.random().toString(36).substr(2, 9)}`, []);
   
-  // 2. 【關鍵修正】取得完整的絕對路徑 (例如 http://localhost:5173/chart/123)
-  // 這能解決瀏覽器誤判相對路徑導致的 404 錯誤
-  const [absoluteUrl, setAbsoluteUrl] = useState('');
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      // 取得當前網址，並去掉 hash (#) 以後的東西，確保路徑乾淨
-      setAbsoluteUrl(window.location.href.split('#')[0]);
-    }
-  }, []);
-
-  // 3. 自動佈局演算法 (保持不變)
+  // 3. 自動佈局演算法
   const { nodes, lines } = useMemo(() => {
     const calculatedNodes: GraphNode[] = [];
     
@@ -128,7 +117,7 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
       className="w-full h-full bg-slate-50 relative overflow-hidden cursor-grab active:cursor-grabbing select-none"
       onClick={handleBgClick}
     >
-      {/* 提示文字 (確保圖層顯示) */}
+      {/* 提示文字 */}
       <div className="absolute bottom-2 right-2 text-[10px] text-gray-400 pointer-events-none select-none z-0">
         可拖曳移動畫布
       </div>
@@ -141,22 +130,21 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
         style={{ touchAction: 'none' }} // 防止觸控裝置上的預設滾動
       >
         {/* 1. 連線層 (SVG) */}
-        {/* 修正：如果 absoluteUrl 還沒準備好，先不渲染 marker 引用，避免報錯 */}
         <svg className="absolute overflow-visible pointer-events-none" style={{ left: 0, top: 0, width: '5000px', height: '5000px', transform: 'translate(-50%, -50%)' }}>
           <defs>
             <marker id={markerId} markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto" fill="#cbd5e1">
               <path d="M0,0 L0,6 L6,3 z" />
             </marker>
           </defs>
-          {absoluteUrl && lines.map(line => (
+          {lines.map(line => (
             <path
               key={line.targetId}
               d={line.d}
               fill="none"
               stroke="#cbd5e1"
               strokeWidth="2"
-              // 修正：使用 絕對路徑 + #ID
-              markerEnd={`url(${absoluteUrl}#${markerId})`}
+              // 修正：移除 absoluteUrl，改回單純的 #ID 引用，避免觸發網路請求導致 404
+              markerEnd={`url(#${markerId})`}
             />
           ))}
         </svg>
