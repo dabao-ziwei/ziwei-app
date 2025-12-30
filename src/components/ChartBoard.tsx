@@ -239,9 +239,10 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const resetTime = () => { setCurrentHour(client!.birthHour); resetAllStates(); };
   const handleBack = () => { onBack ? onBack() : navigate('/'); };
   
-  // 截圖邏輯
+  // 截圖邏輯 (修正)
   const isBenMingState = daXianSeq === -1 && liuNianYear === null;
-  const isCleanState = isBenMingState && flyingPalace === null && selectedPalace === null && mode !== 'divination';
+  // 修改點：加入 externalGan === null 的判斷
+  const isCleanState = isBenMingState && flyingPalace === null && selectedPalace === null && externalGan === null && mode !== 'divination';
 
   const handleDownload = async () => { 
       if (!chartRef.current) return; 
