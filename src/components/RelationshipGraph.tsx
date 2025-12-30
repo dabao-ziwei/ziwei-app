@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Eye, RefreshCw, X } from 'lucide-react';
 import type { Client, Relationship } from '../db';
@@ -27,6 +27,15 @@ interface GraphNode {
   relType: string;
 }
 
+// 新增：箭頭圖形組件，取代原本的 marker
+const ArrowHead = ({ x, y, rotation, color = "#cbd5e1" }: { x: number, y: number, rotation: number, color?: string }) => (
+  <polygon
+    points="0,-6 10,0 0,6" // 箭頭形狀
+    fill={color}
+    transform={`translate(${x}, ${y}) rotate(${rotation})`}
+  />
+);
+
 export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
   client,
   relationships,
@@ -35,9 +44,6 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  
-  // 1. 產生唯一的 marker ID
-  const markerId = useMemo(() => `arrow-head-${Math.random().toString(36).substr(2, 9)}`, []);
   
   // 3. 自動佈局演算法
   const { nodes, lines } = useMemo(() => {
@@ -94,14 +100,27 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
       .filter(n => n.id !== 'center')
       .map(node => {
         let d = '';
+        let arrowRotation = 0;
+        // 修正箭頭位置：縮短一點點以免被 Node 遮住
+        const offset = 40; // 根據 Node 大小調整
+
         if (Math.abs(node.y) > Math.abs(node.x)) {
+          // 垂直佈局
           const cY = node.y / 2;
           d = `M 0 0 C 0 ${cY}, ${node.x} ${cY}, ${node.x} ${node.y}`;
+          // 計算箭頭角度：如果 y > 0 (下方)，箭頭朝下 (90度)；如果 y < 0 (上方)，箭頭朝上 (-90度)
+          arrowRotation = node.y > 0 ? 90 : -90;
         } else {
+          // 水平佈局
           const cX = node.x / 2;
           d = `M 0 0 C ${cX} 0, ${cX} ${node.y}, ${node.x} ${node.y}`;
+          // 計算箭頭角度：如果 x > 0 (右方)，箭頭朝右 (0度)；如果 x < 0 (左方)，箭頭朝左 (180度)
+          arrowRotation = node.x > 0 ? 0 : 180;
         }
-        return { targetId: node.id, d };
+
+        // 我們需要把箭頭放在線條的「幾乎」末端，但不要與 Node 重疊
+        // 簡單起見，直接放在 Node 中心，Node 會蓋住箭頭的尖端，看起來就像連在一起
+        return { targetId: node.id, d, x: node.x, y: node.y, rotation: arrowRotation };
       });
 
     return { nodes: calculatedNodes, lines: calculatedLines };
@@ -126,106 +145,110 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
       <motion.div
         drag
         dragMomentum={false}
-        className="absolute left-1/2 top-1/2 flex items-center justify-center w-0 h-0"
-        style={{ touchAction: 'none' }} // 防止觸控裝置上的預設滾動
+        // 修正：給予明確的寬高，確保內容不會因為尺寸為0而被隱藏
+        className="absolute left-0 top-0 w-full h-full flex items-center justify-center"
+        style={{ touchAction: 'none' }}
       >
-        {/* 1. 連線層 (SVG) */}
-        <svg className="absolute overflow-visible pointer-events-none" style={{ left: 0, top: 0, width: '5000px', height: '5000px', transform: 'translate(-50%, -50%)' }}>
-          <defs>
-            <marker id={markerId} markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto" fill="#cbd5e1">
-              <path d="M0,0 L0,6 L6,3 z" />
-            </marker>
-          </defs>
-          {lines.map(line => (
-            <path
-              key={line.targetId}
-              d={line.d}
-              fill="none"
-              stroke="#cbd5e1"
-              strokeWidth="2"
-              // 修正：移除 absoluteUrl，改回單純的 #ID 引用，避免觸發網路請求導致 404
-              markerEnd={`url(#${markerId})`}
-            />
-          ))}
-        </svg>
+        {/* 使用 Group 來模擬中心點位移 */}
+        <motion.div className="relative" style={{ x: '50%', y: '50%' }}>
+            
+            {/* 1. 連線層 (SVG) */}
+            <svg className="absolute overflow-visible pointer-events-none" style={{ left: 0, top: 0, width: '0px', height: '0px' }}>
+              {lines.map(line => (
+                <g key={line.targetId}>
+                    {/* 線條 */}
+                    <path
+                      d={line.d}
+                      fill="none"
+                      stroke="#cbd5e1"
+                      strokeWidth="2"
+                    />
+                    {/* 手動繪製的箭頭 (完全取代 markerUrl) */}
+                    {/* 這裡我們稍微調整箭頭位置，讓它位於線條末端 */}
+                    {/* 為了簡單，我們直接畫在 Node 座標上，依靠 Node 的背景色蓋住箭頭尖端，或者利用 rotation 偏移 */}
+                    <ArrowHead x={line.x} y={line.y} rotation={line.rotation} />
+                </g>
+              ))}
+            </svg>
 
-        {/* 2. 節點層 (Nodes) */}
-        {nodes.map(node => {
-          const isCenter = node.id === 'center';
-          const isSelected = selectedNodeId === node.id;
-          
-          return (
-            <div
-              key={node.id}
-              className="absolute flex flex-col items-center justify-center"
-              style={{
-                left: node.x,
-                top: node.y,
-                transform: 'translate(-50%, -50%)',
-                zIndex: isSelected ? 50 : 10,
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!isCenter) setSelectedNodeId(isSelected ? null : node.id);
-              }}
-            >
-              <div 
-                className={`
-                  relative px-4 py-2 rounded-lg shadow-sm border transition-all duration-200 flex items-center justify-center
-                  ${isCenter 
-                    ? (client.gender === '男' ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white border-blue-600' : 'bg-gradient-to-r from-pink-500 to-pink-600 text-white border-pink-600') 
-                    : (isSelected ? 'bg-white border-blue-400 ring-2 ring-blue-200 scale-105' : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-md')
-                  }
-                `}
-                style={{ 
-                  minWidth: isCenter ? '100px' : 'auto',
-                  cursor: isCenter ? 'default' : 'pointer' 
-                }}
-              >
-                <span className={`text-sm font-bold whitespace-nowrap ${isCenter ? 'text-white' : 'text-gray-700'}`}>
-                  {node.data.name}
-                </span>
-                
-                {!isCenter && (
-                   <span className={`ml-2 text-[10px] px-1 rounded ${node.data.gender === '男' ? 'bg-blue-50 text-blue-500' : 'bg-pink-50 text-pink-500'}`}>
-                     {node.data.gender}
-                   </span>
-                )}
-              </div>
-
-              {/* 3. 互動選單 */}
-              {isSelected && !isCenter && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10, scale: 0.9 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  className="absolute top-full mt-2 bg-white rounded-xl shadow-xl border border-gray-100 p-1.5 flex flex-col gap-1 w-32 z-50 overflow-hidden"
+            {/* 2. 節點層 (Nodes) */}
+            {nodes.map(node => {
+              const isCenter = node.id === 'center';
+              const isSelected = selectedNodeId === node.id;
+              
+              return (
+                <div
+                  key={node.id}
+                  className="absolute flex flex-col items-center justify-center"
+                  style={{
+                    left: node.x,
+                    top: node.y,
+                    transform: 'translate(-50%, -50%)', // 確保節點中心對齊座標
+                    zIndex: isSelected ? 50 : 10,
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!isCenter) setSelectedNodeId(isSelected ? null : node.id);
+                  }}
                 >
-                  <div className="flex justify-between items-center px-2 py-1 border-b border-gray-50 mb-1">
-                    <span className="text-[10px] text-gray-400 font-medium">功能選單</span>
-                    <button onClick={(e) => { e.stopPropagation(); setSelectedNodeId(null); }} className="text-gray-400 hover:text-gray-600">
-                      <X size={12} />
-                    </button>
+                  <div 
+                    className={`
+                      relative px-4 py-2 rounded-lg shadow-sm border transition-all duration-200 flex items-center justify-center
+                      ${isCenter 
+                        ? (client.gender === '男' ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white border-blue-600' : 'bg-gradient-to-r from-pink-500 to-pink-600 text-white border-pink-600') 
+                        : (isSelected ? 'bg-white border-blue-400 ring-2 ring-blue-200 scale-105' : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-md')
+                      }
+                    `}
+                    style={{ 
+                      minWidth: isCenter ? '100px' : 'auto',
+                      cursor: isCenter ? 'default' : 'pointer' 
+                    }}
+                  >
+                    <span className={`text-sm font-bold whitespace-nowrap ${isCenter ? 'text-white' : 'text-gray-700'}`}>
+                      {node.data.name}
+                    </span>
+                    
+                    {!isCenter && (
+                      <span className={`ml-2 text-[10px] px-1 rounded ${node.data.gender === '男' ? 'bg-blue-50 text-blue-500' : 'bg-pink-50 text-pink-500'}`}>
+                        {node.data.gender}
+                      </span>
+                    )}
                   </div>
-                  
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); onNavigate(node.data); }} 
-                    className="flex items-center gap-2 px-2 py-2 text-xs text-gray-700 hover:bg-blue-50 rounded-lg text-left transition-colors"
-                  >
-                    <Eye size={14} className="text-blue-500"/> 看他命盤
-                  </button>
-                  
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); onCompatibility(node.data); }} 
-                    className="flex items-center gap-2 px-2 py-2 text-xs text-purple-700 hover:bg-purple-50 rounded-lg text-left font-bold transition-colors"
-                  >
-                    <RefreshCw size={14} /> 和他合盤
-                  </button>
-                </motion.div>
-              )}
-            </div>
-          );
-        })}
+
+                  {/* 3. 互動選單 */}
+                  {isSelected && !isCenter && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      className="absolute top-full mt-2 bg-white rounded-xl shadow-xl border border-gray-100 p-1.5 flex flex-col gap-1 w-32 z-50 overflow-hidden"
+                    >
+                      <div className="flex justify-between items-center px-2 py-1 border-b border-gray-50 mb-1">
+                        <span className="text-[10px] text-gray-400 font-medium">功能選單</span>
+                        <button onClick={(e) => { e.stopPropagation(); setSelectedNodeId(null); }} className="text-gray-400 hover:text-gray-600">
+                          <X size={12} />
+                        </button>
+                      </div>
+                      
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); onNavigate(node.data); }} 
+                        className="flex items-center gap-2 px-2 py-2 text-xs text-gray-700 hover:bg-blue-50 rounded-lg text-left transition-colors"
+                      >
+                        <Eye size={14} className="text-blue-500"/> 看他命盤
+                      </button>
+                      
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); onCompatibility(node.data); }} 
+                        className="flex items-center gap-2 px-2 py-2 text-xs text-purple-700 hover:bg-purple-50 rounded-lg text-left font-bold transition-colors"
+                      >
+                        <RefreshCw size={14} /> 和他合盤
+                      </button>
+                    </motion.div>
+                  )}
+                </div>
+              );
+            })}
+        </motion.div>
       </motion.div>
     </div>
   );
