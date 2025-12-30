@@ -24,7 +24,6 @@ interface CenterInfoBoardProps {
   divNum?: string[];
   isDivinationReady?: boolean;
 
-  // 功能鍵控制 Props
   onToggleTwin: () => void;
   onToggleInverted: () => void;
   onToggleSmallLimit: () => void;
@@ -35,6 +34,7 @@ interface CenterInfoBoardProps {
   isLiuNian: boolean;
 }
 
+// 關係座標 (維持不變)
 const POSITIONS = {
     top: { x: 50, y: 15 },    
     bottom: { x: 50, y: 85 }, 
@@ -119,146 +119,149 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     }
 
     return (
-        // 外部容器：保持 col-span-2 row-span-2
-        <div className="col-span-2 row-span-2 flex border border-gray-300 bg-white z-10 relative overflow-hidden">
+        // 修正：這裡加上 p-0.5 讓中間白色塊稍微內縮，解決「壓線」和「綠框處隱藏線條」的問題
+        <div className="col-span-2 row-span-2 flex z-10 relative overflow-hidden p-0.5">
             
-            {/* 左側：個人資料 */}
-            {/* 修正：p-1 (極小內距)，h-full */}
-            <div className={`${hasRelations ? 'w-full md:w-[35%]' : 'w-full'} h-full flex flex-col p-1 border-r border-gray-100 bg-white/95 z-20 shadow-sm relative transition-all duration-300`}>
+            {/* 容器本體：加回 border 和 bg-white */}
+            <div className={`flex w-full h-full border border-gray-300 bg-white shadow-sm`}>
                 
-                {/* 返回按鈕 */}
-                {!hasRelations && historyStack.length > 0 && (
-                    <button onClick={onHistoryBack} className="absolute top-1 left-1 z-50 flex items-center gap-1 px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold rounded transition-colors">
-                        <ArrowLeft size={10} /> 返回
-                    </button>
-                )}
+                {/* 左側：個人資料 */}
+                <div className={`${hasRelations ? 'w-full md:w-[35%]' : 'w-full'} h-full flex flex-col p-1 border-r border-gray-100 bg-white z-20 relative transition-all duration-300`}>
+                    
+                    {/* 返回按鈕 (無關聯時) */}
+                    {!hasRelations && historyStack.length > 0 && (
+                        <button onClick={onHistoryBack} className="absolute top-1 left-1 z-50 flex items-center gap-1 px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold rounded transition-colors">
+                            <ArrowLeft size={10} /> 返回
+                        </button>
+                    )}
 
-                {/* 1. 頂部：時辰切換 (mt-1 大幅減少上方留白) */}
-                <div className="flex justify-between items-center px-1 mt-1 shrink-0">
-                    <button onClick={() => onChangeHour(-1)} className="text-gray-400 hover:text-gray-800 font-bold text-base select-none p-1">&lt;</button>
-                    <div 
-                        onClick={isTimeModified ? onResetTime : undefined} 
-                        className={`text-sm font-bold select-none cursor-pointer ${isTimeModified ? 'text-blue-600 underline' : 'text-gray-700'}`} 
-                        title="點擊還原出生時辰"
-                    >
-                        {currentHourZhi}時
+                    {/* 1. 頂部：時辰切換 (mt-2 稍微留一點點頂部空間，但不多) */}
+                    <div className="flex justify-between items-center px-1 mt-2 shrink-0">
+                        <button onClick={() => onChangeHour(-1)} className="text-gray-400 hover:text-gray-800 font-bold text-base select-none p-1">&lt;</button>
+                        <div 
+                            onClick={isTimeModified ? onResetTime : undefined} 
+                            className={`text-sm font-bold select-none cursor-pointer ${isTimeModified ? 'text-blue-600 underline' : 'text-gray-700'}`} 
+                            title="點擊還原出生時辰"
+                        >
+                            {currentHourZhi}時
+                        </div>
+                        <button onClick={() => onChangeHour(1)} className="text-gray-400 hover:text-gray-800 font-bold text-base select-none p-1">&gt;</button>
                     </div>
-                    <button onClick={() => onChangeHour(1)} className="text-gray-400 hover:text-gray-800 font-bold text-base select-none p-1">&gt;</button>
+
+                    {/* 2. 中間：命主資料 (justify-start 置頂，pt-2 往下推一點) */}
+                    <div className="flex-1 flex flex-col items-center justify-start pt-2 text-center gap-0.5 min-h-0 overflow-hidden">
+                        {/* 姓名 */}
+                        <div className="text-2xl font-bold text-gray-900 tracking-widest leading-tight truncate w-full px-2">
+                            {client.name}
+                        </div>
+                        {/* 主星 (紅色) */}
+                        <div className="text-xs font-bold text-red-600 tracking-wide">
+                            {benMingMajorStarsStr}
+                        </div>
+
+                        {chartData && (
+                            <div className="text-[10px] text-gray-500 font-medium mt-1 space-y-0.5">
+                                <div>{client.gender} | {chartData.bureau}</div>
+                                <div className="font-mono">命主：{chartData.mingZhu}　身主：{chartData.shenZhu}</div>
+                            </div>
+                        )}
+
+                        {/* 時間輸入框 */}
+                        {chartData && (
+                            <div className="mt-2 transform scale-90 origin-top">
+                                <DateInput value={{
+                                    year: client.birthYear.toString(),
+                                    month: client.birthMonth.toString().padStart(2, '0'),
+                                    day: client.birthDay.toString().padStart(2, '0'),
+                                    hour: client.birthHour.toString().padStart(2, '0'),
+                                    minute: client.birthMinute.toString().padStart(2, '0'),
+                                }} onChange={() => {}} />
+                            </div>
+                        )}
+
+                        {chartData && (
+                            <div className="grid grid-cols-1 gap-0 text-[10px] text-gray-400 mt-1 font-mono leading-tight">
+                                <div>農曆 {chartData.lunarDate}</div>
+                                <div>{chartData.bazi}</div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* 3. 底部：功能按鈕 (mt-auto 確保釘在最底，mb-1 留一點底邊距) */}
+                    {!isDivinationMode && (
+                        <div className="mt-auto flex justify-center shrink-0 mb-1">
+                            <div className="flex bg-slate-100/80 rounded-md p-0.5 gap-0.5 border border-slate-200">
+                                {!isDaXian && !isLiuNian && (
+                                    <>
+                                        <button onClick={onToggleTwin} className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${showTwin ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}>
+                                            <Users size={10} /> 雙胞胎
+                                        </button>
+                                        <div className="w-px bg-gray-300 my-0.5"></div>
+                                    </>
+                                )}
+                                <button onClick={onToggleInverted} className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${showInverted ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}>
+                                    <Repeat size={10} /> 顛倒盤
+                                </button>
+                                {isLiuNian && (
+                                    <>
+                                        <div className="w-px bg-gray-300 my-0.5"></div>
+                                        <button onClick={onToggleSmallLimit} className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${showSmallLimit ? 'bg-green-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}>
+                                            <Clock size={10} /> 小限
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
-                {/* 2. 中間：命主資料 (justify-start 確保內容靠上，不被撐開) */}
-                <div className="flex-1 flex flex-col items-center justify-start pt-1 text-center gap-0.5 min-h-0 overflow-y-auto">
-                    {/* 姓名 */}
-                    <div className="text-2xl font-bold text-gray-900 tracking-widest leading-tight">
-                        {client.name}
-                    </div>
-                    {/* 主星 (紅色) */}
-                    <div className="text-xs font-bold text-red-600 tracking-wide">
-                        {benMingMajorStarsStr}
-                    </div>
-
-                    {chartData && (
-                        <div className="text-[10px] text-gray-500 font-medium mt-1 space-y-0.5">
-                            <div>{client.gender} | {chartData.bureau}</div>
-                            <div className="font-mono">命主：{chartData.mingZhu}　身主：{chartData.shenZhu}</div>
-                        </div>
-                    )}
-
-                    {/* 時間顯示 (DateInput) */}
-                    {chartData && (
-                        <div className="mt-1 transform scale-90 origin-top">
-                             <DateInput value={{
-                                year: client.birthYear.toString(),
-                                month: client.birthMonth.toString().padStart(2, '0'),
-                                day: client.birthDay.toString().padStart(2, '0'),
-                                hour: client.birthHour.toString().padStart(2, '0'),
-                                minute: client.birthMinute.toString().padStart(2, '0'),
-                            }} onChange={() => {}} />
-                        </div>
-                    )}
-
-                    {chartData && (
-                        <div className="grid grid-cols-1 gap-0 text-[10px] text-gray-400 mt-1 font-mono leading-tight">
-                            <div>農曆 {chartData.lunarDate}</div>
-                            <div>{chartData.bazi}</div>
-                        </div>
-                    )}
-                </div>
-
-                {/* 3. 底部：功能按鈕 (mt-auto 確保釘底) */}
-                {!isDivinationMode && (
-                    <div className="mt-auto flex justify-center shrink-0 pb-0.5">
-                        <div className="flex bg-slate-100/80 rounded-md p-0.5 gap-0.5 border border-slate-200">
-                            {!isDaXian && !isLiuNian && (
-                                <>
-                                    <button onClick={onToggleTwin} className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${showTwin ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}>
-                                        <Users size={10} /> 雙胞胎
-                                    </button>
-                                    <div className="w-px bg-gray-300 my-0.5"></div>
-                                </>
-                            )}
-                            <button onClick={onToggleInverted} className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${showInverted ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}>
-                                <Repeat size={10} /> 顛倒盤
+                {/* 右側：關係圖 */}
+                {hasRelations && (
+                    <div className="hidden md:block w-[65%] h-full relative bg-slate-50 overflow-hidden">
+                        {historyStack.length > 0 && (
+                            <button onClick={onHistoryBack} className="absolute top-2 left-2 z-50 flex items-center gap-1 px-3 py-1.5 bg-white/90 hover:bg-white text-gray-700 text-xs font-bold rounded-lg border border-gray-300 shadow-sm transition-all backdrop-blur-sm">
+                                <ArrowLeft size={12} />
+                                <span>返回 {historyStack[historyStack.length - 1].name}</span>
                             </button>
-                            {isLiuNian && (
-                                <>
-                                    <div className="w-px bg-gray-300 my-0.5"></div>
-                                    <button onClick={onToggleSmallLimit} className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${showSmallLimit ? 'bg-green-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}>
-                                        <Clock size={10} /> 小限
-                                    </button>
-                                </>
-                            )}
+                        )}
+                        <div className="w-full h-full min-w-[300px] min-h-[300px] relative">
+                            <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                                <defs>
+                                    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="28" refY="3.5" orient="auto">
+                                        <polygon points="0 0, 10 3.5, 0 7" fill="#cbd5e1" />
+                                    </marker>
+                                </defs>
+                                {graphNodes.map((node, i) => (
+                                    <line key={i} x1="50%" y1="50%" x2={`${node.x}%`} y2={`${node.y}%`} stroke="#e2e8f0" strokeWidth="1.5" />
+                                ))}
+                            </svg>
+                            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10">
+                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-md border-2 border-white">我</div>
+                            </div>
+                            {graphNodes.map((node, i) => (
+                                <div key={node.id} className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer group" style={{ left: `${node.x}%`, top: `${node.y}%` }} onClick={() => setSelectedRelId(selectedRelId === node.id ? null : node.id)}>
+                                    <div className={`flex flex-col items-center transition-all duration-300 ${selectedRelId === node.id ? 'scale-110 z-50' : 'hover:scale-105 z-20'}`}>
+                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold shadow-sm border border-white ${['配偶', '老公', '老婆'].includes(node.relation_type) ? 'bg-pink-100 text-pink-700' : ['父親', '母親'].includes(node.relation_type) ? 'bg-amber-100 text-amber-700' : ['子女'].includes(node.relation_type) ? 'bg-green-100 text-green-700' : 'bg-white text-gray-600'}`}>
+                                            {node.related_client?.name.slice(0, 2)}
+                                        </div>
+                                        <span className="text-[10px] text-gray-500 bg-white/80 px-1 rounded mt-0.5 whitespace-nowrap backdrop-blur-sm">{node.relation_type}</span>
+                                    </div>
+                                    {selectedRelId === node.id && (
+                                        <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 bg-white rounded-lg shadow-xl border border-gray-100 p-1 flex flex-col gap-1 w-28 z-50 animate-in fade-in zoom-in duration-200">
+                                            <button onClick={(e) => { e.stopPropagation(); onNavigate(node.related_client); }} className="flex items-center gap-2 px-2 py-1.5 text-xs text-gray-700 hover:bg-blue-50 rounded text-left">
+                                                <Eye size={12} /> 查看命盤
+                                            </button>
+                                            <button onClick={(e) => { e.stopPropagation(); onCompatibility(node.related_client); }} className="flex items-center gap-2 px-2 py-1.5 text-xs text-purple-700 hover:bg-purple-50 rounded text-left font-bold">
+                                                <RefreshCw size={12} /> 進行合盤
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
                         </div>
                     </div>
                 )}
             </div>
-
-            {/* 右側：關係圖 (保持原樣) */}
-            {hasRelations && (
-                <div className="hidden md:block w-[65%] h-full relative bg-slate-50 overflow-hidden">
-                    {historyStack.length > 0 && (
-                        <button onClick={onHistoryBack} className="absolute top-2 left-2 z-50 flex items-center gap-1 px-3 py-1.5 bg-white/90 hover:bg-white text-gray-700 text-xs font-bold rounded-lg border border-gray-300 shadow-sm transition-all backdrop-blur-sm">
-                            <ArrowLeft size={12} />
-                            <span>返回 {historyStack[historyStack.length - 1].name}</span>
-                        </button>
-                    )}
-                    <div className="w-full h-full min-w-[300px] min-h-[300px] relative">
-                        <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                            <defs>
-                                <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="28" refY="3.5" orient="auto">
-                                    <polygon points="0 0, 10 3.5, 0 7" fill="#cbd5e1" />
-                                </marker>
-                            </defs>
-                            {graphNodes.map((node, i) => (
-                                <line key={i} x1="50%" y1="50%" x2={`${node.x}%`} y2={`${node.y}%`} stroke="#e2e8f0" strokeWidth="1.5" />
-                            ))}
-                        </svg>
-                        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10">
-                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-md border-2 border-white">我</div>
-                        </div>
-                        {graphNodes.map((node, i) => (
-                            <div key={node.id} className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer group" style={{ left: `${node.x}%`, top: `${node.y}%` }} onClick={() => setSelectedRelId(selectedRelId === node.id ? null : node.id)}>
-                                <div className={`flex flex-col items-center transition-all duration-300 ${selectedRelId === node.id ? 'scale-110 z-50' : 'hover:scale-105 z-20'}`}>
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold shadow-sm border border-white ${['配偶', '老公', '老婆'].includes(node.relation_type) ? 'bg-pink-100 text-pink-700' : ['父親', '母親'].includes(node.relation_type) ? 'bg-amber-100 text-amber-700' : ['子女'].includes(node.relation_type) ? 'bg-green-100 text-green-700' : 'bg-white text-gray-600'}`}>
-                                        {node.related_client?.name.slice(0, 2)}
-                                    </div>
-                                    <span className="text-[10px] text-gray-500 bg-white/80 px-1 rounded mt-0.5 whitespace-nowrap backdrop-blur-sm">{node.relation_type}</span>
-                                </div>
-                                {selectedRelId === node.id && (
-                                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 bg-white rounded-lg shadow-xl border border-gray-100 p-1 flex flex-col gap-1 w-28 z-50 animate-in fade-in zoom-in duration-200">
-                                        <button onClick={(e) => { e.stopPropagation(); onNavigate(node.related_client); }} className="flex items-center gap-2 px-2 py-1.5 text-xs text-gray-700 hover:bg-blue-50 rounded text-left">
-                                            <Eye size={12} /> 查看命盤
-                                        </button>
-                                        <button onClick={(e) => { e.stopPropagation(); onCompatibility(node.related_client); }} className="flex items-center gap-2 px-2 py-1.5 text-xs text-purple-700 hover:bg-purple-50 rounded text-left font-bold">
-                                            <RefreshCw size={12} /> 進行合盤
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
         </div>
     );
 };
