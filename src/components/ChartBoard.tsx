@@ -34,15 +34,11 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const navigate = useNavigate();
   const location = useLocation();
   
-  // 當前顯示的命盤
   const [client, setClient] = useState<Client | null>(
       propClient || location.state?.client || null
   );
 
-  // 瀏覽歷史 (用於從關係圖跳轉後返回)
   const [historyStack, setHistoryStack] = useState<Client[]>([]);
-
-  // 關係資料
   const [relationships, setRelationships] = useState<Relationship[]>([]);
 
   const [currentHour, setCurrentHour] = useState<number>(() => {
@@ -74,7 +70,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
 
   const chartRef = useRef<HTMLDivElement>(null);
 
-  // 初始化載入
   useEffect(() => {
     const fetchData = async () => {
       if (client) {
@@ -113,7 +108,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     fetchData();
   }, [id, client, navigate]);
 
-  // 計算引擎
   const baseEngine = useMemo(() => {
     if (!client || currentHour === -1) return null;
     try {
@@ -152,7 +146,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
         return displayEngine.getChartData();
     }
 
-    // Standard Mode Logic
     let daGan = -1, liuGan = -1, liuZhi = -1, xiaoGan = -1;
     const tempBaseData = displayEngine.getChartData();
     const startPos = displayEngine.getMingPos();
@@ -179,7 +172,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     return displayEngine.getChartData();
   }, [client, currentHour, daXianSeq, liuNianYear, showXiaoXian, mode, isDivinationReady, divNum]);
 
-  // 外來四化
   const externalSiHuaMap = useMemo(() => {
       if (externalGan === null) return undefined;
       return getSiHuaMap(externalGan);
@@ -197,7 +189,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
       setIsExternalInputOpen(false);
   };
 
-  // Nav Handlers
   const handleNavigateToRelation = (target: Client) => {
       if (client) {
           setHistoryStack(prev => [...prev, client]);
@@ -223,7 +214,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
       alert(`即將與 ${target.name} 進行合盤分析 (開發中)`);
   };
 
-  // 輔助函式與變數
   const benMingMajorStarsStr = useMemo(() => {
       if (!baseEngine || !baseChartData) return '';
       const pos = mode === 'divination' ? -1 : baseEngine.getMingPos();
@@ -249,8 +239,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const resetTime = () => { setCurrentHour(client!.birthHour); resetAllStates(); };
   const handleBack = () => { onBack ? onBack() : navigate('/'); };
   
-  // 截圖功能 (嚴格邏輯：本命盤 && 無飛化 && 無三方四正)
-  // 大限/流年/小限 都屬於 Limit 狀態
   const isBenMingState = daXianSeq === -1 && liuNianYear === null;
   const isCleanState = isBenMingState && flyingPalace === null && selectedPalace === null && mode !== 'divination';
 
@@ -276,19 +264,17 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   let currentHourZhi = ZHI[Math.floor((currentHour + 1) / 2) % 12];
   if (Math.floor((currentHour + 1) / 2) % 12 === 0) { currentHourZhi = currentHour === 23 ? '晚子' : '早子'; }
 
-  // 為了 CenterInfoBoard 準備的 Grid 邏輯
+  // 16格網格陣列：中間 4 格為 null (indices: 5, 6, 9, 10)
   const gridLayout = [5, 6, 7, 8, 4, null, null, 9, 3, null, null, 10, 2, 1, 0, 11];
   const connections = (() => { if (selectedPalace === null) return { self: -1, tri1: -1, tri2: -1, opp: -1 }; return { self: selectedPalace, tri1: (selectedPalace + 4) % 12, tri2: (selectedPalace + 8) % 12, opp: (selectedPalace + 6) % 12 }; })();
   const getAnchorCoord = (palaceIdx: number) => { const map: { [key: number]: { x: number; y: number } } = { 5: { x: 25, y: 25 }, 6: { x: 37.5, y: 25 }, 7: { x: 62.5, y: 25 }, 8: { x: 75, y: 25 }, 4: { x: 25, y: 37.5 }, 9: { x: 75, y: 37.5 }, 3: { x: 25, y: 62.5 }, 10: { x: 75, y: 62.5 }, 2: { x: 25, y: 75 }, 1: { x: 37.5, y: 75 }, 0: { x: 62.5, y: 75 }, 11: { x: 75, y: 75 } }; return map[palaceIdx] || { x: 50, y: 50 }; };
 
-  // DaXian List Logic
   const daXianList = useMemo(() => { if (!baseChartData || !baseEngine || mode === 'divination') return []; const list = []; const startPos = baseEngine.getMingPos(); const direction = baseChartData.direction || 1; for (let i = 0; i < 10; i++) { const offset = i * direction; const palaceIdx = (startPos + offset + 120) % 12; const palace = baseChartData.palaces[palaceIdx]; if (palace) { const startYear = baseChartData.lunarYear + palace.ages[0]; list.push({ seq: i, name: `${['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'][i]}限`, ganZhi: `${GAN[palace.ganIndex]}${ZHI[palace.zhiIndex]}`, palaceIdx: palaceIdx, startAge: palace.ages[0], endAge: palace.ages[1], startYear: startYear }); } } return list; }, [baseChartData, baseEngine, mode]);
   const liuNianList = useMemo(() => { if (mode === 'divination') return []; const targetSeq = daXianSeq === -1 ? 0 : daXianSeq; const targetDaXian = daXianList[targetSeq]; if (!targetDaXian) return []; const list = []; for (let i = 0; i < 10; i++) { const year = targetDaXian.startYear + i; const age = targetDaXian.startAge + i; const gan = (year - 4) % 10; const zhi = (year - 4) % 12; list.push({ year, age, label: `${year}${GAN[gan]}${ZHI[zhi]} ${age}` }); } return list; }, [daXianSeq, daXianList, mode]);
   const xiaoXianMingIdx = useMemo(() => { if (!liuNianYear || !baseChartData || !baseEngine) return -1; const virtualAge = liuNianYear - baseChartData.lunarYear + 1; return baseEngine.getXiaoXianPos(virtualAge); }, [liuNianYear, baseChartData, baseEngine]);
   const benMingPos = baseEngine ? baseEngine.getMingPos() : 0;
   const divMingIndex = useMemo(() => { if (mode !== 'divination') return -1; if (!isDivinationReady) return -1; let mingNum = parseInt(divNum[0] + divNum[1], 10); while (mingNum > 12) { mingNum = parseInt(mingNum.toString()[0]) + parseInt(mingNum.toString()[1]); } const targetZhiIdx = (mingNum - 1) % 12; return chartData?.palaces.findIndex(p => p.zhiIndex === targetZhiIdx) ?? -1; }, [mode, divNum, chartData, isDivinationReady]);
 
-  // UI Handlers for DaXian/LiuNian
   const handleDaXianClick = (seq: number) => { setDaXianSeq(daXianSeq === seq ? -1 : seq); setLiuNianYear(null); setShowXiaoXian(false); setFlyingPalace(null); setSelectedPalace(null); setIsReverse(false); };
   const handleLiuNianClick = (year: number) => { setLiuNianYear(liuNianYear === year ? null : year); setShowXiaoXian(false); setFlyingPalace(null); setSelectedPalace(null); setIsReverse(false); };
   const toggleXiaoXian = () => { setShowXiaoXian(!showXiaoXian); setFlyingPalace(null); setSelectedPalace(null); };
@@ -304,18 +290,14 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   return (
     <div className="flex flex-col h-[100dvh] w-full bg-white relative overflow-hidden">
       
-      {/* Header - 功能單純化 */}
       <div className="flex justify-between items-center px-4 py-2 bg-white border-b border-gray-200 shadow-sm shrink-0 z-50 h-[56px]">
-        {/* 左側：永遠只有返回列表 */}
         <button onClick={handleBack} className="bg-white text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm">
             <ChevronLeft size={16} />
             列表
         </button>
 
-        {/* 右側：他人生年 + 截圖 */}
         {mode === 'standard' && (
             <div className="flex gap-2">
-                 {/* 他人生年按鈕 */}
                 {externalGan !== null ? (
                     <div className="flex items-center gap-1 bg-purple-100 border border-purple-200 px-3 py-1.5 rounded-lg animate-in fade-in">
                         <span className="text-sm font-bold text-purple-700">{GAN[externalGan]}干飛化</span>
@@ -332,7 +314,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                     </button>
                 )}
 
-                {/* 截圖按鈕 (嚴格條件) */}
                 {isCleanState && (
                     <button 
                         onClick={handleDownload}
@@ -348,7 +329,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
       </div>
 
       <div className="flex-1 min-h-0 w-full relative">
-        {/* Modals */}
         {isExternalInputOpen && (
             <div className="absolute inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
                 <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 relative animate-in fade-in zoom-in">
@@ -366,7 +346,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
             </div>
         )}
 
-        {/* Grid System Container */}
         <div ref={chartRef} className="w-full h-full bg-white border-2 border-gray-800 shadow-xl z-10 grid grid-cols-4 grid-rows-4 relative">
             
             <svg className="absolute inset-0 w-full h-full pointer-events-none z-40">
@@ -374,10 +353,11 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
             </svg>
 
             {gridLayout.map((palaceIdx, gridPos) => {
-                if (palaceIdx === null) {
-                    if (gridPos === 5) {
-                        return (
-                            <CenterInfoBoard 
+                // 修正：遇到中間左上角 (index 5) 時，渲染跨欄的 CenterInfoBoard
+                if (gridPos === 5) {
+                    return (
+                        <div key="center-board" className="col-span-2 row-span-2 z-0 relative">
+                             <CenterInfoBoard 
                                 key="center"
                                 client={client!}
                                 chartData={chartData}
@@ -395,7 +375,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                                 divNum={divNum}
                                 isDivinationReady={isDivinationReady}
                                 
-                                // 功能鍵狀態傳遞
                                 onToggleTwin={() => setIsTwinMode(!isTwinMode)}
                                 onToggleInverted={() => setIsReverse(!isReverse)}
                                 onToggleSmallLimit={toggleXiaoXian}
@@ -405,10 +384,17 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                                 isDaXian={daXianSeq >= 0}
                                 isLiuNian={liuNianYear !== null}
                             />
-                        );
-                    }
+                        </div>
+                    );
+                }
+                
+                // 修正：忽略中間其他三個空位，避免重疊渲染
+                if (gridPos === 6 || gridPos === 9 || gridPos === 10) {
                     return null;
                 }
+
+                // 其餘為宮位
+                if (palaceIdx === null) return null;
 
                 const { daName, liuName, xiaoName } = getRelativeNames(palaceIdx);
                 const oppPalaceIdx = (palaceIdx + 6) % 12;
