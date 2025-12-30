@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Network, ArrowLeft, Users, Repeat, Clock, Eye, RefreshCw } from 'lucide-react';
-import { DateInput } from './DateInput'; // 請確認此元件路徑正確
+import { DateInput } from './DateInput';
 import type { Client, Relationship } from '../db';
 import type { ChartData } from '../logic/types';
 
@@ -24,7 +24,7 @@ interface CenterInfoBoardProps {
   divNum?: string[];
   isDivinationReady?: boolean;
 
-  // 新增功能鍵 Props
+  // 功能鍵控制 Props
   onToggleTwin: () => void;
   onToggleInverted: () => void;
   onToggleSmallLimit: () => void;
@@ -35,7 +35,6 @@ interface CenterInfoBoardProps {
   isLiuNian: boolean;
 }
 
-// 保持原本的座標設定
 const POSITIONS = {
     top: { x: 50, y: 15 },    
     bottom: { x: 50, y: 85 }, 
@@ -63,7 +62,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     isDivinationMode,
     divNum,
     isDivinationReady,
-    // 功能鍵
     onToggleTwin,
     onToggleInverted,
     onToggleSmallLimit,
@@ -74,8 +72,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     isLiuNian
 }) => {
     const [selectedRelId, setSelectedRelId] = useState<string | null>(null);
-
-    // 判斷是否顯示右側區塊
     const hasRelations = relationships.length > 0;
 
     const graphNodes = useMemo(() => {
@@ -123,78 +119,92 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     }
 
     return (
+        // 外部容器：保持 col-span-2 row-span-2
         <div className="col-span-2 row-span-2 flex border border-gray-300 bg-white z-10 relative overflow-hidden">
             
-            {/* 左側：個人資料 (動態寬度 + Flex 佈局優化) */}
-            <div className={`${hasRelations ? 'w-full md:w-[35%]' : 'w-full'} h-full flex flex-col p-2 border-r border-gray-100 bg-white z-20 shadow-sm relative transition-all duration-300`}>
+            {/* 左側：個人資料 */}
+            {/* 修正：p-1 (極小內距)，h-full */}
+            <div className={`${hasRelations ? 'w-full md:w-[35%]' : 'w-full'} h-full flex flex-col p-1 border-r border-gray-100 bg-white/95 z-20 shadow-sm relative transition-all duration-300`}>
                 
-                {/* 如果沒有右側關聯圖，返回按鈕顯示在這裡 */}
+                {/* 返回按鈕 */}
                 {!hasRelations && historyStack.length > 0 && (
-                    <button onClick={onHistoryBack} className="absolute top-2 left-2 z-50 flex items-center gap-1 px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold rounded transition-colors">
-                        <ArrowLeft size={12} /> 返回
+                    <button onClick={onHistoryBack} className="absolute top-1 left-1 z-50 flex items-center gap-1 px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold rounded transition-colors">
+                        <ArrowLeft size={10} /> 返回
                     </button>
                 )}
 
-                {/* 1. 頂部：時辰切換 (Shrink-0 防止被壓縮) */}
-                <div className="flex justify-between items-center mb-1 mt-4 px-2 shrink-0">
-                    <button onClick={() => onChangeHour(-1)} className="text-gray-400 hover:text-gray-800 font-bold text-lg select-none p-2">&lt;</button>
+                {/* 1. 頂部：時辰切換 (mt-1 大幅減少上方留白) */}
+                <div className="flex justify-between items-center px-1 mt-1 shrink-0">
+                    <button onClick={() => onChangeHour(-1)} className="text-gray-400 hover:text-gray-800 font-bold text-base select-none p-1">&lt;</button>
                     <div 
                         onClick={isTimeModified ? onResetTime : undefined} 
-                        className={`text-base font-bold select-none cursor-pointer ${isTimeModified ? 'text-blue-600 underline' : 'text-gray-700'}`} 
+                        className={`text-sm font-bold select-none cursor-pointer ${isTimeModified ? 'text-blue-600 underline' : 'text-gray-700'}`} 
                         title="點擊還原出生時辰"
                     >
                         {currentHourZhi}時
                     </div>
-                    <button onClick={() => onChangeHour(1)} className="text-gray-400 hover:text-gray-800 font-bold text-lg select-none p-2">&gt;</button>
+                    <button onClick={() => onChangeHour(1)} className="text-gray-400 hover:text-gray-800 font-bold text-base select-none p-1">&gt;</button>
                 </div>
 
-                {/* 2. 中間：命主資料 (justify-start 往上推，消除空白) */}
-                <div className="flex-1 flex flex-col items-center justify-start pt-2 text-center gap-1 min-h-0 overflow-y-auto">
-                    <div className="text-2xl md:text-3xl font-bold text-gray-900 tracking-widest leading-tight">
+                {/* 2. 中間：命主資料 (justify-start 確保內容靠上，不被撐開) */}
+                <div className="flex-1 flex flex-col items-center justify-start pt-1 text-center gap-0.5 min-h-0 overflow-y-auto">
+                    {/* 姓名 */}
+                    <div className="text-2xl font-bold text-gray-900 tracking-widest leading-tight">
                         {client.name}
                     </div>
-                    <div className="text-xs font-bold text-red-600 tracking-wide mt-1">
+                    {/* 主星 (紅色) */}
+                    <div className="text-xs font-bold text-red-600 tracking-wide">
                         {benMingMajorStarsStr}
                     </div>
 
                     {chartData && (
-                        <div className="text-xs text-gray-500 font-medium mt-1 space-y-1">
+                        <div className="text-[10px] text-gray-500 font-medium mt-1 space-y-0.5">
                             <div>{client.gender} | {chartData.bureau}</div>
-                            {/* 單行顯示 */}
                             <div className="font-mono">命主：{chartData.mingZhu}　身主：{chartData.shenZhu}</div>
                         </div>
                     )}
 
+                    {/* 時間顯示 (DateInput) */}
                     {chartData && (
-                        <div className="grid grid-cols-3 gap-x-2 gap-y-0 text-[11px] text-gray-500 mt-2 border-t border-gray-100 pt-2 w-full max-w-[180px]">
-                            <div className="text-right">西元</div>
-                            <div className="col-span-2 text-left font-mono">{chartData.solarDate}</div>
-                            <div className="text-right">農曆</div>
-                            <div className="col-span-2 text-left font-mono">{chartData.lunarDate}</div>
+                        <div className="mt-1 transform scale-90 origin-top">
+                             <DateInput value={{
+                                year: client.birthYear.toString(),
+                                month: client.birthMonth.toString().padStart(2, '0'),
+                                day: client.birthDay.toString().padStart(2, '0'),
+                                hour: client.birthHour.toString().padStart(2, '0'),
+                                minute: client.birthMinute.toString().padStart(2, '0'),
+                            }} onChange={() => {}} />
+                        </div>
+                    )}
+
+                    {chartData && (
+                        <div className="grid grid-cols-1 gap-0 text-[10px] text-gray-400 mt-1 font-mono leading-tight">
+                            <div>農曆 {chartData.lunarDate}</div>
+                            <div>{chartData.bazi}</div>
                         </div>
                     )}
                 </div>
 
-                {/* 3. 底部：功能按鈕 (mt-auto 釘在底部) */}
+                {/* 3. 底部：功能按鈕 (mt-auto 確保釘底) */}
                 {!isDivinationMode && (
-                    <div className="mt-auto pt-2 flex justify-center shrink-0">
-                        <div className="flex bg-slate-100/80 rounded-lg p-1 gap-1 border border-slate-200">
+                    <div className="mt-auto flex justify-center shrink-0 pb-0.5">
+                        <div className="flex bg-slate-100/80 rounded-md p-0.5 gap-0.5 border border-slate-200">
                             {!isDaXian && !isLiuNian && (
                                 <>
-                                    <button onClick={onToggleTwin} className={`px-2 py-1 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${showTwin ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}>
-                                        <Users size={12} /> 雙胞胎
+                                    <button onClick={onToggleTwin} className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${showTwin ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}>
+                                        <Users size={10} /> 雙胞胎
                                     </button>
-                                    <div className="w-px bg-gray-300 my-1"></div>
+                                    <div className="w-px bg-gray-300 my-0.5"></div>
                                 </>
                             )}
-                            <button onClick={onToggleInverted} className={`px-2 py-1 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${showInverted ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}>
-                                <Repeat size={12} /> 顛倒盤
+                            <button onClick={onToggleInverted} className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${showInverted ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}>
+                                <Repeat size={10} /> 顛倒盤
                             </button>
                             {isLiuNian && (
                                 <>
-                                    <div className="w-px bg-gray-300 my-1"></div>
-                                    <button onClick={onToggleSmallLimit} className={`px-2 py-1 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${showSmallLimit ? 'bg-green-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}>
-                                        <Clock size={12} /> 小限
+                                    <div className="w-px bg-gray-300 my-0.5"></div>
+                                    <button onClick={onToggleSmallLimit} className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${showSmallLimit ? 'bg-green-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}>
+                                        <Clock size={10} /> 小限
                                     </button>
                                 </>
                             )}
@@ -203,7 +213,7 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                 )}
             </div>
 
-            {/* 右側：關係星系圖 (保持原樣，僅顯示時機受控) */}
+            {/* 右側：關係圖 (保持原樣) */}
             {hasRelations && (
                 <div className="hidden md:block w-[65%] h-full relative bg-slate-50 overflow-hidden">
                     {historyStack.length > 0 && (
