@@ -36,20 +36,21 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   
-  // 1. 產生唯一的 marker ID，避免多個組件衝突
+  // 1. 產生唯一的 marker ID
   const markerId = useMemo(() => `arrow-head-${Math.random().toString(36).substr(2, 9)}`, []);
   
-  // 2. 取得當前頁面路徑，解決 SPA 路由下 url(#id) 被誤判為 404 請求的問題
-  const [pageUrl, setPageUrl] = useState('');
+  // 2. 【關鍵修正】取得完整的絕對路徑 (例如 http://localhost:5173/chart/123)
+  // 這能解決瀏覽器誤判相對路徑導致的 404 錯誤
+  const [absoluteUrl, setAbsoluteUrl] = useState('');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      // 取得當前的路徑 (例如 /chart/123)，確保 SVG 引用的是「當前頁面內的 ID」
-      setPageUrl(window.location.pathname + window.location.search);
+      // 取得當前網址，並去掉 hash (#) 以後的東西，確保路徑乾淨
+      setAbsoluteUrl(window.location.href.split('#')[0]);
     }
   }, []);
 
-  // 3. 自動佈局演算法
+  // 3. 自動佈局演算法 (保持不變)
   const { nodes, lines } = useMemo(() => {
     const calculatedNodes: GraphNode[] = [];
     
@@ -62,44 +63,27 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
       relType: 'self',
     });
 
-    // 分類
     const parents = relationships.filter(r => ['父親', '母親', '爸爸', '媽媽', '父', '母'].includes(r.relation_type));
     const children = relationships.filter(r => ['子女', '兒子', '女兒'].includes(r.relation_type));
     const partners = relationships.filter(r => ['配偶', '老公', '老婆', '丈夫', '妻子', '情侶'].includes(r.relation_type));
     const others = relationships.filter(r => !parents.includes(r) && !children.includes(r) && !partners.includes(r));
 
-    // 輔助排版函數
     const layoutGroup = (group: Relationship[], direction: 'top' | 'bottom' | 'left' | 'right') => {
       const count = group.length;
       if (count === 0) return;
 
       group.forEach((rel, index) => {
         if (!rel.related_client) return;
-
         let x = 0;
         let y = 0;
-
-        // 計算偏移量 (讓節點置中對稱)
         const centerOffset = (count - 1) * CONFIG.SIBLING_GAP / 2;
         const offset = index * CONFIG.SIBLING_GAP - centerOffset;
 
         switch (direction) {
-          case 'top': // 父母
-            y = -CONFIG.Y_GAP;
-            x = offset;
-            break;
-          case 'bottom': // 子女
-            y = CONFIG.Y_GAP;
-            x = offset;
-            break;
-          case 'left': // 朋友/手足
-            x = -CONFIG.X_GAP;
-            y = offset; // 垂直排列
-            break;
-          case 'right': // 配偶
-            x = CONFIG.X_GAP;
-            y = offset; // 垂直排列
-            break;
+          case 'top': y = -CONFIG.Y_GAP; x = offset; break;
+          case 'bottom': y = CONFIG.Y_GAP; x = offset; break;
+          case 'left': x = -CONFIG.X_GAP; y = offset; break;
+          case 'right': x = CONFIG.X_GAP; y = offset; break;
         }
 
         calculatedNodes.push({
@@ -117,17 +101,14 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
     layoutGroup(others, 'left');
     layoutGroup(partners, 'right');
 
-    // 生成連線路徑
     const calculatedLines = calculatedNodes
       .filter(n => n.id !== 'center')
       .map(node => {
         let d = '';
         if (Math.abs(node.y) > Math.abs(node.x)) {
-          // 垂直連線 (上下)
           const cY = node.y / 2;
           d = `M 0 0 C 0 ${cY}, ${node.x} ${cY}, ${node.x} ${node.y}`;
         } else {
-          // 水平連線 (左右)
           const cX = node.x / 2;
           d = `M 0 0 C ${cX} 0, ${cX} ${node.y}, ${node.x} ${node.y}`;
         }
@@ -147,28 +128,35 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
       className="w-full h-full bg-slate-50 relative overflow-hidden cursor-grab active:cursor-grabbing select-none"
       onClick={handleBgClick}
     >
+      {/* 提示文字 (確保圖層顯示) */}
+      <div className="absolute bottom-2 right-2 text-[10px] text-gray-400 pointer-events-none select-none z-0">
+        可拖曳移動畫布
+      </div>
+
       {/* 無限畫布區域 */}
       <motion.div
         drag
         dragMomentum={false}
         className="absolute left-1/2 top-1/2 flex items-center justify-center w-0 h-0"
+        style={{ touchAction: 'none' }} // 防止觸控裝置上的預設滾動
       >
-        {/* 1. 連線層 (SVG) - 關鍵修正：width/height 100% 且 overflow: visible */}
-        <svg className="absolute overflow-visible pointer-events-none" style={{ left: 0, top: 0, width: '100%', height: '100%' }}>
+        {/* 1. 連線層 (SVG) */}
+        {/* 修正：如果 absoluteUrl 還沒準備好，先不渲染 marker 引用，避免報錯 */}
+        <svg className="absolute overflow-visible pointer-events-none" style={{ left: 0, top: 0, width: '5000px', height: '5000px', transform: 'translate(-50%, -50%)' }}>
           <defs>
             <marker id={markerId} markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto" fill="#cbd5e1">
               <path d="M0,0 L0,6 L6,3 z" />
             </marker>
           </defs>
-          {lines.map(line => (
+          {absoluteUrl && lines.map(line => (
             <path
               key={line.targetId}
               d={line.d}
               fill="none"
               stroke="#cbd5e1"
               strokeWidth="2"
-              // 關鍵修正：使用 pageUrl 確保引用正確，避免 404
-              markerEnd={`url(${pageUrl}#${markerId})`}
+              // 修正：使用 絕對路徑 + #ID
+              markerEnd={`url(${absoluteUrl}#${markerId})`}
             />
           ))}
         </svg>
@@ -251,10 +239,6 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
           );
         })}
       </motion.div>
-      
-      <div className="absolute bottom-2 right-2 text-[10px] text-gray-300 pointer-events-none select-none">
-        可拖曳移動畫布
-      </div>
     </div>
   );
 };
