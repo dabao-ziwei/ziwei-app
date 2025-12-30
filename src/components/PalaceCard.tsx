@@ -26,8 +26,9 @@ interface PalaceCardProps {
   
   divinationName?: string;
 
-  // 新增: 接收外來四化
   externalSiHua?: Record<string, '祿' | '權' | '科' | '忌'>;
+  // [新增] 紫占覆蓋用的四化
+  divinationSiHua?: Record<string, '祿' | '權' | '科' | '忌'>;
 }
 
 export const PalaceCard: React.FC<PalaceCardProps> = ({
@@ -49,6 +50,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   reverseLiuName,
   divinationName, 
   externalSiHua,
+  divinationSiHua
 }) => {
   const palaceGanZhi = `${GAN[palace.ganIndex]}${ZHI[palace.zhiIndex]}`;
   const isBenMing = !daName && !liuName && !xiaoName;
@@ -65,12 +67,11 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
       });
   }
 
-  // 背景色判斷優先順序：外來化忌 > 外來化祿 > 流年 > 預設
   let bgColorClass = '';
   if (hasExternalJi) {
-      bgColorClass = 'bg-gray-200 ring-inset ring-2 ring-gray-400'; // 化忌
+      bgColorClass = 'bg-gray-200 ring-inset ring-2 ring-gray-400'; 
   } else if (hasExternalLu) {
-      bgColorClass = 'bg-red-50 ring-inset ring-2 ring-pink-300'; // 化祿
+      bgColorClass = 'bg-red-50 ring-inset ring-2 ring-pink-300'; 
   } else if (isLiuNianMing) {
       bgColorClass = 'bg-blue-50';
   }
@@ -96,12 +97,11 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
 
   const reverseBaseName = isReverse ? PALACE_REVERSE_MAP[baseName] : null;
 
-  // [修改點] 整合宮干飛化與外來生年飛化
   const renderFlyingChips = () => {
     const chips: React.ReactNode[] = [];
     
     allStarsInPalace.forEach((star, idx) => {
-      // 1. 宮干飛化 (原本的邏輯)
+      // 1. 宮干飛化
       if (flyingStars) {
           const type = flyingStars[star.name];
           if (type) {
@@ -120,26 +120,20 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
           }
       }
 
-      // 2. 外來生年飛化 (新增的邏輯)
+      // 2. 外來生年飛化
       if (externalSiHua) {
           const extType = externalSiHua[star.name];
           if (extType) {
              const abbr = STAR_ABBR_MAP[star.name] || star.name[0];
-             // 使用紫色系區隔，代表「外來/生年」
-             // 祿: 紫紅, 權: 紫橘, 科: 紫藍, 忌: 深紫
              let colorClass = ''; 
-             let label = '';
-
-             // 這裡您可以決定顯示 "飛祿" 或 "生祿" 或 "乙祿"
-             // 為了版面整潔，建議顯示 "飛+化" (例如: 飛祿)
-             if (extType === '祿') { colorClass = 'bg-fuchsia-600 text-white'; label = '飛祿'; }
-             else if (extType === '權') { colorClass = 'bg-orange-600 text-white'; label = '飛權'; }
-             else if (extType === '科') { colorClass = 'bg-indigo-500 text-white'; label = '飛科'; }
-             else if (extType === '忌') { colorClass = 'bg-slate-800 text-white border border-fuchsia-400'; label = '飛忌'; }
+             if (extType === '祿') { colorClass = 'bg-fuchsia-600 text-white'; }
+             else if (extType === '權') { colorClass = 'bg-orange-600 text-white'; }
+             else if (extType === '科') { colorClass = 'bg-indigo-500 text-white'; }
+             else if (extType === '忌') { colorClass = 'bg-slate-800 text-white border border-fuchsia-400'; }
 
              chips.push(
                 <div key={`ext-${idx}`} className={`px-1 py-[1px] rounded text-[11px] font-bold leading-none shadow-md ${colorClass} select-none border border-white/20`}>
-                   {abbr}{extType} {/* 顯示範例: 機祿 (天機化祿) */}
+                   {abbr}{extType}
                 </div>
              );
           }
@@ -147,7 +141,6 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
     });
 
     if (chips.length === 0) return null;
-    // 使用 flex-col gap-0.5 讓多個名牌垂直堆疊，避免擋住太多橫向空間
     return <div className="absolute top-0.5 right-0.5 flex flex-col gap-0.5 items-end z-30 pointer-events-none">{chips}</div>;
   };
 
@@ -164,7 +157,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
             star={star}
             color="text-red-700"
             bgSiHua={{ ben: 'bg-red-600', da: 'bg-gray-500', liu: 'bg-blue-500', xiao: 'bg-green-600' }}
-            // 移除 externalType 傳遞
+            divinationSiHua={divinationSiHua} // [新增] 傳遞
           />
         ))}
 
@@ -174,7 +167,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
             star={star}
             color="text-black"
             bgSiHua={{ ben: 'bg-red-600', da: 'bg-gray-500', liu: 'bg-blue-500', xiao: 'bg-green-600' }}
-            // 移除 externalType 傳遞
+            divinationSiHua={divinationSiHua}
           />
         ))}
 
@@ -184,7 +177,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
             star={star}
             color="text-blue-600"
             bgSiHua={{ ben: 'bg-red-600', da: 'bg-gray-500', liu: 'bg-blue-500', xiao: 'bg-green-600' }}
-            // 移除 externalType 傳遞
+            divinationSiHua={divinationSiHua}
           />
         ))}
 
@@ -194,7 +187,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
             star={star}
             color="text-black"
             bgSiHua={{ ben: 'bg-red-600', da: 'bg-gray-500', liu: 'bg-blue-500', xiao: 'bg-green-600' }}
-            // 移除 externalType 傳遞
+            divinationSiHua={divinationSiHua}
           />
         ))}
       </div>
@@ -239,15 +232,16 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   );
 };
 
-// [修改點] 移除 externalType 參數
 const VerticalStar = ({
   star,
   color,
   bgSiHua,
+  divinationSiHua, 
 }: {
   star: Star;
   color: string;
   bgSiHua: any;
+  divinationSiHua?: any;
 }) => {
   return (
     <div className="flex flex-col items-center w-[18px] mr-[1px] relative">
@@ -256,18 +250,21 @@ const VerticalStar = ({
       <span className="text-[10px] text-gray-400 font-normal leading-none scale-90 origin-center my-0">{star.brightness || ''}</span>
 
       <div className="flex flex-col gap-0 w-full items-center mt-0">
-        <SiHuaSlot star={star} scope="ben" bg={bgSiHua.ben} />
+        <SiHuaSlot star={star} scope="ben" bg={bgSiHua.ben} overrideType={divinationSiHua?.[star.name]} />
         <SiHuaSlot star={star} scope="da" bg={bgSiHua.da} />
         <SiHuaSlot star={star} scope="liu" bg={bgSiHua.liu} />
         <SiHuaSlot star={star} scope="xiao" bg={bgSiHua.xiao} />
-        
-        {/* 已移除底部的外來四化文字 */}
       </div>
     </div>
   );
 };
 
-const SiHuaSlot = ({ star, scope, bg }: { star: Star; scope: 'ben' | 'da' | 'liu' | 'xiao'; bg: string; }) => {
+const SiHuaSlot = ({ star, scope, bg, overrideType }: { star: Star; scope: 'ben' | 'da' | 'liu' | 'xiao'; bg: string; overrideType?: string }) => {
+  // [修正] 若有 overrideType 且 scope 為 ben，則直接使用 overrideType
+  if (scope === 'ben' && overrideType) {
+      return <div className={`w-3.5 h-3.5 flex items-center justify-center text-[11px] text-white rounded-[1px] leading-none shadow-sm ${bg} mb-[1px]`}>{overrideType}</div>;
+  }
+
   const sihua = star.sihua?.find((s) => s.scope === scope);
   if (sihua) {
     return <div className={`w-3.5 h-3.5 flex items-center justify-center text-[11px] text-white rounded-[1px] leading-none shadow-sm ${bg} mb-[1px]`}>{sihua.type}</div>;

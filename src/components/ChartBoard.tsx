@@ -29,6 +29,32 @@ const getSiHuaMap = (ganIndex: number) => {
     } as Record<string, '祿' | '權' | '科' | '忌'>;
 };
 
+// [新增] 遞迴相加邏輯：直到 <= 12
+const getRecursiveSum = (n: number): number => {
+    let sum = n;
+    while (sum > 12) {
+        let tempSum = 0;
+        const digits = sum.toString().split('').map(Number);
+        digits.forEach(d => tempSum += d);
+        sum = tempSum;
+    }
+    return sum;
+};
+
+// [新增] 數字轉天干邏輯 (3=甲, ..., 12=癸, 1=壬, 2=癸)
+const getDivinationStem = (n: number): number => {
+    // 轉換為 GAN 陣列索引 (0=甲, 9=癸)
+    // 3->0(甲), 4->1(乙)... 12->9(癸)
+    // 1->8(壬), 2->9(癸)
+    
+    // 公式推導: 
+    // n=3 -> (3-3+10)%10 = 0
+    // n=12 -> (12-3+10)%10 = 9
+    // n=1 -> (1-3+10)%10 = 8
+    // n=2 -> (2-3+10)%10 = 9
+    return (n - 3 + 10) % 10;
+};
+
 export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBack, mode = 'standard' }) => {
   const { id } = useParams<{ id?: string }>();
   const navigate = useNavigate();
@@ -59,8 +85,9 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const [isTwinMode, setIsTwinMode] = useState<boolean>(false);
 
   // Divination States
-  const [divNum, setDivNum] = useState<string[]>(['', '', '', '']);
-  const [isDivinationReady, setIsDivinationReady] = useState(false);
+  // 從 location.state 讀取 divNum
+  const divNum = location.state?.divNum || (client as any)?.divNum;
+  const isDivinationReady = !!divNum;
   
   // External Year States
   const [isExternalInputOpen, setIsExternalInputOpen] = useState(false);
@@ -74,7 +101,8 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     const fetchData = async () => {
       if (client) {
           setLoading(false);
-          if (client.id && !client.id.startsWith('temp-')) {
+          // 紫占模式下不讀取關係
+          if (client.id && !client.id.startsWith('temp-') && mode !== 'divination') {
               getRelationships(client.id).then(setRelationships);
           } else {
               setRelationships([]);
@@ -106,7 +134,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
       }
     };
     fetchData();
-  }, [id, client, navigate]);
+  }, [id, client, navigate, mode]);
 
   const baseEngine = useMemo(() => {
     if (!client || currentHour === -1) return null;
@@ -172,6 +200,33 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     return displayEngine.getChartData();
   }, [client, currentHour, daXianSeq, liuNianYear, showXiaoXian, mode, isDivinationReady, divNum]);
 
+  // [新增] 計算紫占的覆蓋資料
+  const { divMingIndex, divSiHuaMap } = useMemo(() => {
+      if (mode !== 'divination' || !divNum || divNum.length !== 4) {
+          return { divMingIndex: -1, divSiHuaMap: undefined };
+      }
+
+      // 1. AB 決定命宮
+      const numAB = parseInt(divNum[0] + divNum[1]);
+      const finalAB = getRecursiveSum(numAB);
+      // finalAB 對應地支 (1=子, 2=丑...)
+      // 由於 chartData.palaces[i].zhiIndex 是 0(子)..11(亥)
+      // 所以目標 zhiIndex = finalAB - 1
+      const targetZhiIndex = finalAB - 1;
+      
+      // 找出該地支對應的宮位 index
+      const foundMingIdx = chartData?.palaces.findIndex(p => p.zhiIndex === targetZhiIndex) ?? -1;
+
+      // 2. CD 決定四化
+      const numCD = parseInt(divNum[2] + divNum[3]);
+      const finalCD = getRecursiveSum(numCD);
+      const ganIdx = getDivinationStem(finalCD); // 轉換為天干 Index
+      const siHuaMap = getSiHuaMap(ganIdx); // 取得四化 Map
+
+      return { divMingIndex: foundMingIdx, divSiHuaMap: siHuaMap };
+
+  }, [divNum, mode, chartData]);
+
   const externalSiHuaMap = useMemo(() => {
       if (externalGan === null) return undefined;
       return getSiHuaMap(externalGan);
@@ -216,12 +271,13 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
 
   const benMingMajorStarsStr = useMemo(() => {
       if (!baseEngine || !baseChartData) return '';
-      const pos = mode === 'divination' ? -1 : baseEngine.getMingPos();
+      // 紫占模式下，如果已經算出新的命宮，就顯示新命宮的主星
+      const pos = mode === 'divination' && divMingIndex !== -1 ? divMingIndex : baseEngine.getMingPos();
       if (pos === -1) return '';
       const p = chartData?.palaces[pos] || baseChartData.palaces[pos];
       if (p && p.majorStars.length > 0) return `(${p.majorStars.map(s => s.name).join('、')})`;
       return '(無主星)';
-  }, [baseEngine, baseChartData, mode, chartData]);
+  }, [baseEngine, baseChartData, mode, chartData, divMingIndex]);
 
   const resetAllStates = () => {
     setDaXianSeq(-1); setLiuNianYear(null); setShowXiaoXian(false);
@@ -239,9 +295,8 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const resetTime = () => { setCurrentHour(client!.birthHour); resetAllStates(); };
   const handleBack = () => { onBack ? onBack() : navigate('/'); };
   
-  // 截圖邏輯 (修正)
+  // 截圖邏輯
   const isBenMingState = daXianSeq === -1 && liuNianYear === null;
-  // 修改點：加入 externalGan === null 的判斷
   const isCleanState = isBenMingState && flyingPalace === null && selectedPalace === null && externalGan === null && mode !== 'divination';
 
   const handleDownload = async () => { 
@@ -274,7 +329,14 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const liuNianList = useMemo(() => { if (mode === 'divination') return []; const targetSeq = daXianSeq === -1 ? 0 : daXianSeq; const targetDaXian = daXianList[targetSeq]; if (!targetDaXian) return []; const list = []; for (let i = 0; i < 10; i++) { const year = targetDaXian.startYear + i; const age = targetDaXian.startAge + i; const gan = (year - 4) % 10; const zhi = (year - 4) % 12; list.push({ year, age, label: `${year}${GAN[gan]}${ZHI[zhi]} ${age}` }); } return list; }, [daXianSeq, daXianList, mode]);
   const xiaoXianMingIdx = useMemo(() => { if (!liuNianYear || !baseChartData || !baseEngine) return -1; const virtualAge = liuNianYear - baseChartData.lunarYear + 1; return baseEngine.getXiaoXianPos(virtualAge); }, [liuNianYear, baseChartData, baseEngine]);
   const benMingPos = baseEngine ? baseEngine.getMingPos() : 0;
-  const divMingIndex = useMemo(() => { if (mode !== 'divination') return -1; if (!isDivinationReady) return -1; let mingNum = parseInt(divNum[0] + divNum[1], 10); while (mingNum > 12) { mingNum = parseInt(mingNum.toString()[0]) + parseInt(mingNum.toString()[1]); } const targetZhiIdx = (mingNum - 1) % 12; return chartData?.palaces.findIndex(p => p.zhiIndex === targetZhiIdx) ?? -1; }, [mode, divNum, chartData, isDivinationReady]);
+  
+  // [修正] isBenMingMing 判斷：若為紫占，使用 divMingIndex
+  const getIsBenMingMing = (palaceIdx: number) => {
+      if (mode === 'divination') {
+          return palaceIdx === divMingIndex;
+      }
+      return palaceIdx === benMingPos;
+  }
 
   const handleDaXianClick = (seq: number) => { setDaXianSeq(daXianSeq === seq ? -1 : seq); setLiuNianYear(null); setShowXiaoXian(false); setFlyingPalace(null); setSelectedPalace(null); setIsReverse(false); };
   const handleLiuNianClick = (year: number) => { setLiuNianYear(liuNianYear === year ? null : year); setShowXiaoXian(false); setFlyingPalace(null); setSelectedPalace(null); setIsReverse(false); };
@@ -282,7 +344,24 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const handlePalaceClick = (palaceIdx: number) => { setSelectedPalace(selectedPalace === palaceIdx ? null : palaceIdx); };
   const handleTriggerClick = (palaceIdx: number) => { setFlyingPalace(flyingPalace === palaceIdx ? null : palaceIdx); };
   const flyingStarsLookup = (() => { if (flyingPalace === null) return {}; const targetPalace = chartData!.palaces[flyingPalace]; if (!targetPalace) return {}; return baseEngine!.getSiHuaMap(targetPalace.ganIndex); })();
-  const getRelativeNames = (currentIdx: number) => { if (mode === 'divination') return {}; let daName = undefined, liuName = undefined, xiaoName = undefined; if (daXianSeq >= 0) { const daMingIdx = daXianList[daXianSeq].palaceIdx; const offset = (daMingIdx - currentIdx + 12) % 12; daName = `大${PALACE_NAMES[offset].substring(0, 1)}`; } if (liuNianYear) { const liuZhi = (liuNianYear - 4) % 12; const liuMingIdx = chartData!.palaces.findIndex(p => p.zhiIndex === liuZhi); if (liuMingIdx >= 0) { const offset = (liuMingIdx - currentIdx + 12) % 12; liuName = `流${PALACE_NAMES[offset].substring(0, 1)}`; } } if (xiaoXianMingIdx >= 0 && showXiaoXian) { const offset = (xiaoXianMingIdx - currentIdx + 12) % 12; xiaoName = `小${PALACE_NAMES[offset].substring(0, 1)}`; } return { daName, liuName, xiaoName }; };
+  const getRelativeNames = (currentIdx: number) => { 
+      // 紫占模式也需要顯示命兄夫子...
+      const mingIdx = mode === 'divination' && divMingIndex !== -1 ? divMingIndex : (daXianSeq >= 0 ? daXianList[daXianSeq].palaceIdx : (liuNianYear ? chartData!.palaces.findIndex(p => p.zhiIndex === (liuNianYear - 4) % 12) : benMingPos));
+      
+      // 如果是紫占，我們只想顯示「本命」的相對位置 (因為沒有大限流年)
+      if (mode === 'divination') {
+          if (divMingIndex === -1) return {};
+          const offset = (divMingIndex - currentIdx + 12) % 12;
+          return { divinationName: PALACE_NAMES[offset] };
+      }
+
+      // 標準模式邏輯 (不變)
+      let daName = undefined, liuName = undefined, xiaoName = undefined; 
+      if (daXianSeq >= 0) { const daMingIdx = daXianList[daXianSeq].palaceIdx; const offset = (daMingIdx - currentIdx + 12) % 12; daName = `大${PALACE_NAMES[offset].substring(0, 1)}`; } 
+      if (liuNianYear) { const liuZhi = (liuNianYear - 4) % 12; const liuMingIdx = chartData!.palaces.findIndex(p => p.zhiIndex === liuZhi); if (liuMingIdx >= 0) { const offset = (liuMingIdx - currentIdx + 12) % 12; liuName = `流${PALACE_NAMES[offset].substring(0, 1)}`; } } 
+      if (xiaoXianMingIdx >= 0 && showXiaoXian) { const offset = (xiaoXianMingIdx - currentIdx + 12) % 12; xiaoName = `小${PALACE_NAMES[offset].substring(0, 1)}`; } 
+      return { daName, liuName, xiaoName }; 
+  };
 
   if (loading || !client || !baseChartData || !baseEngine || !chartData) {
     return <div className="flex h-[100dvh] w-full items-center justify-center bg-gray-100"><Loader2 className="animate-spin text-gray-500" size={48} /></div>;
@@ -299,7 +378,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
             列表
         </button>
 
-        {/* 右側：他人生年 + 截圖 */}
+        {/* 右側：他人生年 + 截圖 (紫占隱藏) */}
         {mode === 'standard' && (
             <div className="flex gap-2">
                 {externalGan !== null ? (
@@ -362,7 +441,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                 // 中間區塊渲染
                 if (gridPos === 5) {
                     return (
-                        // 【關鍵修正】這裡加上了 h-full w-full，確保父層把空間傳遞給 CenterInfoBoard
                         <div key="center-board" className="col-span-2 row-span-2 z-0 relative h-full w-full">
                              <CenterInfoBoard 
                                 key="center"
@@ -382,7 +460,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                                 divNum={divNum}
                                 isDivinationReady={isDivinationReady}
                                 
-                                // 傳遞功能鍵狀態
                                 onToggleTwin={() => setIsTwinMode(!isTwinMode)}
                                 onToggleInverted={() => setIsReverse(!isReverse)}
                                 onToggleSmallLimit={toggleXiaoXian}
@@ -396,17 +473,15 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                     );
                 }
                 
-                // 忽略中間其他三個空位
-                if (gridPos === 6 || gridPos === 9 || gridPos === 10) {
-                    return null;
-                }
-
+                if (gridPos === 6 || gridPos === 9 || gridPos === 10) return null;
                 if (palaceIdx === null) return null;
 
-                const { daName, liuName, xiaoName } = getRelativeNames(palaceIdx);
+                const relNames = getRelativeNames(palaceIdx);
                 const oppPalaceIdx = (palaceIdx + 6) % 12;
-                const { daName: reverseDaName, liuName: reverseLiuName } = getRelativeNames(oppPalaceIdx);
-                const isBenMingMing = mode === 'divination' ? palaceIdx === divMingIndex : palaceIdx === benMingPos;
+                
+                // [修正] 紫占模式下的命宮判定
+                const isBenMingMing = getIsBenMingMing(palaceIdx);
+                
                 const isDaXianMing = daXianSeq >= 0 && daXianList[daXianSeq].palaceIdx === palaceIdx;
                 const isLiuNianMing = liuNianYear !== null && chartData.palaces[palaceIdx].zhiIndex === (liuNianYear - 4) % 12;
                 const isXiaoXianMingPalace = liuNianYear !== null && palaceIdx === xiaoXianMingIdx;
@@ -414,17 +489,15 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                 const isConnected = selectedPalace !== null && Object.values(connections).includes(palaceIdx);
                 const showXiaoXianSeal = isXiaoXianMingPalace && !showXiaoXian;
                 const isFlyingSource = flyingPalace === palaceIdx;
-                let divPalaceName = undefined;
-                if (mode === 'divination' && divMingIndex !== -1) { const offset = (divMingIndex - palaceIdx + 12) % 12; divPalaceName = PALACE_NAMES[offset]; }
 
                 return (
                     <div key={palaceIdx} onClick={() => handlePalaceClick(palaceIdx)} className={`relative cursor-pointer transition-all duration-200 border border-gray-300 box-border overflow-visible ${isConnected ? 'bg-red-50' : 'hover:bg-gray-50'} ${isFlyingSource ? 'ring-4 ring-purple-400 z-50 animate-pulse' : ''}`} style={isFlyingSource ? { animationIterationCount: 3 } : {}}>
                         {isFlyingSource && <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-purple-600 text-white text-[11px] font-bold px-2 py-0.5 rounded-full shadow-lg z-50 whitespace-nowrap tracking-wide border border-white">{GAN[chartData.palaces[palaceIdx].ganIndex]}干飛化</div>}
                         <PalaceCard
                             palace={chartData.palaces[palaceIdx]}
-                            daName={daName}
-                            liuName={liuName}
-                            xiaoName={xiaoName}
+                            daName={relNames.daName}
+                            liuName={relNames.liuName}
+                            xiaoName={relNames.xiaoName}
                             isBody={mode !== 'divination' && chartData.palaces[palaceIdx].isBody}
                             isXiaoXianMing={showXiaoXianSeal}
                             isBenMingMing={isBenMingMing}
@@ -435,9 +508,10 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                             flyingStars={flyingStarsLookup}
                             isTwinMode={isTwinMode}
                             isReverse={isReverse}
-                            reverseDaName={reverseDaName}
-                            reverseLiuName={reverseLiuName}
-                            divinationName={divPalaceName}
+                            // ...
+                            divinationName={relNames.divinationName}
+                            // [關鍵修正] 若為紫占模式，優先傳遞 divSiHuaMap (CD 決定的四化)
+                            divinationSiHua={mode === 'divination' ? divSiHuaMap : undefined}
                             externalSiHua={externalSiHuaMap}
                         />
                         {isDaXianMing && isDaXianActive && <div className="absolute inset-0 border-[3px] border-gray-600 pointer-events-none z-20 opacity-70"></div>}

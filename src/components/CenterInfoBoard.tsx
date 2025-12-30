@@ -4,24 +4,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { Client, Relationship } from '../db';
 import type { ChartData } from '../logic/types';
 
-// ==========================================
-// 1. 定義箭頭元件 (SVG Polygon)
-// ==========================================
 const ArrowHead = ({ x, y, rotation }: { x: number, y: number, rotation: number }) => (
   <polygon
     points="0,0 -6,-4 -6,4"
-    fill="#cbd5e1" // gray-300
+    fill="#cbd5e1"
     transform={`translate(${x}, ${y}) rotate(${rotation})`}
   />
 );
 
-// ==========================================
-// 2. 定義佈局參數 (緊湊版)
-// ==========================================
 const GRAPH_CONFIG = {
-  Y_GAP: 80,       // 垂直距離 (長輩在上，晚輩在下)
-  X_GAP: 130,      // 水平距離
-  SIBLING_GAP: 90, // 同層間距
+  Y_GAP: 80,
+  X_GAP: 130,
+  SIBLING_GAP: 90,
 };
 
 interface GraphNode {
@@ -70,7 +64,7 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     onHistoryBack,
     onNavigate,
     onCompatibility,
-    // benMingMajorStarsStr, // 已移除顯示，這裡保留解構但不使用
+    // benMingMajorStarsStr, 
     onChangeHour,
     onResetTime,
     currentHourZhi,
@@ -90,15 +84,11 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     const hasRelations = relationships.length > 0;
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
-    // =========================================================
-    // 3. 計算節點與連線 (佈局邏輯核心)
-    // =========================================================
     const { nodes, lines } = useMemo(() => {
         if (!hasRelations) return { nodes: [], lines: [] };
 
         const calculatedNodes: GraphNode[] = [];
         
-        // 中心：命主
         calculatedNodes.push({
             id: 'center',
             x: 0,
@@ -107,11 +97,9 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
             relType: 'self',
         });
 
-        // 分類邏輯 (確保女兒/子女在 'bottom')
         const parents = relationships.filter(r => ['父親', '母親', '爸爸', '媽媽', '父', '母'].includes(r.relation_type));
         const children = relationships.filter(r => ['子女', '兒子', '女兒', '長男', '長女', '次男', '次女'].includes(r.relation_type));
         const partners = relationships.filter(r => ['配偶', '老公', '老婆', '丈夫', '妻子', '情侶'].includes(r.relation_type));
-        // 其他人放左邊 (包含兄弟姊妹)
         const others = relationships.filter(r => !parents.includes(r) && !children.includes(r) && !partners.includes(r));
 
         const layoutGroup = (group: Relationship[], direction: 'top' | 'bottom' | 'left' | 'right') => {
@@ -125,20 +113,19 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                 
                 let x = 0, y = 0;
                 switch (direction) {
-                    case 'top':    y = -GRAPH_CONFIG.Y_GAP; x = offset; break; // 負 Y = 向上 (長輩)
-                    case 'bottom': y = GRAPH_CONFIG.Y_GAP;  x = offset; break; // 正 Y = 向下 (晚輩)
-                    case 'left':   x = -GRAPH_CONFIG.X_GAP; y = offset; break; // 負 X = 向左
-                    case 'right':  x = GRAPH_CONFIG.X_GAP;  y = offset; break; // 正 X = 向右
+                    case 'top':    y = -GRAPH_CONFIG.Y_GAP; x = offset; break;
+                    case 'bottom': y = GRAPH_CONFIG.Y_GAP;  x = offset; break;
+                    case 'left':   x = -GRAPH_CONFIG.X_GAP; y = offset; break;
+                    case 'right':  x = GRAPH_CONFIG.X_GAP;  y = offset; break;
                 }
                 calculatedNodes.push({ id: rel.related_client.id, x, y, data: rel.related_client, relType: rel.relation_type });
             });
         };
 
-        // 執行佈局
-        layoutGroup(parents, 'top');    // 父母在上
-        layoutGroup(children, 'bottom'); // 子女在下 (修正您提到的 "A是B女兒" 問題)
-        layoutGroup(others, 'left');    // 兄弟/其他在左
-        layoutGroup(partners, 'right'); // 配偶在右
+        layoutGroup(parents, 'top');
+        layoutGroup(children, 'bottom');
+        layoutGroup(others, 'left');
+        layoutGroup(partners, 'right');
 
         const calculatedLines = calculatedNodes
             .filter(n => n.id !== 'center')
@@ -148,22 +135,19 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                 let arrowX = node.x;
                 let arrowY = node.y;
                 
-                // 卡片尺寸微調 (配合緊湊版面)
                 const halfW = 42; 
                 const halfH = 16;
 
                 if (Math.abs(node.y) > Math.abs(node.x)) {
-                    // 垂直線
                     const cY = node.y / 2;
                     d = `M 0 0 C 0 ${cY}, ${node.x} ${cY}, ${node.x} ${node.y}`;
-                    if (node.y > 0) { arrowRotation = 90; arrowY = node.y - halfH; } // 向下
-                    else { arrowRotation = -90; arrowY = node.y + halfH; } // 向上
+                    if (node.y > 0) { arrowRotation = 90; arrowY = node.y - halfH; }
+                    else { arrowRotation = -90; arrowY = node.y + halfH; }
                 } else {
-                    // 水平線
                     const cX = node.x / 2;
                     d = `M 0 0 C ${cX} 0, ${cX} ${node.y}, ${node.x} ${node.y}`;
-                    if (node.x > 0) { arrowRotation = 0; arrowX = node.x - halfW; } // 向右
-                    else { arrowRotation = 180; arrowX = node.x + halfW; } // 向左
+                    if (node.x > 0) { arrowRotation = 0; arrowX = node.x - halfW; }
+                    else { arrowRotation = 180; arrowX = node.x + halfW; }
                 }
                 return { targetId: node.id, d, arrowX, arrowY, rotation: arrowRotation };
             });
@@ -171,22 +155,22 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
         return { nodes: calculatedNodes, lines: calculatedLines };
     }, [client, relationships, hasRelations]);
 
-    // 紫占模式顯示 (保持不變)
+    // 紫占模式顯示 (簡化)
     if (isDivinationMode) {
         return (
-            <div className="col-span-2 row-span-2 flex flex-col items-center justify-center p-4 bg-white z-10 relative">
-                <div className="flex flex-col items-center gap-2 mb-4">
-                    <div className="text-3xl sm:text-4xl font-bold text-purple-800 tracking-widest text-center">{client.name}</div>
-                    {/* 紫占模式下是否要顯示主星？這裡暫時保留，若要移除也可註解掉 */}
-                    {/* <div className="text-sm font-bold text-gray-500 tracking-wide">{benMingMajorStarsStr}</div> */}
+            <div className="col-span-2 row-span-2 flex flex-col items-center justify-center p-4 bg-white z-10 relative h-full w-full">
+                <div className="flex flex-col items-center gap-4">
+                    <div className="text-4xl font-bold text-purple-800 tracking-widest text-center">紫微占卜</div>
+                    {divNum && (
+                        <div className="flex gap-3">
+                            {divNum.map((n, i) => (
+                                <span key={i} className="text-2xl font-bold text-white bg-purple-600 w-10 h-10 flex items-center justify-center rounded-lg shadow-md border border-purple-400">
+                                    {n}
+                                </span>
+                            ))}
+                        </div>
+                    )}
                 </div>
-                {isDivinationReady && divNum && (
-                    <div className="flex gap-2">
-                        {divNum.map((n, i) => (
-                            <span key={i} className="text-xl font-bold text-purple-800 bg-purple-100 px-3 py-1 rounded-lg border border-purple-200 shadow-sm">{n}</span>
-                        ))}
-                    </div>
-                )}
             </div>
         );
     }
@@ -197,7 +181,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                 
                 {/* --- [左側：個人資料欄] --- */}
                 <div className={`h-full flex flex-col p-1 border-r border-gray-100 bg-white z-20 relative transition-all duration-300 ${hasRelations ? 'basis-[35%] shrink-0' : 'w-full'}`}>
-                    {/* 麵包屑 */}
                     {historyStack.length > 0 && (
                          <div className="absolute top-0 left-0 w-full px-2 py-1 z-50 bg-white/90 backdrop-blur-sm border-b border-gray-100 flex items-center gap-1 overflow-hidden">
                             <button onClick={onHistoryBack} className="flex items-center text-gray-500 hover:text-blue-600 transition-colors shrink-0"><ArrowLeft size={14} /></button>
@@ -212,20 +195,15 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                     
                     <div className={`${historyStack.length > 0 ? 'mt-6' : 'mt-1'}`}></div>
 
-                    {/* 時辰切換 */}
                     <div className="flex justify-between items-center px-1 mt-1 shrink-0">
                         <button onClick={() => onChangeHour(-1)} className="text-gray-400 hover:text-gray-800 font-bold text-base select-none p-1">&lt;</button>
                         <div onClick={isTimeModified ? onResetTime : undefined} className={`text-sm font-bold select-none cursor-pointer ${isTimeModified ? 'text-blue-600 underline' : 'text-gray-700'}`}>{currentHourZhi}時</div>
                         <button onClick={() => onChangeHour(1)} className="text-gray-400 hover:text-gray-800 font-bold text-base select-none p-1">&gt;</button>
                     </div>
 
-                    {/* 命主資料 (已移除主星資訊) */}
                     <div className="flex-1 flex flex-col items-center justify-start pt-2 text-center gap-0.5 min-h-0 overflow-hidden">
                         <div className="text-2xl font-bold text-gray-900 tracking-widest leading-tight truncate w-full px-2">{client.name}</div>
                         
-                        {/* [Requirement 1] 移除主星資訊 */}
-                        {/* <div className="text-xs font-bold text-red-600 tracking-wide">{benMingMajorStarsStr}</div> */}
-
                         {chartData && (
                             <div className="text-[10px] text-gray-500 font-medium mt-1 space-y-0.5">
                                 <div>{client.gender} | {chartData.bureau}</div>
@@ -243,29 +221,25 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                         )}
                     </div>
 
-                    {/* 功能按鈕 */}
-                    {!isDivinationMode && (
-                        <div className="mt-auto flex justify-center shrink-0 mb-1">
-                            <div className="flex bg-slate-100/80 rounded-md p-0.5 gap-0.5 border border-slate-200">
-                                {!isDaXian && !isLiuNian && (
-                                    <>
-                                        <button onClick={onToggleTwin} className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${showTwin ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}><Users size={10} /> 雙胞胎</button>
-                                        <div className="w-px bg-gray-300 my-0.5"></div>
-                                    </>
-                                )}
-                                <button onClick={onToggleInverted} className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${showInverted ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}><Repeat size={10} /> 顛倒盤</button>
-                                {isLiuNian && (
-                                    <>
-                                        <div className="w-px bg-gray-300 my-0.5"></div>
-                                        <button onClick={onToggleSmallLimit} className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${showSmallLimit ? 'bg-green-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}><Clock size={10} /> 小限</button>
-                                    </>
-                                )}
-                            </div>
+                    <div className="mt-auto flex justify-center shrink-0 mb-1">
+                        <div className="flex bg-slate-100/80 rounded-md p-0.5 gap-0.5 border border-slate-200">
+                            {!isDaXian && !isLiuNian && (
+                                <>
+                                    <button onClick={onToggleTwin} className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${showTwin ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}><Users size={10} /> 雙胞胎</button>
+                                    <div className="w-px bg-gray-300 my-0.5"></div>
+                                </>
+                            )}
+                            <button onClick={onToggleInverted} className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${showInverted ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}><Repeat size={10} /> 顛倒盤</button>
+                            {isLiuNian && (
+                                <>
+                                    <div className="w-px bg-gray-300 my-0.5"></div>
+                                    <button onClick={onToggleSmallLimit} className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${showSmallLimit ? 'bg-green-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}><Clock size={10} /> 小限</button>
+                                </>
+                            )}
                         </div>
-                    )}
+                    </div>
                 </div> 
 
-                {/* --- [右側：關係圖] --- */}
                 {hasRelations && (
                     <div className="hidden md:block flex-1 h-full relative bg-white border-l border-gray-100 overflow-hidden cursor-grab active:cursor-grabbing" onClick={() => setSelectedNodeId(null)}>
                          <div className="absolute bottom-2 right-2 text-[10px] text-gray-400 pointer-events-none select-none z-0">可拖曳移動畫布</div>
