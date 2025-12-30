@@ -1,255 +1,268 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { Eye, RefreshCw, Network } from 'lucide-react';
-import type { Client, Relationship } from '../db';
-import type { ChartData } from '../logic/types';
+import React, { useState, useEffect } from 'react';
+import { type Client, type Relationship } from '../db';
+import { type ChartData } from '../logic/types';
+import { DateInput } from './DateInput';
+import { ArrowLeft, RefreshCw, Users, Repeat, Clock } from 'lucide-react';
 
 interface CenterInfoBoardProps {
   client: Client;
-  chartData: ChartData;
+  chartData: ChartData | null;
   relationships: Relationship[];
-  onNavigate: (targetClient: Client) => void;
-  onCompatibility: (targetClient: Client) => void;
+  historyStack: Client[];
+  
+  onHistoryBack: () => void;
+  onNavigate: (target: Client) => void;
+  onCompatibility: (target: Client) => void;
+  
   benMingMajorStarsStr: string;
   onChangeHour: (delta: number) => void;
   onResetTime: () => void;
   currentHourZhi: string;
   isTimeModified: boolean;
-  isDivinationMode?: boolean;
-  divNum?: string[];
-  isDivinationReady?: boolean;
+  
+  isDivinationMode: boolean;
+  divNum: string[];
+  isDivinationReady: boolean;
+
+  // 功能鍵控制
+  onToggleTwin: () => void;
+  onToggleInverted: () => void;
+  onToggleSmallLimit: () => void;
+  showTwin: boolean;
+  showInverted: boolean;
+  showSmallLimit: boolean;
+  isDaXian: boolean;
+  isLiuNian: boolean;
 }
 
-// 嚴格定義四個象限的座標生成器
-const getPosition = (zone: 'top' | 'bottom' | 'left' | 'right', index: number, total: number) => {
-    const spread = 20; // 擴散程度
-    
-    // 左側特殊處理：因為可能較多人，採用垂直交錯排列
-    if (zone === 'left') {
-        const xOffset = (index % 2) * 5; // 左右微調，製造蜂巢感
-        const yBase = 50; 
-        const yOffset = (Math.floor(index / 2) + 1) * 12 * (index % 2 === 0 ? -1 : 1); // 上下交錯
-        return { x: 15 + xOffset, y: yBase + (index === 0 ? 0 : yOffset) };
-    }
-
-    const offset = total === 1 ? 0 : (index - (total - 1) / 2) * spread;
-
-    switch (zone) {
-        case 'top':    return { x: 50 + offset, y: 15 };
-        case 'bottom': return { x: 50 + offset, y: 85 };
-        case 'right':  return { x: 85, y: 50 + offset };
-        default: return {x: 50, y: 50};
-    }
-};
-
 export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
-    client,
-    chartData,
-    relationships,
-    onNavigate,
-    onCompatibility,
-    benMingMajorStarsStr,
-    onChangeHour,
-    onResetTime,
-    currentHourZhi,
-    isTimeModified,
-    isDivinationMode,
-    divNum,
-    isDivinationReady
+  client,
+  chartData,
+  relationships,
+  historyStack,
+  onHistoryBack,
+  onNavigate,
+  onCompatibility,
+  benMingMajorStarsStr,
+  onChangeHour,
+  onResetTime,
+  currentHourZhi,
+  isTimeModified,
+  isDivinationMode,
+  divNum,
+  isDivinationReady,
+  
+  onToggleTwin,
+  onToggleInverted,
+  onToggleSmallLimit,
+  showTwin,
+  showInverted,
+  showSmallLimit,
+  isDaXian,
+  isLiuNian
 }) => {
-    const [selectedRelId, setSelectedRelId] = useState<string | null>(null);
+  const [scale, setScale] = useState(1);
+  const [dateVal, setDateVal] = useState({
+      year: client.birthYear.toString(),
+      month: client.birthMonth.toString().padStart(2, '0'),
+      day: client.birthDay.toString().padStart(2, '0'),
+      hour: client.birthHour.toString().padStart(2, '0'),
+      minute: client.birthMinute.toString().padStart(2, '0'),
+  });
 
-    // 2. 自動關閉氣泡：當命主切換時，重置選取狀態
-    useEffect(() => {
-        setSelectedRelId(null);
-    }, [client.id]);
-
-    // 點擊空白處關閉氣泡
-    const handleBgClick = () => {
-        if (selectedRelId) setSelectedRelId(null);
+  useEffect(() => {
+    const handleResize = () => {
+        const board = document.getElementById('center-info-board');
+        if (board) {
+            const containerWidth = board.parentElement?.clientWidth || 300;
+            const containerHeight = board.parentElement?.clientHeight || 300;
+            const contentWidth = board.scrollWidth;
+            const contentHeight = board.scrollHeight;
+            
+            const scaleX = containerWidth / contentWidth;
+            const scaleY = containerHeight / contentHeight;
+            const newScale = Math.min(scaleX, scaleY, 1) * 0.95; 
+            setScale(newScale);
+        }
     };
+    window.addEventListener('resize', handleResize);
+    setTimeout(handleResize, 100); 
+    return () => window.removeEventListener('resize', handleResize);
+  }, [client, chartData, relationships]);
 
-    // 1. 整理關係節點位置 (嚴格象限分類)
-    const graphNodes = useMemo(() => {
-        const topGroup = relationships.filter(r => ['父親', '母親', '爸爸', '媽媽', '父', '母'].includes(r.relation_type));
-        const bottomGroup = relationships.filter(r => ['子女', '兒子', '女兒'].includes(r.relation_type));
-        const rightGroup = relationships.filter(r => ['配偶', '老公', '老婆', '丈夫', '妻子', '情侶', '伴侶'].includes(r.relation_type));
-        
-        // 剩下的全部歸類到左側
-        const leftGroup = relationships.filter(r => 
-            !topGroup.includes(r) && 
-            !bottomGroup.includes(r) && 
-            !rightGroup.includes(r)
-        );
+  // 動態版面：有關聯才分欄，沒關聯則置中單欄
+  const hasRelations = relationships.length > 0;
 
-        const nodes: any[] = [];
+  return (
+    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[45]">
+      <div 
+        id="center-info-board"
+        className={`bg-white/95 backdrop-blur-sm shadow-xl rounded-xl border border-gray-200 pointer-events-auto transition-all duration-300 overflow-hidden relative
+            ${hasRelations ? 'w-[190%] h-[190%]' : 'w-[95%] h-[95%] max-w-sm'}
+        `}
+        style={{ transform: `scale(${scale})` }}
+      >
+        {/* 1. 上一層返回按鈕 (Contextual Back Button) */}
+        {historyStack.length > 0 && (
+           <button 
+             onClick={onHistoryBack}
+             className="absolute top-2 left-2 z-50 flex items-center gap-1 px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-md transition-colors border border-gray-300"
+           >
+             <ArrowLeft size={12} />
+             <span>返回 {historyStack[historyStack.length - 1].name}</span>
+           </button>
+        )}
 
-        topGroup.forEach((r, i) => nodes.push({ ...r, ...getPosition('top', i, topGroup.length) }));
-        bottomGroup.forEach((r, i) => nodes.push({ ...r, ...getPosition('bottom', i, bottomGroup.length) }));
-        rightGroup.forEach((r, i) => nodes.push({ ...r, ...getPosition('right', i, rightGroup.length) }));
-        leftGroup.forEach((r, i) => nodes.push({ ...r, ...getPosition('left', i, leftGroup.length) }));
-
-        return nodes;
-    }, [relationships]);
-
-    if (isDivinationMode) {
-        return (
-            <div className="col-span-2 row-span-2 flex flex-col items-center justify-center p-4 border border-gray-300 bg-white z-10 relative">
-                <div className="flex flex-col items-center gap-2 mb-4">
-                    <div className="text-3xl sm:text-4xl font-bold text-purple-800 tracking-widest text-center">
-                        {client.name}
-                    </div>
-                    <div className="text-sm font-bold text-gray-500 tracking-wide">
-                        {benMingMajorStarsStr}
-                    </div>
+        {/* 內容容器 */}
+        <div className={`w-full h-full ${hasRelations ? 'grid grid-cols-2 divide-x divide-gray-200' : 'flex flex-col'}`}>
+            
+            {/* 左側：命主資料與功能區 */}
+            <div className="flex flex-col p-4 relative">
+                
+                {/* 標題區 */}
+                <div className="text-center mb-2 mt-6">
+                    {isDivinationMode ? (
+                        <>
+                           <h2 className="text-xl font-bold text-purple-800">紫微占卜</h2>
+                           {!isDivinationReady && <div className="text-sm text-gray-500 mt-1">請默念問題後，輸入三個數字</div>}
+                        </>
+                    ) : (
+                        <>
+                            <div className="flex items-center justify-center gap-2 mb-1">
+                                <span className="text-xs bg-gray-800 text-white px-1.5 py-0.5 rounded">{chartData?.bureau}</span>
+                                <span className={`text-xs px-1.5 py-0.5 rounded ${client.gender === '男' ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'}`}>
+                                    {chartData?.solarDate.includes('陽') ? '陽' : '陰'}{client.gender}
+                                </span>
+                            </div>
+                            <h2 className="text-2xl font-bold text-gray-900 leading-tight">{client.name}</h2>
+                            <div className="text-sm font-bold text-red-600 mt-1">{benMingMajorStarsStr}</div>
+                        </>
+                    )}
                 </div>
-                {isDivinationReady && divNum && (
-                    <div className="flex gap-2">
-                        {divNum.map((n, i) => (
-                            <span key={i} className="text-xl font-bold text-purple-800 bg-purple-100 px-3 py-1 rounded-lg border border-purple-200 shadow-sm">{n}</span>
+
+                {/* 命主/身主 (單行顯示) */}
+                {!isDivinationMode && chartData && (
+                    <div className="flex justify-center gap-4 text-xs text-gray-500 font-mono mb-3 border-b border-gray-100 pb-2">
+                        <span>命主：{chartData.mingZhu}</span>
+                        <span>身主：{chartData.shenZhu}</span>
+                    </div>
+                )}
+
+                {/* 時間顯示/輸入區 */}
+                <div className="flex-1 flex flex-col items-center justify-center space-y-3">
+                    {isDivinationMode ? (
+                        <div className="flex gap-2">
+                             {/* 占卜輸入邏輯 (省略細節，維持原本顯示) */}
+                             <div className="text-lg font-mono font-bold tracking-widest">
+                                {divNum.map((n, i) => <span key={i} className="mx-1 border-b-2 border-purple-300 w-8 inline-block text-center">{n}</span>)}
+                             </div>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="w-full max-w-[200px]">
+                                <DateInput value={dateVal} onChange={() => { /* ReadOnly Display in this simplified view */ }} />
+                            </div>
+                            
+                            {/* 時辰調整 */}
+                            <div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-lg border border-gray-100">
+                                <button onClick={() => onChangeHour(-1)} className="p-1 hover:bg-white rounded shadow-sm text-gray-500"><ArrowLeft size={14}/></button>
+                                <span className={`text-sm font-mono font-bold w-16 text-center ${isTimeModified ? 'text-blue-600' : 'text-gray-700'}`}>
+                                    {currentHourZhi}時
+                                </span>
+                                <button onClick={() => onChangeHour(1)} className="p-1 hover:bg-white rounded shadow-sm text-gray-500"><ArrowLeft size={14} className="rotate-180"/></button>
+                                {isTimeModified && (
+                                    <button onClick={onResetTime} className="ml-1 p-1 text-red-500 hover:bg-red-50 rounded" title="重置時間">
+                                        <RefreshCw size={12}/>
+                                    </button>
+                                )}
+                            </div>
+                            
+                            <div className="text-xs text-gray-400 font-mono text-center leading-relaxed">
+                                <div>農曆 {chartData?.lunarDate}</div>
+                                <div>{chartData?.bazi}</div>
+                            </div>
+                        </>
+                    )}
+                </div>
+
+                {/* 左下角功能按鈕列 (依狀態顯示) */}
+                {/* 邏輯：
+                    - 本命盤 (DaXian=F, LiuNian=F): 雙胞胎 | 顛倒盤 (小限隱藏)
+                    - 大限盤 (DaXian=T, LiuNian=F): 顛倒盤 (雙胞胎隱藏, 小限隱藏)
+                    - 流年盤 (LiuNian=T): 顛倒盤 | 小限 (雙胞胎隱藏)
+                */}
+                {!isDivinationMode && (
+                    <div className="absolute bottom-2 left-2 z-50 no-screenshot">
+                        <div className="flex bg-slate-800/90 rounded-md border border-slate-600 backdrop-blur-sm overflow-hidden p-0.5 shadow-lg gap-0.5">
+                            {/* 雙胞胎：只在本命盤出現 */}
+                            {!isDaXian && !isLiuNian && (
+                                <>
+                                    <button 
+                                        onClick={onToggleTwin}
+                                        className={`px-2 py-1 text-[10px] font-bold transition-colors flex items-center gap-1 rounded-sm ${showTwin ? 'bg-indigo-600 text-white' : 'hover:bg-slate-700 text-slate-300'}`}
+                                        title="切換雙胞胎盤"
+                                    >
+                                        <Users size={12} />
+                                        雙胞胎
+                                    </button>
+                                    <div className="w-px bg-slate-600 my-0.5 opacity-50"></div>
+                                </>
+                            )}
+
+                            {/* 顛倒盤：所有狀態皆出現 (判斷異地生活) */}
+                            <button 
+                                onClick={onToggleInverted}
+                                className={`px-2 py-1 text-[10px] font-bold transition-colors flex items-center gap-1 rounded-sm ${showInverted ? 'bg-indigo-600 text-white' : 'hover:bg-slate-700 text-slate-300'}`}
+                                title="切換顛倒盤"
+                            >
+                                <Repeat size={12} />
+                                顛倒盤
+                            </button>
+
+                            {/* 小限：只在流年盤出現 */}
+                            {isLiuNian && (
+                                <>
+                                    <div className="w-px bg-slate-600 my-0.5 opacity-50"></div>
+                                    <button 
+                                        onClick={onToggleSmallLimit}
+                                        className={`px-2 py-1 text-[10px] font-bold transition-colors flex items-center gap-1 rounded-sm ${showSmallLimit ? 'bg-green-600 text-white' : 'hover:bg-slate-700 text-slate-300'}`}
+                                        title="切換小限盤"
+                                    >
+                                        <Clock size={12} />
+                                        小限
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* 右側：關係圖 (僅在有關聯時顯示) */}
+            {hasRelations && (
+                <div className="relative overflow-hidden bg-gray-50/50">
+                    <div className="absolute top-2 left-2 text-xs font-bold text-gray-400 select-none">關係網</div>
+                    
+                    {/* 簡易關係列表渲染 (取代原本複雜的 Graph，保持方框內整潔) */}
+                    <div className="h-full overflow-y-auto p-4 pt-8 space-y-2">
+                        {relationships.map(rel => (
+                            <div 
+                                key={rel.id} 
+                                onClick={() => rel.related_client && onNavigate(rel.related_client)}
+                                className="group flex items-center justify-between p-2 bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:shadow-sm cursor-pointer transition-all"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100">{rel.relation_type}</span>
+                                    <span className="text-sm font-bold text-gray-700 group-hover:text-blue-700">{rel.related_client?.name}</span>
+                                </div>
+                                <span className="text-[10px] text-gray-400 font-mono">{rel.related_client?.birthYear}</span>
+                            </div>
                         ))}
                     </div>
-                )}
-            </div>
-        );
-    }
-
-    return (
-        <div className="col-span-2 row-span-2 flex border border-gray-300 bg-white z-10 relative overflow-hidden">
-            
-            {/* 左側：個人資料 */}
-            <div className="w-full md:w-[40%] h-full flex flex-col p-4 border-r border-gray-100 bg-white z-20 shadow-sm">
-                
-                <div className="flex justify-between items-center mb-4 px-1">
-                    <button onClick={() => onChangeHour(-1)} className="text-gray-400 hover:text-gray-800 font-bold text-lg select-none">&lt;</button>
-                    <div 
-                        onClick={isTimeModified ? onResetTime : undefined} 
-                        className={`text-base font-bold select-none cursor-pointer ${isTimeModified ? 'text-blue-600 underline' : 'text-gray-700'}`} 
-                        title="點擊還原出生時辰"
-                    >
-                        {currentHourZhi}時
-                    </div>
-                    <button onClick={() => onChangeHour(1)} className="text-gray-400 hover:text-gray-800 font-bold text-lg select-none">&gt;</button>
                 </div>
-
-                <div className="text-center mb-4">
-                    <div className="text-3xl md:text-4xl font-bold text-gray-900 tracking-widest leading-tight">
-                        {client.name}
-                    </div>
-                </div>
-
-                <div className="flex-1 flex flex-col justify-start pl-2 gap-3 text-sm text-gray-600">
-                    <div className="space-y-1">
-                        <div className="flex gap-2 items-baseline whitespace-nowrap">
-                            <span className="text-xs font-bold text-gray-400 w-8">西元</span>
-                            <span className="font-mono font-medium text-gray-800">{chartData.solarDate}</span>
-                        </div>
-                        <div className="flex gap-2 items-baseline whitespace-nowrap">
-                            <span className="text-xs font-bold text-gray-400 w-8">農曆</span>
-                            <span className="font-mono font-medium text-gray-800">{chartData.lunarDate}</span>
-                        </div>
-                    </div>
-
-                    <div className="space-y-1 pt-2 border-t border-gray-100">
-                        <div className="flex gap-2 items-center">
-                            <span className="text-xs font-bold text-gray-400 w-8">格局</span>
-                            <span className="font-bold text-blue-700">{client.gender} {chartData.bureau}</span>
-                        </div>
-                        <div className="flex gap-2 items-center">
-                            <span className="text-xs font-bold text-gray-400 w-8">命主</span>
-                            <span>{chartData.mingZhu}</span>
-                        </div>
-                        <div className="flex gap-2 items-center">
-                            <span className="text-xs font-bold text-gray-400 w-8">身主</span>
-                            <span>{chartData.shenZhu}</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* 右側：關係星系圖 (點擊空白關閉 Popover) */}
-            <div 
-                className="hidden md:block w-[60%] h-full relative bg-slate-50 overflow-auto"
-                onClick={handleBgClick}
-            >
-                {relationships.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-gray-300 gap-2 select-none">
-                        <Network size={48} className="opacity-20"/>
-                        <span className="text-xs">尚無關聯</span>
-                    </div>
-                ) : (
-                    <div className="w-full h-full min-w-[300px] min-h-[300px] relative">
-                        <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                            {graphNodes.map((node, i) => (
-                                <line 
-                                    key={i}
-                                    x1="50%" y1="50%" 
-                                    x2={`${node.x}%`} y2={`${node.y}%`} 
-                                    stroke="#cbd5e1" 
-                                    strokeWidth="1.5"
-                                    strokeDasharray="4 4"
-                                />
-                            ))}
-                        </svg>
-
-                        {/* 中心點 (顯示當前命主名字 - Requirement 1) */}
-                        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10">
-                            <div className="px-4 py-2 rounded-lg bg-gradient-to-br from-gray-700 to-gray-800 text-white flex items-center justify-center font-bold text-sm shadow-lg border-2 border-white whitespace-nowrap">
-                                {client.name}
-                            </div>
-                        </div>
-
-                        {/* 衛星點 (移除稱謂標籤 - Requirement 3) */}
-                        {graphNodes.map((node, i) => {
-                            const isTop = ['父親', '母親', '父', '母'].includes(node.relation_type);
-                            const isBottom = ['子女', '兒子', '女兒'].includes(node.relation_type);
-                            const isPartner = ['配偶', '老公', '老婆', '丈夫', '妻子', '情侶'].includes(node.relation_type);
-                            
-                            let bgClass = 'bg-white text-gray-700 border-gray-200';
-                            if (isTop) bgClass = 'bg-amber-50 text-amber-800 border-amber-200';
-                            else if (isBottom) bgClass = 'bg-green-50 text-green-800 border-green-200';
-                            else if (isPartner) bgClass = 'bg-pink-50 text-pink-800 border-pink-200';
-
-                            return (
-                                <div 
-                                    key={node.id}
-                                    className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer group"
-                                    style={{ left: `${node.x}%`, top: `${node.y}%` }}
-                                    onClick={(e) => { e.stopPropagation(); setSelectedRelId(selectedRelId === node.id ? null : node.id); }}
-                                >
-                                    <div className={`flex flex-col items-center transition-all duration-300 ${selectedRelId === node.id ? 'scale-110 z-50' : 'hover:scale-105 z-20'}`}>
-                                        
-                                        {/* 姓名卡片 (無稱謂) */}
-                                        <div className={`
-                                            px-3 py-1.5 rounded-lg border shadow-sm flex items-center justify-center font-bold text-sm whitespace-nowrap
-                                            ${bgClass}
-                                        `}>
-                                            {node.related_client?.name}
-                                        </div>
-                                    </div>
-
-                                    {/* Popover Menu */}
-                                    {selectedRelId === node.id && (
-                                        <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-1 bg-white rounded-lg shadow-xl border border-gray-100 p-1 flex flex-col gap-1 w-32 z-50 animate-in fade-in zoom-in duration-200">
-                                            <button 
-                                                onClick={(e) => { e.stopPropagation(); onNavigate(node.related_client); }}
-                                                className="flex items-center gap-2 px-2 py-1.5 text-xs text-gray-700 hover:bg-blue-50 rounded text-left transition-colors"
-                                            >
-                                                <Eye size={14} /> 查看命盤
-                                            </button>
-                                            <button 
-                                                onClick={(e) => { e.stopPropagation(); onCompatibility(node.related_client); }}
-                                                className="flex items-center gap-2 px-2 py-1.5 text-xs text-purple-700 hover:bg-purple-50 rounded text-left font-bold transition-colors"
-                                            >
-                                                <RefreshCw size={14} /> 進行合盤
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
+            )}
         </div>
-    );
+      </div>
+    </div>
+  );
 };

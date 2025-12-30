@@ -6,7 +6,7 @@ import { CenterInfoBoard } from './CenterInfoBoard';
 import { getClient, getRelationships, type Client, type Relationship } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
 import { GAN, ZHI, PALACE_NAMES, SIHUA_TABLE } from '../logic/constants';
-import { Loader2, UserPlus, X, ArrowLeft, Camera, Users, Repeat, Clock, ChevronLeft } from 'lucide-react';
+import { Loader2, UserPlus, X, ChevronLeft, Camera } from 'lucide-react';
 
 interface ChartBoardProps {
   client?: Client;
@@ -77,21 +77,17 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   // 初始化載入
   useEffect(() => {
     const fetchData = async () => {
-      // 如果已有 client (from state/prop/history)，只載入關係
       if (client) {
           setLoading(false);
-          // 載入該 client 的關係網
           if (client.id && !client.id.startsWith('temp-')) {
               getRelationships(client.id).then(setRelationships);
           } else {
               setRelationships([]);
           }
-          // 同步時辰 (如果切換了 client)
           if (currentHour === -1) setCurrentHour(client.birthHour);
           return;
       }
 
-      // 否則從 ID 載入
       if (id) {
         setLoading(true);
         try {
@@ -99,7 +95,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
             if (data) {
                 setClient(data);
                 setCurrentHour(data.birthHour);
-                // 載入關係
                 getRelationships(data.id).then(setRelationships);
             } else {
                 alert("找不到此命盤");
@@ -116,7 +111,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
       }
     };
     fetchData();
-  }, [id, client, navigate]); // 移除 currentHour 依賴避免迴圈
+  }, [id, client, navigate]);
 
   // 計算引擎
   const baseEngine = useMemo(() => {
@@ -154,8 +149,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
     }
 
     if (mode === 'divination') {
-        const data = displayEngine.getChartData();
-        return data;
+        return displayEngine.getChartData();
     }
 
     // Standard Mode Logic
@@ -209,9 +203,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
           setHistoryStack(prev => [...prev, client]);
           setClient(target);
           setCurrentHour(target.birthHour);
-          // 重置狀態
           resetAllStates();
-          // 資料會在 useEffect 中重新 fetch relationships
       }
   };
 
@@ -223,7 +215,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
           setCurrentHour(prevClient.birthHour);
           resetAllStates();
       } else {
-          handleBack(); // 回列表
+          handleBack();
       }
   };
 
@@ -257,11 +249,14 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const resetTime = () => { setCurrentHour(client!.birthHour); resetAllStates(); };
   const handleBack = () => { onBack ? onBack() : navigate('/'); };
   
-  // 截圖功能
+  // 截圖功能 (嚴格邏輯：本命盤 && 無飛化 && 無三方四正)
+  // 大限/流年/小限 都屬於 Limit 狀態
+  const isBenMingState = daXianSeq === -1 && liuNianYear === null;
+  const isCleanState = isBenMingState && flyingPalace === null && selectedPalace === null && mode !== 'divination';
+
   const handleDownload = async () => { 
       if (!chartRef.current) return; 
       try { 
-          // 暫時隱藏有 .no-screenshot class 的元素
           const dataUrl = await toPng(chartRef.current, { 
               cacheBust: true, 
               backgroundColor: '#ffffff', 
@@ -276,10 +271,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
           console.error('Download failed:', err); 
       } 
   };
-
-  const isLimitActive = daXianSeq >= 0 || liuNianYear !== null || showXiaoXian;
-  // const isCleanState = daXianSeq === -1 && liuNianYear === null && selectedPalace === null && flyingPalace === null && !isReverse && mode !== 'divination';
-  // 註解：現在截圖按鈕常駐顯示，不再依賴 CleanState 隱藏
 
   const isTimeModified = currentHour !== client?.birthHour;
   let currentHourZhi = ZHI[Math.floor((currentHour + 1) / 2) % 12];
@@ -303,7 +294,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const toggleXiaoXian = () => { setShowXiaoXian(!showXiaoXian); setFlyingPalace(null); setSelectedPalace(null); };
   const handlePalaceClick = (palaceIdx: number) => { setSelectedPalace(selectedPalace === palaceIdx ? null : palaceIdx); };
   const handleTriggerClick = (palaceIdx: number) => { setFlyingPalace(flyingPalace === palaceIdx ? null : palaceIdx); };
-  // const toggleViewMode = () => { isLimitActive ? setIsReverse(!isReverse) : setIsTwinMode(!isTwinMode); }; // 移除這個舊的切換邏輯
   const flyingStarsLookup = (() => { if (flyingPalace === null) return {}; const targetPalace = chartData!.palaces[flyingPalace]; if (!targetPalace) return {}; return baseEngine!.getSiHuaMap(targetPalace.ganIndex); })();
   const getRelativeNames = (currentIdx: number) => { if (mode === 'divination') return {}; let daName = undefined, liuName = undefined, xiaoName = undefined; if (daXianSeq >= 0) { const daMingIdx = daXianList[daXianSeq].palaceIdx; const offset = (daMingIdx - currentIdx + 12) % 12; daName = `大${PALACE_NAMES[offset].substring(0, 1)}`; } if (liuNianYear) { const liuZhi = (liuNianYear - 4) % 12; const liuMingIdx = chartData!.palaces.findIndex(p => p.zhiIndex === liuZhi); if (liuMingIdx >= 0) { const offset = (liuMingIdx - currentIdx + 12) % 12; liuName = `流${PALACE_NAMES[offset].substring(0, 1)}`; } } if (xiaoXianMingIdx >= 0 && showXiaoXian) { const offset = (xiaoXianMingIdx - currentIdx + 12) % 12; xiaoName = `小${PALACE_NAMES[offset].substring(0, 1)}`; } return { daName, liuName, xiaoName }; };
 
@@ -314,25 +304,47 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   return (
     <div className="flex flex-col h-[100dvh] w-full bg-white relative overflow-hidden">
       
-      {/* Header - 只保留最基本的列表返回 (Standard Mode)，關係圖的返回移到命盤內 */}
+      {/* Header - 功能單純化 */}
       <div className="flex justify-between items-center px-4 py-2 bg-white border-b border-gray-200 shadow-sm shrink-0 z-50 h-[56px]">
-        {historyStack.length === 0 && (
-             <button onClick={handleBack} className="bg-white text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm">
-                <ChevronLeft size={16} />
-                列表
-            </button>
-        )}
-        
-        {/* 如果在關係圖模式下，Header 可以顯示當前查看的人名，保持 Context */}
-        {historyStack.length > 0 && (
-             <div className="text-gray-700 font-bold text-sm flex items-center gap-2">
-                <span className="text-gray-400">查看關聯:</span>
-                {client.name}
-             </div>
-        )}
+        {/* 左側：永遠只有返回列表 */}
+        <button onClick={handleBack} className="bg-white text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm">
+            <ChevronLeft size={16} />
+            列表
+        </button>
 
-        {/* 這裡原本的功能按鈕都已經移入命盤內 */}
-        <div className="flex gap-2"></div>
+        {/* 右側：他人生年 + 截圖 */}
+        {mode === 'standard' && (
+            <div className="flex gap-2">
+                 {/* 他人生年按鈕 */}
+                {externalGan !== null ? (
+                    <div className="flex items-center gap-1 bg-purple-100 border border-purple-200 px-3 py-1.5 rounded-lg animate-in fade-in">
+                        <span className="text-sm font-bold text-purple-700">{GAN[externalGan]}干飛化</span>
+                        <button onClick={() => { setExternalGan(null); setExternalYearStr(''); }} className="text-purple-400 hover:text-purple-600 ml-1"><X size={16} /></button>
+                    </div>
+                ) : (
+                    <button 
+                        onClick={() => setIsExternalInputOpen(true)} 
+                        className="bg-white text-purple-700 px-3 py-1.5 rounded-lg border border-purple-200 hover:bg-purple-50 flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm"
+                    >
+                        <UserPlus size={16} />
+                        <span className="hidden sm:inline">看他人生年飛化</span>
+                        <span className="sm:hidden">他年</span>
+                    </button>
+                )}
+
+                {/* 截圖按鈕 (嚴格條件) */}
+                {isCleanState && (
+                    <button 
+                        onClick={handleDownload}
+                        className="bg-white text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm"
+                        title="截圖"
+                    >
+                        <Camera size={16} />
+                        <span className="hidden sm:inline">截圖</span>
+                    </button>
+                )}
+            </div>
+        )}
       </div>
 
       <div className="flex-1 min-h-0 w-full relative">
@@ -357,85 +369,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
         {/* Grid System Container */}
         <div ref={chartRef} className="w-full h-full bg-white border-2 border-gray-800 shadow-xl z-10 grid grid-cols-4 grid-rows-4 relative">
             
-            {/* 1. 【返回按鈕】(僅在關係圖模式顯示，位於命盤左上角) */}
-            {historyStack.length > 0 && (
-                <button 
-                    onClick={handleHistoryBack} 
-                    className="absolute top-2 left-2 z-50 flex items-center gap-1 px-2 py-1.5 bg-slate-800/80 hover:bg-slate-700 text-white text-xs rounded-md backdrop-blur-sm shadow-md border border-slate-600 no-screenshot transition-all"
-                >
-                    <ArrowLeft size={14} />
-                    <span>返回 {historyStack[historyStack.length - 1].name}</span>
-                </button>
-            )}
-
-            {/* 2. 【右上角功能區】：截圖 + 他人生年 (標準模式下) */}
-            {mode === 'standard' && (
-                <div className="absolute top-2 right-2 z-50 flex gap-2 no-screenshot">
-                    {/* 截圖按鈕 */}
-                    <button 
-                        onClick={handleDownload}
-                        className="p-1.5 bg-white/90 hover:bg-gray-100 text-gray-700 rounded-md shadow-sm border border-gray-300 backdrop-blur-sm transition-colors"
-                        title="截圖下載"
-                    >
-                        <Camera size={18} />
-                    </button>
-
-                    {/* 他人生年按鈕 */}
-                    {externalGan !== null ? (
-                        <div className="flex items-center gap-1 bg-purple-100 border border-purple-200 px-2 py-1 rounded-md animate-in fade-in">
-                            <span className="text-xs font-bold text-purple-700">{GAN[externalGan]}干飛化</span>
-                            <button onClick={() => { setExternalGan(null); setExternalYearStr(''); }} className="text-purple-400 hover:text-purple-600"><X size={14} /></button>
-                        </div>
-                    ) : (
-                        <button 
-                            onClick={() => setIsExternalInputOpen(true)} 
-                            className="flex items-center gap-1 px-2 py-1 bg-white/90 hover:bg-purple-50 text-purple-700 text-xs font-bold rounded-md shadow-sm border border-purple-200 backdrop-blur-sm transition-colors"
-                        >
-                            <UserPlus size={16} />
-                            <span className="hidden sm:inline">他年</span>
-                        </button>
-                    )}
-                </div>
-            )}
-
-            {/* 3. 【左下角功能區】：雙胞胎 | 顛倒盤 | 小限 (橫向工具列) */}
-            {mode === 'standard' && (
-                <div className="absolute bottom-2 left-2 z-50 no-screenshot">
-                    <div className="flex bg-slate-800/90 rounded-md border border-slate-600 backdrop-blur-sm overflow-hidden p-0.5 shadow-lg">
-                        <button 
-                            onClick={() => setIsTwinMode(!isTwinMode)}
-                            className={`px-2 py-1 text-[10px] font-bold transition-colors flex items-center gap-1 rounded-sm ${isTwinMode ? 'bg-indigo-600 text-white' : 'hover:bg-slate-700 text-slate-300'}`}
-                            title="切換雙胞胎盤"
-                        >
-                            <Users size={12} />
-                            雙胞胎
-                        </button>
-                        
-                        <div className="w-px bg-slate-600 my-0.5 mx-0.5 opacity-50"></div>
-
-                        <button 
-                            onClick={() => setIsReverse(!isReverse)}
-                            className={`px-2 py-1 text-[10px] font-bold transition-colors flex items-center gap-1 rounded-sm ${isReverse ? 'bg-indigo-600 text-white' : 'hover:bg-slate-700 text-slate-300'}`}
-                            title="切換顛倒盤"
-                        >
-                            <Repeat size={12} />
-                            顛倒盤
-                        </button>
-
-                        <div className="w-px bg-slate-600 my-0.5 mx-0.5 opacity-50"></div>
-
-                        <button 
-                            onClick={toggleXiaoXian}
-                            className={`px-2 py-1 text-[10px] font-bold transition-colors flex items-center gap-1 rounded-sm ${showXiaoXian ? 'bg-green-600 text-white' : 'hover:bg-slate-700 text-slate-300'}`}
-                            title="切換小限盤"
-                        >
-                            <Clock size={12} />
-                            小限
-                        </button>
-                    </div>
-                </div>
-            )}
-
             <svg className="absolute inset-0 w-full h-full pointer-events-none z-40">
                 {selectedPalace !== null && (() => { const pSelf = getAnchorCoord(connections.self); const pTri1 = getAnchorCoord(connections.tri1); const pTri2 = getAnchorCoord(connections.tri2); const pOpp = getAnchorCoord(connections.opp); return ( <> <line x1={`${pSelf.x}%`} y1={`${pSelf.y}%`} x2={`${pTri1.x}%`} y2={`${pTri1.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> <line x1={`${pTri1.x}%`} y1={`${pTri1.y}%`} x2={`${pTri2.x}%`} y2={`${pTri2.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> <line x1={`${pTri2.x}%`} y1={`${pTri2.y}%`} x2={`${pSelf.x}%`} y2={`${pSelf.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> <line x1={`${pSelf.x}%`} y1={`${pSelf.y}%`} x2={`${pOpp.x}%`} y2={`${pOpp.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> </> ); })()}
             </svg>
@@ -449,6 +382,8 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                                 client={client!}
                                 chartData={chartData}
                                 relationships={relationships}
+                                historyStack={historyStack}
+                                onHistoryBack={handleHistoryBack}
                                 onNavigate={handleNavigateToRelation}
                                 onCompatibility={handleCompatibility}
                                 benMingMajorStarsStr={benMingMajorStarsStr}
@@ -459,13 +394,22 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                                 isDivinationMode={mode === 'divination'}
                                 divNum={divNum}
                                 isDivinationReady={isDivinationReady}
+                                
+                                // 功能鍵狀態傳遞
+                                onToggleTwin={() => setIsTwinMode(!isTwinMode)}
+                                onToggleInverted={() => setIsReverse(!isReverse)}
+                                onToggleSmallLimit={toggleXiaoXian}
+                                showTwin={isTwinMode}
+                                showInverted={isReverse}
+                                showSmallLimit={showXiaoXian}
+                                isDaXian={daXianSeq >= 0}
+                                isLiuNian={liuNianYear !== null}
                             />
                         );
                     }
                     return null;
                 }
 
-                // ... (PalaceCard rendering logic) ...
                 const { daName, liuName, xiaoName } = getRelativeNames(palaceIdx);
                 const oppPalaceIdx = (palaceIdx + 6) % 12;
                 const { daName: reverseDaName, liuName: reverseLiuName } = getRelativeNames(oppPalaceIdx);
