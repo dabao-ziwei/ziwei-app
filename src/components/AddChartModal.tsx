@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Loader2, Link as LinkIcon, Search } from 'lucide-react'; 
-import { loadClients, getUserCustomRelationTypes, type Client } from '../db';
+import { loadClients, type Client } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
 import { TagSelect } from './TagSelect'; 
+import { ZHI } from '../logic/constants'; // 引入 ZHI 以顯示時辰
 
 interface AddChartModalProps {
   isOpen: boolean;
@@ -12,8 +13,21 @@ interface AddChartModalProps {
 }
 
 const CATEGORIES = ['我', '家人', '朋友', '客戶', '名人', '其他'];
-// 更新後的預設關係
+
+// 鎖定預設項目，不亂加
 const DEFAULT_RELATIONS = ['配偶', '情侶', '父親', '母親', '子女', '哥哥', '姐姐', '弟弟', '妹妹', '親戚', '朋友'];
+
+// 輔助：格式化完整時間顯示
+const formatFullDate = (c: Client) => {
+    const min = c.birthMinute.toString().padStart(2, '0');
+    // 計算地支
+    const zhiIdx = Math.floor((c.birthHour + 1) / 2) % 12;
+    let zhi = ZHI[zhiIdx];
+    if (zhiIdx === 0 && c.birthHour === 23) zhi = '晚子';
+    if (zhiIdx === 0 && c.birthHour === 0) zhi = '早子';
+    
+    return `${c.birthYear}/${c.birthMonth.toString().padStart(2, '0')}/${c.birthDay.toString().padStart(2, '0')} ${c.birthHour}:${min} (${zhi}時)`;
+};
 
 export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, onSave, editData }) => {
   const [gender, setGender] = useState<'男' | '女'>('女');
@@ -28,13 +42,12 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
   const [category, setCategory] = useState('客戶');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // 快速關聯狀態
   const [linkTarget, setLinkTarget] = useState<Client | null>(null);
   const [linkType, setLinkType] = useState('配偶');
   const [isSearchingLink, setIsSearchingLink] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [allClients, setAllClients] = useState<Client[]>([]);
-  
-  const [relationOptions, setRelationOptions] = useState<string[]>(DEFAULT_RELATIONS);
 
   const yearRef = useRef<HTMLInputElement>(null);
   const monthRef = useRef<HTMLInputElement>(null);
@@ -45,10 +58,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
   useEffect(() => {
     if (isOpen) {
       loadClients().then(setAllClients);
-      getUserCustomRelationTypes().then(customTypes => {
-          const merged = Array.from(new Set([...DEFAULT_RELATIONS, ...customTypes]));
-          setRelationOptions(merged);
-      });
+      // 這裡不再載入自訂關係，只使用 DEFAULT_RELATIONS
       
       if (editData) {
         setName(editData.name);
@@ -69,6 +79,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
         setMinute('');
         setCategory('客戶');
         setLinkTarget(null);
+        setLinkType('配偶'); // 重置為預設
       }
       setTimeout(() => yearRef.current?.focus(), 100);
     }
@@ -236,10 +247,11 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
                                     <div 
                                         key={c.id} 
                                         onClick={() => { setLinkTarget(c); setIsSearchingLink(false); setSearchTerm(''); }}
-                                        className="p-2 hover:bg-blue-50 cursor-pointer text-sm flex justify-between"
+                                        className="p-2 hover:bg-blue-50 cursor-pointer text-sm flex justify-between items-center"
                                     >
-                                        <span>{c.name}</span>
-                                        <span className="text-gray-400 text-xs">{c.birthYear}</span>
+                                        <span className="font-medium text-gray-700">{c.name}</span>
+                                        {/* 完整時間顯示 (Requirement 1) */}
+                                        <span className="text-gray-400 text-xs">{formatFullDate(c)}</span>
                                     </div>
                                 ))}
                             </div>
@@ -252,11 +264,12 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
                             <span className="font-bold text-blue-800">{linkTarget.name}</span>
                             <span className="text-gray-600">的...</span>
                         </div>
+                        {/* 這裡僅使用 DEFAULT_RELATIONS，不包含自訂項目 (Requirement 2) */}
                         <TagSelect 
-                            options={relationOptions} 
+                            options={DEFAULT_RELATIONS} 
                             value={linkType} 
                             onChange={setLinkType} 
-                            allowCustom={false} // 快速關聯先鎖定預設+自訂，介面已載入
+                            allowCustom={false}
                         />
                     </div>
                 )}
