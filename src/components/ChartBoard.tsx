@@ -2,11 +2,11 @@ import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { toPng } from 'html-to-image';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { PalaceCard } from './PalaceCard';
-import { CenterInfoBoard } from './CenterInfoBoard'; // 引入新組件
-import { getClient, getRelationships, type Client, type Relationship } from '../db'; // 引入 getRelationships
+import { CenterInfoBoard } from './CenterInfoBoard';
+import { getClient, getRelationships, type Client, type Relationship } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
 import { GAN, ZHI, PALACE_NAMES, SIHUA_TABLE } from '../logic/constants';
-import { Loader2, UserPlus, X, ArrowLeft } from 'lucide-react';
+import { Loader2, UserPlus, X, ArrowLeft, Camera, Users, Repeat, Clock, ChevronLeft } from 'lucide-react';
 
 interface ChartBoardProps {
   client?: Client;
@@ -155,7 +155,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
 
     if (mode === 'divination') {
         const data = displayEngine.getChartData();
-        // (紫占計算邏輯省略，同前)
         return data;
     }
 
@@ -232,10 +231,10 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
       alert(`即將與 ${target.name} 進行合盤分析 (開發中)`);
   };
 
-  // 輔助函式與變數 (同前)
+  // 輔助函式與變數
   const benMingMajorStarsStr = useMemo(() => {
       if (!baseEngine || !baseChartData) return '';
-      const pos = mode === 'divination' ? -1 : baseEngine.getMingPos(); // 暫不處理紫占的命主星
+      const pos = mode === 'divination' ? -1 : baseEngine.getMingPos();
       if (pos === -1) return '';
       const p = chartData?.palaces[pos] || baseChartData.palaces[pos];
       if (p && p.majorStars.length > 0) return `(${p.majorStars.map(s => s.name).join('、')})`;
@@ -257,12 +256,31 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   };
   const resetTime = () => { setCurrentHour(client!.birthHour); resetAllStates(); };
   const handleBack = () => { onBack ? onBack() : navigate('/'); };
-  const handleDownload = async () => { /* 同前 */ if (!chartRef.current) return; try { const dataUrl = await toPng(chartRef.current, { cacheBust: true, backgroundColor: '#ffffff', filter: (node) => !(node.classList?.contains('no-screenshot')) }); const link = document.createElement('a'); const suffix = mode === 'divination' ? '_紫占' : (isTwinMode ? '_雙胞胎' : (isReverse ? '_顛倒盤' : '_本命盤')); link.download = `${client!.name}${suffix}.png`; link.href = dataUrl; link.click(); } catch (err) { console.error('Download failed:', err); } };
+  
+  // 截圖功能
+  const handleDownload = async () => { 
+      if (!chartRef.current) return; 
+      try { 
+          // 暫時隱藏有 .no-screenshot class 的元素
+          const dataUrl = await toPng(chartRef.current, { 
+              cacheBust: true, 
+              backgroundColor: '#ffffff', 
+              filter: (node) => !(node.classList?.contains('no-screenshot')) 
+          }); 
+          const link = document.createElement('a'); 
+          const suffix = mode === 'divination' ? '_紫占' : (isTwinMode ? '_雙胞胎' : (isReverse ? '_顛倒盤' : '_本命盤')); 
+          link.download = `${client!.name}${suffix}.png`; 
+          link.href = dataUrl; 
+          link.click(); 
+      } catch (err) { 
+          console.error('Download failed:', err); 
+      } 
+  };
 
-  // ... (DaXianList, LiuNianList, Grid logic 同前) ...
-  // 為節省篇幅，直接在 Render 中使用變數
   const isLimitActive = daXianSeq >= 0 || liuNianYear !== null || showXiaoXian;
-  const isCleanState = daXianSeq === -1 && liuNianYear === null && selectedPalace === null && flyingPalace === null && !isReverse && mode !== 'divination';
+  // const isCleanState = daXianSeq === -1 && liuNianYear === null && selectedPalace === null && flyingPalace === null && !isReverse && mode !== 'divination';
+  // 註解：現在截圖按鈕常駐顯示，不再依賴 CleanState 隱藏
+
   const isTimeModified = currentHour !== client?.birthHour;
   let currentHourZhi = ZHI[Math.floor((currentHour + 1) / 2) % 12];
   if (Math.floor((currentHour + 1) / 2) % 12 === 0) { currentHourZhi = currentHour === 23 ? '晚子' : '早子'; }
@@ -272,20 +290,20 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const connections = (() => { if (selectedPalace === null) return { self: -1, tri1: -1, tri2: -1, opp: -1 }; return { self: selectedPalace, tri1: (selectedPalace + 4) % 12, tri2: (selectedPalace + 8) % 12, opp: (selectedPalace + 6) % 12 }; })();
   const getAnchorCoord = (palaceIdx: number) => { const map: { [key: number]: { x: number; y: number } } = { 5: { x: 25, y: 25 }, 6: { x: 37.5, y: 25 }, 7: { x: 62.5, y: 25 }, 8: { x: 75, y: 25 }, 4: { x: 25, y: 37.5 }, 9: { x: 75, y: 37.5 }, 3: { x: 25, y: 62.5 }, 10: { x: 75, y: 62.5 }, 2: { x: 25, y: 75 }, 1: { x: 37.5, y: 75 }, 0: { x: 62.5, y: 75 }, 11: { x: 75, y: 75 } }; return map[palaceIdx] || { x: 50, y: 50 }; };
 
-  // DaXian List Logic (簡化版，邏輯同前)
+  // DaXian List Logic
   const daXianList = useMemo(() => { if (!baseChartData || !baseEngine || mode === 'divination') return []; const list = []; const startPos = baseEngine.getMingPos(); const direction = baseChartData.direction || 1; for (let i = 0; i < 10; i++) { const offset = i * direction; const palaceIdx = (startPos + offset + 120) % 12; const palace = baseChartData.palaces[palaceIdx]; if (palace) { const startYear = baseChartData.lunarYear + palace.ages[0]; list.push({ seq: i, name: `${['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'][i]}限`, ganZhi: `${GAN[palace.ganIndex]}${ZHI[palace.zhiIndex]}`, palaceIdx: palaceIdx, startAge: palace.ages[0], endAge: palace.ages[1], startYear: startYear }); } } return list; }, [baseChartData, baseEngine, mode]);
   const liuNianList = useMemo(() => { if (mode === 'divination') return []; const targetSeq = daXianSeq === -1 ? 0 : daXianSeq; const targetDaXian = daXianList[targetSeq]; if (!targetDaXian) return []; const list = []; for (let i = 0; i < 10; i++) { const year = targetDaXian.startYear + i; const age = targetDaXian.startAge + i; const gan = (year - 4) % 10; const zhi = (year - 4) % 12; list.push({ year, age, label: `${year}${GAN[gan]}${ZHI[zhi]} ${age}` }); } return list; }, [daXianSeq, daXianList, mode]);
   const xiaoXianMingIdx = useMemo(() => { if (!liuNianYear || !baseChartData || !baseEngine) return -1; const virtualAge = liuNianYear - baseChartData.lunarYear + 1; return baseEngine.getXiaoXianPos(virtualAge); }, [liuNianYear, baseChartData, baseEngine]);
   const benMingPos = baseEngine ? baseEngine.getMingPos() : 0;
   const divMingIndex = useMemo(() => { if (mode !== 'divination') return -1; if (!isDivinationReady) return -1; let mingNum = parseInt(divNum[0] + divNum[1], 10); while (mingNum > 12) { mingNum = parseInt(mingNum.toString()[0]) + parseInt(mingNum.toString()[1]); } const targetZhiIdx = (mingNum - 1) % 12; return chartData?.palaces.findIndex(p => p.zhiIndex === targetZhiIdx) ?? -1; }, [mode, divNum, chartData, isDivinationReady]);
 
-  // UI Handlers for DaXian/LiuNian (同前)
+  // UI Handlers for DaXian/LiuNian
   const handleDaXianClick = (seq: number) => { setDaXianSeq(daXianSeq === seq ? -1 : seq); setLiuNianYear(null); setShowXiaoXian(false); setFlyingPalace(null); setSelectedPalace(null); setIsReverse(false); };
   const handleLiuNianClick = (year: number) => { setLiuNianYear(liuNianYear === year ? null : year); setShowXiaoXian(false); setFlyingPalace(null); setSelectedPalace(null); setIsReverse(false); };
   const toggleXiaoXian = () => { setShowXiaoXian(!showXiaoXian); setFlyingPalace(null); setSelectedPalace(null); };
   const handlePalaceClick = (palaceIdx: number) => { setSelectedPalace(selectedPalace === palaceIdx ? null : palaceIdx); };
   const handleTriggerClick = (palaceIdx: number) => { setFlyingPalace(flyingPalace === palaceIdx ? null : palaceIdx); };
-  const toggleViewMode = () => { isLimitActive ? setIsReverse(!isReverse) : setIsTwinMode(!isTwinMode); };
+  // const toggleViewMode = () => { isLimitActive ? setIsReverse(!isReverse) : setIsTwinMode(!isTwinMode); }; // 移除這個舊的切換邏輯
   const flyingStarsLookup = (() => { if (flyingPalace === null) return {}; const targetPalace = chartData!.palaces[flyingPalace]; if (!targetPalace) return {}; return baseEngine!.getSiHuaMap(targetPalace.ganIndex); })();
   const getRelativeNames = (currentIdx: number) => { if (mode === 'divination') return {}; let daName = undefined, liuName = undefined, xiaoName = undefined; if (daXianSeq >= 0) { const daMingIdx = daXianList[daXianSeq].palaceIdx; const offset = (daMingIdx - currentIdx + 12) % 12; daName = `大${PALACE_NAMES[offset].substring(0, 1)}`; } if (liuNianYear) { const liuZhi = (liuNianYear - 4) % 12; const liuMingIdx = chartData!.palaces.findIndex(p => p.zhiIndex === liuZhi); if (liuMingIdx >= 0) { const offset = (liuMingIdx - currentIdx + 12) % 12; liuName = `流${PALACE_NAMES[offset].substring(0, 1)}`; } } if (xiaoXianMingIdx >= 0 && showXiaoXian) { const offset = (xiaoXianMingIdx - currentIdx + 12) % 12; xiaoName = `小${PALACE_NAMES[offset].substring(0, 1)}`; } return { daName, liuName, xiaoName }; };
 
@@ -296,50 +314,32 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   return (
     <div className="flex flex-col h-[100dvh] w-full bg-white relative overflow-hidden">
       
-      {/* Header */}
+      {/* Header - 只保留最基本的列表返回 (Standard Mode)，關係圖的返回移到命盤內 */}
       <div className="flex justify-between items-center px-4 py-2 bg-white border-b border-gray-200 shadow-sm shrink-0 z-50 h-[56px]">
-        {historyStack.length > 0 ? (
-            <button onClick={handleHistoryBack} className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-100 flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm">
-                <ArrowLeft size={16} />
-                <span>返回 {historyStack[historyStack.length - 1].name}</span>
-            </button>
-        ) : (
-            <button onClick={handleBack} className="bg-white text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+        {historyStack.length === 0 && (
+             <button onClick={handleBack} className="bg-white text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm">
+                <ChevronLeft size={16} />
                 列表
             </button>
         )}
-
-        {mode === 'standard' && (
-            <div className="flex gap-2">
-                {externalGan !== null ? (
-                    <div className="flex items-center gap-2 bg-purple-50 border border-purple-200 px-3 py-1.5 rounded-lg animate-in fade-in">
-                        <span className="text-sm font-bold text-purple-700">{GAN[externalGan]}干飛化</span>
-                        <button onClick={() => { setExternalGan(null); setExternalYearStr(''); }} className="text-purple-400 hover:text-purple-600"><X size={16} /></button>
-                    </div>
-                ) : (
-                    <button onClick={() => setIsExternalInputOpen(true)} className="bg-white text-purple-700 px-3 py-1.5 rounded-lg border border-purple-200 hover:bg-purple-50 flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm">
-                        <UserPlus size={16} />
-                        <span className="hidden sm:inline">他人生年看飛化</span>
-                        <span className="sm:hidden">他年</span>
-                    </button>
-                )}
-            </div>
+        
+        {/* 如果在關係圖模式下，Header 可以顯示當前查看的人名，保持 Context */}
+        {historyStack.length > 0 && (
+             <div className="text-gray-700 font-bold text-sm flex items-center gap-2">
+                <span className="text-gray-400">查看關聯:</span>
+                {client.name}
+             </div>
         )}
 
-        {isCleanState && (
-          <button onClick={handleDownload} className="bg-white text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-            截圖
-          </button>
-        )}
+        {/* 這裡原本的功能按鈕都已經移入命盤內 */}
+        <div className="flex gap-2"></div>
       </div>
 
       <div className="flex-1 min-h-0 w-full relative">
-        {/* Modals (省略部分以節省空間，保持不變) */}
+        {/* Modals */}
         {isExternalInputOpen && (
             <div className="absolute inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-                <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 relative">
+                <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 relative animate-in fade-in zoom-in">
                     <button onClick={() => setIsExternalInputOpen(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={20} /></button>
                     <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2"><UserPlus size={20} className="text-purple-600" /> 他人生年看飛化</h3>
                     <div className="flex bg-gray-100 p-1 rounded-lg mb-4">
@@ -354,8 +354,88 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
             </div>
         )}
 
-        {/* Grid System */}
-        <div ref={chartRef} className="w-full h-full bg-white border-2 border-gray-800 shadow-xl z-10 grid grid-cols-4 grid-rows-4">
+        {/* Grid System Container */}
+        <div ref={chartRef} className="w-full h-full bg-white border-2 border-gray-800 shadow-xl z-10 grid grid-cols-4 grid-rows-4 relative">
+            
+            {/* 1. 【返回按鈕】(僅在關係圖模式顯示，位於命盤左上角) */}
+            {historyStack.length > 0 && (
+                <button 
+                    onClick={handleHistoryBack} 
+                    className="absolute top-2 left-2 z-50 flex items-center gap-1 px-2 py-1.5 bg-slate-800/80 hover:bg-slate-700 text-white text-xs rounded-md backdrop-blur-sm shadow-md border border-slate-600 no-screenshot transition-all"
+                >
+                    <ArrowLeft size={14} />
+                    <span>返回 {historyStack[historyStack.length - 1].name}</span>
+                </button>
+            )}
+
+            {/* 2. 【右上角功能區】：截圖 + 他人生年 (標準模式下) */}
+            {mode === 'standard' && (
+                <div className="absolute top-2 right-2 z-50 flex gap-2 no-screenshot">
+                    {/* 截圖按鈕 */}
+                    <button 
+                        onClick={handleDownload}
+                        className="p-1.5 bg-white/90 hover:bg-gray-100 text-gray-700 rounded-md shadow-sm border border-gray-300 backdrop-blur-sm transition-colors"
+                        title="截圖下載"
+                    >
+                        <Camera size={18} />
+                    </button>
+
+                    {/* 他人生年按鈕 */}
+                    {externalGan !== null ? (
+                        <div className="flex items-center gap-1 bg-purple-100 border border-purple-200 px-2 py-1 rounded-md animate-in fade-in">
+                            <span className="text-xs font-bold text-purple-700">{GAN[externalGan]}干飛化</span>
+                            <button onClick={() => { setExternalGan(null); setExternalYearStr(''); }} className="text-purple-400 hover:text-purple-600"><X size={14} /></button>
+                        </div>
+                    ) : (
+                        <button 
+                            onClick={() => setIsExternalInputOpen(true)} 
+                            className="flex items-center gap-1 px-2 py-1 bg-white/90 hover:bg-purple-50 text-purple-700 text-xs font-bold rounded-md shadow-sm border border-purple-200 backdrop-blur-sm transition-colors"
+                        >
+                            <UserPlus size={16} />
+                            <span className="hidden sm:inline">他年</span>
+                        </button>
+                    )}
+                </div>
+            )}
+
+            {/* 3. 【左下角功能區】：雙胞胎 | 顛倒盤 | 小限 (橫向工具列) */}
+            {mode === 'standard' && (
+                <div className="absolute bottom-2 left-2 z-50 no-screenshot">
+                    <div className="flex bg-slate-800/90 rounded-md border border-slate-600 backdrop-blur-sm overflow-hidden p-0.5 shadow-lg">
+                        <button 
+                            onClick={() => setIsTwinMode(!isTwinMode)}
+                            className={`px-2 py-1 text-[10px] font-bold transition-colors flex items-center gap-1 rounded-sm ${isTwinMode ? 'bg-indigo-600 text-white' : 'hover:bg-slate-700 text-slate-300'}`}
+                            title="切換雙胞胎盤"
+                        >
+                            <Users size={12} />
+                            雙胞胎
+                        </button>
+                        
+                        <div className="w-px bg-slate-600 my-0.5 mx-0.5 opacity-50"></div>
+
+                        <button 
+                            onClick={() => setIsReverse(!isReverse)}
+                            className={`px-2 py-1 text-[10px] font-bold transition-colors flex items-center gap-1 rounded-sm ${isReverse ? 'bg-indigo-600 text-white' : 'hover:bg-slate-700 text-slate-300'}`}
+                            title="切換顛倒盤"
+                        >
+                            <Repeat size={12} />
+                            顛倒盤
+                        </button>
+
+                        <div className="w-px bg-slate-600 my-0.5 mx-0.5 opacity-50"></div>
+
+                        <button 
+                            onClick={toggleXiaoXian}
+                            className={`px-2 py-1 text-[10px] font-bold transition-colors flex items-center gap-1 rounded-sm ${showXiaoXian ? 'bg-green-600 text-white' : 'hover:bg-slate-700 text-slate-300'}`}
+                            title="切換小限盤"
+                        >
+                            <Clock size={12} />
+                            小限
+                        </button>
+                    </div>
+                </div>
+            )}
+
             <svg className="absolute inset-0 w-full h-full pointer-events-none z-40">
                 {selectedPalace !== null && (() => { const pSelf = getAnchorCoord(connections.self); const pTri1 = getAnchorCoord(connections.tri1); const pTri2 = getAnchorCoord(connections.tri2); const pOpp = getAnchorCoord(connections.opp); return ( <> <line x1={`${pSelf.x}%`} y1={`${pSelf.y}%`} x2={`${pTri1.x}%`} y2={`${pTri1.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> <line x1={`${pTri1.x}%`} y1={`${pTri1.y}%`} x2={`${pTri2.x}%`} y2={`${pTri2.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> <line x1={`${pTri2.x}%`} y1={`${pTri2.y}%`} x2={`${pSelf.x}%`} y2={`${pSelf.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> <line x1={`${pSelf.x}%`} y1={`${pSelf.y}%`} x2={`${pOpp.x}%`} y2={`${pOpp.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> </> ); })()}
             </svg>
@@ -363,7 +443,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
             {gridLayout.map((palaceIdx, gridPos) => {
                 if (palaceIdx === null) {
                     if (gridPos === 5) {
-                        // 使用全新的 CenterInfoBoard 取代原本的內容
                         return (
                             <CenterInfoBoard 
                                 key="center"
@@ -386,7 +465,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                     return null;
                 }
 
-                // ... (PalaceCard rendering logic - same as before) ...
+                // ... (PalaceCard rendering logic) ...
                 const { daName, liuName, xiaoName } = getRelativeNames(palaceIdx);
                 const oppPalaceIdx = (palaceIdx + 6) % 12;
                 const { daName: reverseDaName, liuName: reverseLiuName } = getRelativeNames(oppPalaceIdx);
