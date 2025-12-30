@@ -317,7 +317,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                     </button>
                 )}
 
-                {/* 截圖按鈕 (嚴格條件) */}
+                {/* 截圖按鈕 */}
                 {isCleanState && (
                     <button 
                         onClick={handleDownload}
