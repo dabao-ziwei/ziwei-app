@@ -118,10 +118,9 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     }
 
     return (
-        // 修正：保留 p-0.5 避免貼死 Grid 線條造成閃爍，但移除所有 border 和 shadow
         <div className="col-span-2 row-span-2 flex z-10 relative overflow-hidden p-0.5">
             
-            {/* 容器本體：徹底移除 border-gray-300 和 shadow-sm，只留純白背景 */}
+            {/* 容器本體 */}
             <div className={`flex w-full h-full bg-white`}>
                 
                 {/* 左側：個人資料 */}
@@ -211,9 +210,9 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                     )}
                 </div>
 
-                {/* 右側：關係圖 */}
+                {/* 右側：關係圖 (移除 bg-slate-50) */}
                 {hasRelations && (
-                    <div className="hidden md:block w-[65%] h-full relative bg-slate-50 overflow-hidden">
+                    <div className="hidden md:block w-[65%] h-full relative overflow-hidden">
                         {historyStack.length > 0 && (
                             <button onClick={onHistoryBack} className="absolute top-2 left-2 z-50 flex items-center gap-1 px-3 py-1.5 bg-white/90 hover:bg-white text-gray-700 text-xs font-bold rounded-lg border border-gray-300 shadow-sm transition-all backdrop-blur-sm">
                                 <ArrowLeft size={12} />
