@@ -1,13 +1,50 @@
 import React, { useMemo, useState } from 'react';
 import { Network, ArrowLeft, Users, Repeat, Clock, Eye, RefreshCw } from 'lucide-react';
-// import { DateInput } from './DateInput'; // 移除這個引用，不再需要
 import type { Client, Relationship } from '../db';
 import type { ChartData } from '../logic/types';
 
-// ... (Interface 和 POSITIONS 保持不變) ...
+interface CenterInfoBoardProps {
+  client: Client;
+  chartData: ChartData | null;
+  relationships: Relationship[];
+  historyStack: Client[]; 
+
+  onHistoryBack: () => void;
+  onNavigate: (targetClient: Client) => void;
+  onCompatibility: (targetClient: Client) => void;
+  
+  benMingMajorStarsStr: string;
+  onChangeHour: (delta: number) => void;
+  onResetTime: () => void;
+  currentHourZhi: string;
+  isTimeModified: boolean;
+  
+  isDivinationMode?: boolean;
+  divNum?: string[];
+  isDivinationReady?: boolean;
+
+  onToggleTwin: () => void;
+  onToggleInverted: () => void;
+  onToggleSmallLimit: () => void;
+  showTwin: boolean;
+  showInverted: boolean;
+  showSmallLimit: boolean;
+  isDaXian: boolean;
+  isLiuNian: boolean;
+}
+
+const POSITIONS = {
+    top: { x: 50, y: 15 },    
+    bottom: { x: 50, y: 85 }, 
+    left: { x: 15, y: 50 },   
+    right: { x: 85, y: 50 },  
+    topLeft: { x: 25, y: 25 },
+    topRight: { x: 75, y: 25 },
+    bottomLeft: { x: 25, y: 75 },
+    bottomRight: { x: 75, y: 75 },
+};
 
 export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
-    // ... (Props 保持不變)
     client,
     chartData,
     relationships,
@@ -32,13 +69,36 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     isDaXian,
     isLiuNian
 }) => {
-    // ... (State 和 Logic 保持不變) ...
     const [selectedRelId, setSelectedRelId] = useState<string | null>(null);
     const hasRelations = relationships.length > 0;
-    const graphNodes = useMemo(() => { /* ...保持原樣... */ return []; }, [relationships]);
+
+    const graphNodes = useMemo(() => {
+        const nodes: any[] = [];
+        const parents = relationships.filter(r => ['父親', '母親', '爸爸', '媽媽', '父', '母'].includes(r.relation_type));
+        const children = relationships.filter(r => ['子女', '兒子', '女兒'].includes(r.relation_type));
+        const partners = relationships.filter(r => ['配偶', '老公', '老婆', '丈夫', '妻子', '情侶'].includes(r.relation_type));
+        const siblings = relationships.filter(r => ['兄弟', '姊妹', '哥哥', '姐姐', '弟弟', '妹妹'].includes(r.relation_type));
+        const others = relationships.filter(r => !parents.includes(r) && !children.includes(r) && !partners.includes(r) && !siblings.includes(r));
+
+        const addNode = (rel: Relationship, posKey: keyof typeof POSITIONS, offsetIdx = 0) => {
+            const base = POSITIONS[posKey];
+            const x = base.x + (offsetIdx % 2 === 0 ? offsetIdx * 5 : -offsetIdx * 5); 
+            const y = base.y + (offsetIdx > 1 ? 5 : 0);
+            nodes.push({ ...rel, x, y });
+        };
+
+        parents.forEach((r, i) => addNode(r, 'top', i));
+        children.forEach((r, i) => addNode(r, 'bottom', i));
+        partners.forEach((r, i) => addNode(r, 'right', i));
+        siblings.forEach((r, i) => addNode(r, 'left', i));
+        others.forEach((r, i) => {
+            const corners = ['topLeft', 'topRight', 'bottomLeft', 'bottomRight'] as const;
+            addNode(r, corners[i % 4], Math.floor(i / 4));
+        });
+        return nodes;
+    }, [relationships]);
 
     if (isDivinationMode) {
-        // ... (紫占模式保持不變) ...
         return (
             <div className="col-span-2 row-span-2 flex flex-col items-center justify-center p-4 bg-white z-10 relative">
                 <div className="flex flex-col items-center gap-2 mb-4">
@@ -57,12 +117,16 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     }
 
     return (
+        // 外層容器：p-0.5 用於內縮，移除所有 border/shadow
         <div className="col-span-2 row-span-2 flex z-10 relative overflow-hidden p-0.5">
+            
+            {/* Flex 容器：將左右兩欄包在一起 */}
             <div className={`flex w-full h-full bg-white`}>
                 
-                {/* 左側：個人資料 */}
+                {/* --- [左側：個人資料欄] --- */}
                 <div className={`${hasRelations ? 'w-full md:w-[35%]' : 'w-full'} h-full flex flex-col p-1 border-r border-gray-100 bg-white z-20 relative transition-all duration-300`}>
                     
+                    {/* 返回按鈕 (無關聯時顯示在左側) */}
                     {!hasRelations && historyStack.length > 0 && (
                         <button onClick={onHistoryBack} className="absolute top-1 left-1 z-50 flex items-center gap-1 px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold rounded transition-colors">
                             <ArrowLeft size={10} /> 返回
@@ -98,14 +162,14 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                             </div>
                         )}
 
-                        {/* 修正：移除 DateInput，改為純文字顯示 */}
-                        <div className="mt-2 flex items-center justify-center gap-1 text-[11px] font-mono text-gray-600 bg-gray-50 px-2 py-1 rounded border border-gray-100">
-                            <span>{client.birthYear}</span>
+                        {/* 純文字時間顯示 (取代 DateInput) */}
+                        <div className="mt-2 flex items-center justify-center gap-1 text-[12px] font-mono text-gray-700 bg-gray-50/50 px-2 py-1 rounded">
+                            <span className="font-bold">{client.birthYear}</span>
                             <span className="text-gray-300">-</span>
                             <span>{client.birthMonth.toString().padStart(2, '0')}</span>
                             <span className="text-gray-300">-</span>
                             <span>{client.birthDay.toString().padStart(2, '0')}</span>
-                            <span className="text-gray-300 mx-1">|</span>
+                            <span className="text-gray-300 mx-2">|</span>
                             <span>{client.birthHour.toString().padStart(2, '0')}</span>
                             <span className="text-gray-300">:</span>
                             <span>{client.birthMinute.toString().padStart(2, '0')}</span>
@@ -145,11 +209,13 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                             </div>
                         </div>
                     )}
-                </div>
+                </div> 
+                {/* [左側欄結束] */}
 
-                {/* 右側：關係圖 (保持原樣) */}
+                {/* --- [右側：關係圖欄] (兄弟層級，不會被蓋住) --- */}
                 {hasRelations && (
-                    <div className="hidden md:block w-[65%] h-full relative overflow-hidden">
+                    <div className="hidden md:block w-[65%] h-full relative overflow-hidden bg-white">
+                        {/* 返回按鈕 (有關聯時顯示在右側) */}
                         {historyStack.length > 0 && (
                             <button onClick={onHistoryBack} className="absolute top-2 left-2 z-50 flex items-center gap-1 px-3 py-1.5 bg-white/90 hover:bg-white text-gray-700 text-xs font-bold rounded-lg border border-gray-300 shadow-sm transition-all backdrop-blur-sm">
                                 <ArrowLeft size={12} />
@@ -157,7 +223,7 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                             </button>
                         )}
                         <div className="w-full h-full min-w-[300px] min-h-[300px] relative">
-                            {/* ... SVG 內容保持不變 ... */}
+                            {/* SVG 連線 */}
                             <svg className="absolute inset-0 w-full h-full pointer-events-none">
                                 <defs>
                                     <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="28" refY="3.5" orient="auto">
@@ -168,9 +234,11 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                     <line key={i} x1="50%" y1="50%" x2={`${node.x}%`} y2={`${node.y}%`} stroke="#e2e8f0" strokeWidth="1.5" />
                                 ))}
                             </svg>
+                            {/* 中心點 */}
                             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10">
                                 <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-md border-2 border-white">我</div>
                             </div>
+                            {/* 衛星點 */}
                             {graphNodes.map((node, i) => (
                                 <div key={node.id} className="absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer group" style={{ left: `${node.x}%`, top: `${node.y}%` }} onClick={() => setSelectedRelId(selectedRelId === node.id ? null : node.id)}>
                                     <div className={`flex flex-col items-center transition-all duration-300 ${selectedRelId === node.id ? 'scale-110 z-50' : 'hover:scale-105 z-20'}`}>
@@ -194,6 +262,8 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                         </div>
                     </div>
                 )}
+                {/* [右側欄結束] */}
+
             </div>
         </div>
     );
