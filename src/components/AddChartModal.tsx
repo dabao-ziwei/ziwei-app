@@ -12,7 +12,8 @@ interface AddChartModalProps {
 }
 
 const CATEGORIES = ['我', '家人', '朋友', '客戶', '名人', '其他'];
-const DEFAULT_RELATIONS = ['配偶', '情侶', '父親', '母親', '子女', '姐姐', '妹妹', '哥哥', '弟弟', '親戚', '朋友'];
+// 更新後的預設關係
+const DEFAULT_RELATIONS = ['配偶', '情侶', '父親', '母親', '子女', '哥哥', '姐姐', '弟弟', '妹妹', '親戚', '朋友'];
 
 export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, onSave, editData }) => {
   const [gender, setGender] = useState<'男' | '女'>('女');
@@ -33,7 +34,6 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
   const [searchTerm, setSearchTerm] = useState('');
   const [allClients, setAllClients] = useState<Client[]>([]);
   
-  // 關係選項 (預設+自訂)
   const [relationOptions, setRelationOptions] = useState<string[]>(DEFAULT_RELATIONS);
 
   const yearRef = useRef<HTMLInputElement>(null);
@@ -45,7 +45,6 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
   useEffect(() => {
     if (isOpen) {
       loadClients().then(setAllClients);
-      // 載入自訂關係選項
       getUserCustomRelationTypes().then(customTypes => {
           const merged = Array.from(new Set([...DEFAULT_RELATIONS, ...customTypes]));
           setRelationOptions(merged);
@@ -254,10 +253,10 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
                             <span className="text-gray-600">的...</span>
                         </div>
                         <TagSelect 
-                            options={relationOptions} // 使用合併後的選項
+                            options={relationOptions} 
                             value={linkType} 
                             onChange={setLinkType} 
-                            allowCustom={false} // 快速關聯通常用預設的即可，要自訂去完整介面
+                            allowCustom={false} // 快速關聯先鎖定預設+自訂，介面已載入
                         />
                     </div>
                 )}

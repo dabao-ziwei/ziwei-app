@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, Link as LinkIcon, Trash2, Plus, Users, HeartHandshake, Check, Info } from 'lucide-react';
+import { X, Search, Link as LinkIcon, Trash2, Plus, Users, HeartHandshake, Check } from 'lucide-react';
 import { getRelationships, addRelationship, deleteRelationship, loadClients, getUserCustomRelationTypes, type Client, type Relationship } from '../db';
 import { TagSelect } from './TagSelect';
-import { GAN, SIHUA_TABLE } from '../logic/constants';
+import { ZHI } from '../logic/constants'; // 用於顯示地支時辰
 
 interface Props {
   isOpen: boolean;
@@ -10,16 +10,26 @@ interface Props {
   currentClient: Client;
 }
 
-// 預設關係清單
-const DEFAULT_RELATIONS = ['配偶', '情侶', '父親', '母親', '子女', '姐姐', '妹妹', '哥哥', '弟弟', '親戚', '朋友'];
+// 嚴格指定的預設關係清單
+const DEFAULT_RELATIONS = ['配偶', '情侶', '父親', '母親', '子女', '哥哥', '姐姐', '弟弟', '妹妹', '親戚', '朋友'];
 
-const getBirthYearSiHua = (year: number) => {
-    const ganIdx = (year - 4) % 10;
-    const gan = GAN[ganIdx < 0 ? ganIdx + 10 : ganIdx];
-    const sihua = SIHUA_TABLE[gan];
-    if (!sihua) return '';
-    const abbr = sihua.map(s => s[0]).join('');
-    return `${year} (${gan}) [${abbr}]`;
+// 顯示格式化時間: 1985/09/26 18:30 (酉時)
+const formatFullDate = (c: Client) => {
+    const min = c.birthMinute.toString().padStart(2, '0');
+    // 計算地支
+    const zhiIdx = Math.floor((c.birthHour + 1) / 2) % 12;
+    let zhi = ZHI[zhiIdx];
+    if (zhiIdx === 0 && c.birthHour === 23) zhi = '晚子';
+    if (zhiIdx === 0 && c.birthHour === 0) zhi = '早子';
+    
+    return `${c.birthYear}/${c.birthMonth.toString().padStart(2, '0')}/${c.birthDay.toString().padStart(2, '0')} ${c.birthHour}:${min} (${zhi}時)`;
+};
+
+// 關係顯示轉換 (家人歸納)
+const getDisplayRelation = (type: string) => {
+    const familyTypes = ['哥哥', '姐姐', '弟弟', '妹妹', '親戚', '兄', '姐', '弟', '妹'];
+    if (familyTypes.includes(type)) return '家人';
+    return type;
 };
 
 export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentClient }) => {
@@ -32,7 +42,6 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
   const [selectedTarget, setSelectedTarget] = useState<Client | null>(null);
   const [relationType, setRelationType] = useState('配偶');
   
-  // 關係選項清單 (預設 + 自訂)
   const [relationOptions, setRelationOptions] = useState<string[]>(DEFAULT_RELATIONS);
 
   useEffect(() => {
@@ -40,9 +49,7 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
       fetchRelationships();
       loadClients().then(data => setAllClients(data.filter(c => c.id !== currentClient.id && c.type !== '紫占')));
       
-      // 載入預設 + 使用者自訂的關係
       getUserCustomRelationTypes().then(customTypes => {
-          // 合併並去重複
           const merged = Array.from(new Set([...DEFAULT_RELATIONS, ...customTypes]));
           setRelationOptions(merged);
       });
@@ -63,13 +70,10 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
 
   const handleAdd = async () => {
     if (!selectedTarget || !relationType.trim()) return;
-    
     setLoading(true);
     const success = await addRelationship(currentClient.id, selectedTarget.id, relationType.trim());
-    
     if (success) {
       await fetchRelationships();
-      // 如果新增了不在清單內的自訂關係，更新選項清單
       if (!relationOptions.includes(relationType.trim())) {
           setRelationOptions(prev => [...prev, relationType.trim()]);
       }
@@ -95,7 +99,7 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
   const filteredClients = allClients.filter(c => 
     c.name.includes(searchTerm) || 
     (c.birthYear.toString() === searchTerm)
-  ).slice(0, 5);
+  ).slice(0, 10); // 增加顯示筆數，避免同名找不到
 
   if (!isOpen) return null;
 
@@ -124,14 +128,17 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
                 )}
 
                 {relationships.map(rel => {
-                    const sihuaInfo = rel.related_client ? getBirthYearSiHua(rel.related_client.birthYear) : '';
                     return (
                         <div key={rel.id} className="flex items-center justify-between p-3 rounded-lg border bg-gray-50 border-gray-100 hover:border-blue-200 hover:bg-blue-50/30 transition-all group">
                             <div className="flex items-center gap-3">
                                 <div className="flex flex-col items-center min-w-[3.5rem]">
                                     <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 text-blue-700">
-                                        {rel.relation_type}
+                                        {getDisplayRelation(rel.relation_type)}
                                     </span>
+                                    {/* 如果是被歸納為家人的，顯示原始稱謂備註，方便辨識 */}
+                                    {getDisplayRelation(rel.relation_type) === '家人' && rel.relation_type !== '家人' && (
+                                        <span className="text-[9px] text-gray-400 mt-0.5">({rel.relation_type})</span>
+                                    )}
                                 </div>
                                 
                                 <div className="flex flex-col">
@@ -141,14 +148,8 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
                                             {rel.related_client?.gender}
                                         </span>
                                     </div>
-                                    <div className="flex items-center gap-2 text-xs mt-0.5">
-                                        <span className="text-gray-500 font-mono">
-                                            {rel.related_client?.birthYear}年
-                                        </span>
-                                        <span className="text-purple-600 bg-purple-50 px-1.5 rounded font-medium flex items-center gap-1" title="生年四化: 祿權科忌">
-                                            <Info size={10} />
-                                            {sihuaInfo}
-                                        </span>
+                                    <div className="flex items-center gap-2 text-xs mt-0.5 text-gray-500 font-mono">
+                                        {rel.related_client ? formatFullDate(rel.related_client) : ''}
                                     </div>
                                 </div>
                             </div>
@@ -191,11 +192,12 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
                                         onClick={() => setSelectedTarget(c)}
                                         className="p-2.5 hover:bg-blue-50 cursor-pointer flex justify-between items-center text-sm transition-colors"
                                     >
-                                        <span className="font-medium text-gray-700">{c.name}</span>
-                                        <div className="text-xs text-gray-400 flex flex-col items-end">
-                                            <span>{c.birthYear} • {c.gender}</span>
-                                            <span className="scale-90 origin-right">{c.majorStars}</span>
+                                        <div className="flex flex-col">
+                                            <span className="font-medium text-gray-700">{c.name}</span>
+                                            {/* 搜尋結果顯示完整生日，區分同名同姓 */}
+                                            <span className="text-[10px] text-gray-400">{formatFullDate(c)}</span>
                                         </div>
+                                        <span className="text-xs text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">{c.gender}</span>
                                     </div>
                                 ))}
                                 {filteredClients.length === 0 && searchTerm && (
@@ -212,7 +214,7 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
                                 </div>
                                 
                                 <TagSelect 
-                                    options={relationOptions} // 使用合併後的選項
+                                    options={relationOptions} 
                                     value={relationType}
                                     onChange={setRelationType}
                                     allowCustom={true}

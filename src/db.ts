@@ -1,5 +1,4 @@
 import { supabase } from './supabase'; 
-import { GAN, SIHUA_TABLE } from './logic/constants';
 
 // --- 設定 ---
 const SUPER_VIEW_EMAIL = 'stephenwu.0926@gmail.com';
@@ -46,33 +45,28 @@ export interface Relationship {
   inferred_from?: string;
 }
 
-// --- 輔助：關係稱謂反轉邏輯 ---
+// --- 輔助：關係稱謂反轉邏輯 (Strict) ---
 const getInverseRelationType = (type: string, fromGender: '男' | '女'): string => {
     // 伴侶類
-    if (['配偶', '老公', '老婆', '丈夫', '妻子', '另一半', '太太'].includes(type)) return '配偶';
-    if (['情侶', '男朋友', '女朋友', '男友', '女友'].includes(type)) return '情侶';
+    if (['配偶'].includes(type)) return '配偶';
+    if (['情侶'].includes(type)) return '情侶';
     
-    // 長輩對晚輩 (子女 -> 父母)
-    if (['子女', '兒子', '女兒', '孩子'].includes(type)) return fromGender === '男' ? '父親' : '母親';
-    
-    // 晚輩對長輩 (父母 -> 子女)
-    if (['父親', '爸爸', '父', '爹', '母親', '媽媽', '母', '娘', '父母', '雙親'].includes(type)) return '子女';
+    // 親子
+    if (['子女'].includes(type)) return fromGender === '男' ? '父親' : '母親';
+    if (['父親', '母親'].includes(type)) return '子女';
 
-    // 平輩 (詳細)
-    // 注意：因為無法得知對方的出生年來判斷長幼，故反向一律統稱 "兄弟姊妹" 比較安全
-    if (['哥哥', '弟弟', '姐姐', '妹妹', '姊姊', '兄', '弟', '姐', '妹'].includes(type)) return '兄弟姊妹';
-    if (['兄弟', '姊妹', '兄妹', '姐弟', '兄弟姊妹'].includes(type)) return '兄弟姊妹';
+    // 手足 (反向統稱家人或對應稱謂，但在不知道對方年紀時，回傳"親戚"或對應稱謂比較保險，這裡為了簡單反向邏輯：)
+    // 哥哥/姐姐/弟弟/妹妹 -> 對方看我是什麼？ 
+    // 因為系統沒去算對方年紀，這裡回傳 "兄弟姊妹" 或 "親戚" 會比亂猜好。
+    // 但配合您的需求，我們可以讓系統存精確的，顯示時再轉。
+    // 若 A 是 B 的哥哥，那 B 是 A 的弟弟或妹妹。
+    // 簡化起見，反向存 "手足" 或 "親戚" 較安全，或者直接存 "親戚"。
+    if (['哥哥', '姐姐', '弟弟', '妹妹'].includes(type)) return '親戚'; 
     
-    // 其他
-    if (['朋友', '好友', '閨蜜', '死黨'].includes(type)) return '朋友';
-    if (['親戚', '親人', '家族'].includes(type)) return '親戚';
-    if (['同事', '合作夥伴', '合夥人'].includes(type)) return '合作夥伴';
+    if (['親戚'].includes(type)) return '親戚';
+    if (['朋友'].includes(type)) return '朋友';
     
-    // 職場
-    if (['上司', '老闆', '主管'].includes(type)) return '下屬';
-    if (['下屬', '員工', '部下'].includes(type)) return '上司';
-
-    return '關係人'; 
+    return '朋友'; // 預設 fallback
 };
 
 // --- 核心載入邏輯 ---
@@ -122,8 +116,7 @@ export const getRelationships = async (clientId: string): Promise<Relationship[]
 };
 
 /**
- * 取得使用者自訂的關係類型 (用於下拉選單)
- * 邏輯：從 relationships 表中撈出該 user_id 建立過的所有 relation_type，去重複
+ * 取得使用者自訂的關係類型
  */
 export const getUserCustomRelationTypes = async (): Promise<string[]> => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -136,9 +129,8 @@ export const getUserCustomRelationTypes = async (): Promise<string[]> => {
 
     if (error || !data) return [];
 
-    // 使用 Set 去重複
     const types = new Set(data.map((r: any) => r.relation_type));
-    return Array.from(types).filter(t => t) as string[]; // 過濾空值
+    return Array.from(types).filter(t => t) as string[]; 
 };
 
 // --- 雙向新增關係 ---
@@ -165,20 +157,24 @@ export const addRelationship = async (fromId: string, toId: string, type: string
     if (err2) console.warn("Reverse link failed", err2);
 
     if (!err1) {
+        // 非同步執行自動連動
         autoLinkFamily(user.id, fromId, toId, type);
     }
 
     return !err1;
 };
 
-// --- 自動家庭連動 ---
+/**
+ * 自動家庭連動 (修正版：防止亂倫 Bug)
+ * 只允許 "父母-子女" 的垂直自動連結，嚴格禁止水平(兄弟)或跨層級配偶的自動推導。
+ */
 const autoLinkFamily = async (user_id: string, fromId: string, toId: string, type: string) => {
     // 情境 1: 新增 "子女" -> 幫 "配偶" 加子女
-    if (['子女', '兒子', '女兒'].includes(type)) {
+    if (['子女'].includes(type)) {
         const { data: spouses } = await supabase.from('relationships')
             .select('to_client_id')
             .eq('from_client_id', fromId)
-            .in('relation_type', ['配偶', '老公', '老婆', '丈夫', '妻子']);
+            .in('relation_type', ['配偶']); // 嚴格鎖定配偶
         
         if (spouses) {
             for (const spouse of spouses) {
@@ -193,11 +189,11 @@ const autoLinkFamily = async (user_id: string, fromId: string, toId: string, typ
     }
 
     // 情境 2: 新增 "配偶" -> 幫配偶加 "子女"
-    if (['配偶', '老公', '老婆', '丈夫', '妻子'].includes(type)) {
+    if (['配偶'].includes(type)) {
         const { data: children } = await supabase.from('relationships')
             .select('to_client_id')
             .eq('from_client_id', fromId)
-            .in('relation_type', ['子女', '兒子', '女兒']);
+            .in('relation_type', ['子女']);
         
         if (children) {
             for (const child of children) {
