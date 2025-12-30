@@ -5,23 +5,23 @@ import type { Client, Relationship } from '../db';
 import type { ChartData } from '../logic/types';
 
 // ==========================================
-// 1. 定義箭頭元件 (純 SVG Polygon，保證不會 404)
+// 1. 定義箭頭元件 (純 SVG Polygon)
 // ==========================================
 const ArrowHead = ({ x, y, rotation }: { x: number, y: number, rotation: number }) => (
   <polygon
-    points="0,0 -8,-5 -8,5"
+    points="0,0 -6,-4 -6,4" // 微調箭頭大小，稍微縮小一點點以配合細線
     fill="#cbd5e1" // gray-300
     transform={`translate(${x}, ${y}) rotate(${rotation})`}
   />
 );
 
 // ==========================================
-// 2. 定義佈局參數
+// 2. 定義佈局參數 (已縮減距離)
 // ==========================================
 const GRAPH_CONFIG = {
-  Y_GAP: 160,
-  X_GAP: 280,
-  SIBLING_GAP: 130,
+  Y_GAP: 80,       // 垂直距離：160 -> 80 (約縮短一半)
+  X_GAP: 130,      // 水平距離：280 -> 130 (約縮短一半)
+  SIBLING_GAP: 90, // 同層間距：130 -> 90 (讓兄弟姊妹靠緊一點)
 };
 
 interface GraphNode {
@@ -146,8 +146,12 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                 let arrowRotation = 0;
                 let arrowX = node.x;
                 let arrowY = node.y;
-                const halfW = 60; 
-                const halfH = 25;
+                
+                // 卡片尺寸的一半 (配合縮小的 UI 調整)
+                // 寬度約 80px -> 半寬 40px (稍微留點 buffer -> 42)
+                // 高度約 28px -> 半高 14px (稍微留點 buffer -> 16)
+                const halfW = 42; 
+                const halfH = 16;
 
                 if (Math.abs(node.y) > Math.abs(node.x)) {
                     const cY = node.y / 2;
@@ -190,12 +194,10 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     }
 
     return (
-        // 【關鍵修正】加上 h-full w-full，讓這層 div 撐滿父層給的空間
         <div className="col-span-2 row-span-2 flex z-10 relative overflow-hidden p-0.5 h-full w-full">
             <div className={`flex w-full h-full bg-white`}>
                 
                 {/* --- [左側：個人資料欄] --- */}
-                {/* 加上 flex-1 或固定寬度，這裡使用 shrink-0 確保不被擠壓 */}
                 <div className={`h-full flex flex-col p-1 border-r border-gray-100 bg-white z-20 relative transition-all duration-300 ${hasRelations ? 'basis-[35%] shrink-0' : 'w-full'}`}>
                     {/* 麵包屑 */}
                     {historyStack.length > 0 && (
@@ -263,7 +265,7 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                 </div> 
 
                 {/* ========================================================= */}
-                {/* 右側：直接嵌入關係圖 (不使用外部元件，避免參數傳遞問題) */}
+                {/* 右側：直接嵌入關係圖 */}
                 {/* ========================================================= */}
                 {hasRelations && (
                     <div className="hidden md:block flex-1 h-full relative bg-white border-l border-gray-100 overflow-hidden cursor-grab active:cursor-grabbing" onClick={() => setSelectedNodeId(null)}>
@@ -279,13 +281,13 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                     {lines.map(line => (
                                         <g key={line.targetId}>
                                             <path d={line.d} fill="none" stroke="#cbd5e1" strokeWidth="2" />
-                                            {/* 直接畫三角形，不使用 markerUrl */}
+                                            {/* 直接畫三角形 */}
                                             <ArrowHead x={line.arrowX} y={line.arrowY} rotation={line.rotation} />
                                         </g>
                                     ))}
                                 </svg>
 
-                                {/* 2. 節點層 */}
+                                {/* 2. 節點層 (UI 微調：縮小尺寸與字體) */}
                                 {nodes.map(node => {
                                     const isCenter = node.id === 'center';
                                     const isSelected = selectedNodeId === node.id;
@@ -295,13 +297,17 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                             style={{ left: node.x, top: node.y, transform: 'translate(-50%, -50%)', zIndex: isSelected ? 50 : 10 }}
                                             onClick={(e) => { e.stopPropagation(); if (!isCenter) setSelectedNodeId(isSelected ? null : node.id); }}
                                         >
-                                            <div className={`relative px-4 py-2 rounded-lg shadow-sm border transition-all duration-200 flex items-center justify-center
+                                            <div className={`relative px-3 py-1.5 rounded-md shadow-sm border transition-all duration-200 flex items-center justify-center
                                                 ${isCenter ? (client.gender === '男' ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white border-blue-600' : 'bg-gradient-to-r from-pink-500 to-pink-600 text-white border-pink-600') 
                                                            : (isSelected ? 'bg-white border-blue-400 ring-2 ring-blue-200 scale-105' : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-md')}`}
-                                                style={{ minWidth: isCenter ? '100px' : 'auto', cursor: isCenter ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
+                                                // 微調 minWidth: 100px -> 80px
+                                                style={{ minWidth: isCenter ? '80px' : 'auto', cursor: isCenter ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
                                             >
-                                                <span className={`text-sm font-bold ${isCenter ? 'text-white' : 'text-gray-700'}`}>{node.data.name}</span>
-                                                {!isCenter && (<span className={`ml-2 text-[10px] px-1 rounded ${node.data.gender === '男' ? 'bg-blue-50 text-blue-500' : 'bg-pink-50 text-pink-500'}`}>{node.data.gender}</span>)}
+                                                {/* 微調字級: text-sm -> text-xs */}
+                                                <span className={`text-xs font-bold ${isCenter ? 'text-white' : 'text-gray-700'}`}>{node.data.name}</span>
+                                                
+                                                {/* 微調性別標籤字級 */}
+                                                {!isCenter && (<span className={`ml-1 text-[10px] px-1 rounded ${node.data.gender === '男' ? 'bg-blue-50 text-blue-500' : 'bg-pink-50 text-pink-500'}`}>{node.data.gender}</span>)}
                                             </div>
 
                                             <AnimatePresence>
