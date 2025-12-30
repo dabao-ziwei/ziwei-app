@@ -1,27 +1,27 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Users, Repeat, Clock, ArrowLeft, ChevronRight, Eye, RefreshCw, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Client, Relationship } from '../db';
 import type { ChartData } from '../logic/types';
 
 // ==========================================
-// 1. 定義箭頭元件 (純 SVG Polygon)
+// 1. 定義箭頭元件 (SVG Polygon)
 // ==========================================
 const ArrowHead = ({ x, y, rotation }: { x: number, y: number, rotation: number }) => (
   <polygon
-    points="0,0 -6,-4 -6,4" // 微調箭頭大小，稍微縮小一點點以配合細線
+    points="0,0 -6,-4 -6,4"
     fill="#cbd5e1" // gray-300
     transform={`translate(${x}, ${y}) rotate(${rotation})`}
   />
 );
 
 // ==========================================
-// 2. 定義佈局參數 (已縮減距離)
+// 2. 定義佈局參數 (緊湊版)
 // ==========================================
 const GRAPH_CONFIG = {
-  Y_GAP: 80,       // 垂直距離：160 -> 80 (約縮短一半)
-  X_GAP: 130,      // 水平距離：280 -> 130 (約縮短一半)
-  SIBLING_GAP: 90, // 同層間距：130 -> 90 (讓兄弟姊妹靠緊一點)
+  Y_GAP: 80,       // 垂直距離 (長輩在上，晚輩在下)
+  X_GAP: 130,      // 水平距離
+  SIBLING_GAP: 90, // 同層間距
 };
 
 interface GraphNode {
@@ -70,7 +70,7 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     onHistoryBack,
     onNavigate,
     onCompatibility,
-    benMingMajorStarsStr,
+    // benMingMajorStarsStr, // 已移除顯示，這裡保留解構但不使用
     onChangeHour,
     onResetTime,
     currentHourZhi,
@@ -88,13 +88,11 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     isLiuNian
 }) => {
     const hasRelations = relationships.length > 0;
-    
-    // =========================================================
-    // 3. 整合原本 RelationshipGraph 的邏輯到這裡
-    // =========================================================
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
-    // 計算節點與連線 (useMemo)
+    // =========================================================
+    // 3. 計算節點與連線 (佈局邏輯核心)
+    // =========================================================
     const { nodes, lines } = useMemo(() => {
         if (!hasRelations) return { nodes: [], lines: [] };
 
@@ -109,9 +107,11 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
             relType: 'self',
         });
 
+        // 分類邏輯 (確保女兒/子女在 'bottom')
         const parents = relationships.filter(r => ['父親', '母親', '爸爸', '媽媽', '父', '母'].includes(r.relation_type));
-        const children = relationships.filter(r => ['子女', '兒子', '女兒'].includes(r.relation_type));
+        const children = relationships.filter(r => ['子女', '兒子', '女兒', '長男', '長女', '次男', '次女'].includes(r.relation_type));
         const partners = relationships.filter(r => ['配偶', '老公', '老婆', '丈夫', '妻子', '情侶'].includes(r.relation_type));
+        // 其他人放左邊 (包含兄弟姊妹)
         const others = relationships.filter(r => !parents.includes(r) && !children.includes(r) && !partners.includes(r));
 
         const layoutGroup = (group: Relationship[], direction: 'top' | 'bottom' | 'left' | 'right') => {
@@ -125,19 +125,20 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                 
                 let x = 0, y = 0;
                 switch (direction) {
-                    case 'top': y = -GRAPH_CONFIG.Y_GAP; x = offset; break;
-                    case 'bottom': y = GRAPH_CONFIG.Y_GAP; x = offset; break;
-                    case 'left': x = -GRAPH_CONFIG.X_GAP; y = offset; break;
-                    case 'right': x = GRAPH_CONFIG.X_GAP; y = offset; break;
+                    case 'top':    y = -GRAPH_CONFIG.Y_GAP; x = offset; break; // 負 Y = 向上 (長輩)
+                    case 'bottom': y = GRAPH_CONFIG.Y_GAP;  x = offset; break; // 正 Y = 向下 (晚輩)
+                    case 'left':   x = -GRAPH_CONFIG.X_GAP; y = offset; break; // 負 X = 向左
+                    case 'right':  x = GRAPH_CONFIG.X_GAP;  y = offset; break; // 正 X = 向右
                 }
                 calculatedNodes.push({ id: rel.related_client.id, x, y, data: rel.related_client, relType: rel.relation_type });
             });
         };
 
-        layoutGroup(parents, 'top');
-        layoutGroup(children, 'bottom');
-        layoutGroup(others, 'left');
-        layoutGroup(partners, 'right');
+        // 執行佈局
+        layoutGroup(parents, 'top');    // 父母在上
+        layoutGroup(children, 'bottom'); // 子女在下 (修正您提到的 "A是B女兒" 問題)
+        layoutGroup(others, 'left');    // 兄弟/其他在左
+        layoutGroup(partners, 'right'); // 配偶在右
 
         const calculatedLines = calculatedNodes
             .filter(n => n.id !== 'center')
@@ -147,22 +148,22 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                 let arrowX = node.x;
                 let arrowY = node.y;
                 
-                // 卡片尺寸的一半 (配合縮小的 UI 調整)
-                // 寬度約 80px -> 半寬 40px (稍微留點 buffer -> 42)
-                // 高度約 28px -> 半高 14px (稍微留點 buffer -> 16)
+                // 卡片尺寸微調 (配合緊湊版面)
                 const halfW = 42; 
                 const halfH = 16;
 
                 if (Math.abs(node.y) > Math.abs(node.x)) {
+                    // 垂直線
                     const cY = node.y / 2;
                     d = `M 0 0 C 0 ${cY}, ${node.x} ${cY}, ${node.x} ${node.y}`;
-                    if (node.y > 0) { arrowRotation = 90; arrowY = node.y - halfH; }
-                    else { arrowRotation = -90; arrowY = node.y + halfH; }
+                    if (node.y > 0) { arrowRotation = 90; arrowY = node.y - halfH; } // 向下
+                    else { arrowRotation = -90; arrowY = node.y + halfH; } // 向上
                 } else {
+                    // 水平線
                     const cX = node.x / 2;
                     d = `M 0 0 C ${cX} 0, ${cX} ${node.y}, ${node.x} ${node.y}`;
-                    if (node.x > 0) { arrowRotation = 0; arrowX = node.x - halfW; }
-                    else { arrowRotation = 180; arrowX = node.x + halfW; }
+                    if (node.x > 0) { arrowRotation = 0; arrowX = node.x - halfW; } // 向右
+                    else { arrowRotation = 180; arrowX = node.x + halfW; } // 向左
                 }
                 return { targetId: node.id, d, arrowX, arrowY, rotation: arrowRotation };
             });
@@ -170,17 +171,14 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
         return { nodes: calculatedNodes, lines: calculatedLines };
     }, [client, relationships, hasRelations]);
 
-    // =========================================================
-    // 渲染邏輯
-    // =========================================================
-
-    // 紫占模式顯示
+    // 紫占模式顯示 (保持不變)
     if (isDivinationMode) {
         return (
             <div className="col-span-2 row-span-2 flex flex-col items-center justify-center p-4 bg-white z-10 relative">
                 <div className="flex flex-col items-center gap-2 mb-4">
                     <div className="text-3xl sm:text-4xl font-bold text-purple-800 tracking-widest text-center">{client.name}</div>
-                    <div className="text-sm font-bold text-gray-500 tracking-wide">{benMingMajorStarsStr}</div>
+                    {/* 紫占模式下是否要顯示主星？這裡暫時保留，若要移除也可註解掉 */}
+                    {/* <div className="text-sm font-bold text-gray-500 tracking-wide">{benMingMajorStarsStr}</div> */}
                 </div>
                 {isDivinationReady && divNum && (
                     <div className="flex gap-2">
@@ -221,10 +219,13 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                         <button onClick={() => onChangeHour(1)} className="text-gray-400 hover:text-gray-800 font-bold text-base select-none p-1">&gt;</button>
                     </div>
 
-                    {/* 命主資料 */}
+                    {/* 命主資料 (已移除主星資訊) */}
                     <div className="flex-1 flex flex-col items-center justify-start pt-2 text-center gap-0.5 min-h-0 overflow-hidden">
                         <div className="text-2xl font-bold text-gray-900 tracking-widest leading-tight truncate w-full px-2">{client.name}</div>
-                        <div className="text-xs font-bold text-red-600 tracking-wide">{benMingMajorStarsStr}</div>
+                        
+                        {/* [Requirement 1] 移除主星資訊 */}
+                        {/* <div className="text-xs font-bold text-red-600 tracking-wide">{benMingMajorStarsStr}</div> */}
+
                         {chartData && (
                             <div className="text-[10px] text-gray-500 font-medium mt-1 space-y-0.5">
                                 <div>{client.gender} | {chartData.bureau}</div>
@@ -264,30 +265,21 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                     )}
                 </div> 
 
-                {/* ========================================================= */}
-                {/* 右側：直接嵌入關係圖 */}
-                {/* ========================================================= */}
+                {/* --- [右側：關係圖] --- */}
                 {hasRelations && (
                     <div className="hidden md:block flex-1 h-full relative bg-white border-l border-gray-100 overflow-hidden cursor-grab active:cursor-grabbing" onClick={() => setSelectedNodeId(null)}>
-                         
-                         {/* 提示文字 */}
                          <div className="absolute bottom-2 right-2 text-[10px] text-gray-400 pointer-events-none select-none z-0">可拖曳移動畫布</div>
-
-                         {/* 無限畫布區域：使用絕對置中 */}
                          <motion.div drag className="relative w-full h-full flex items-center justify-center">
                             <motion.div className="relative" style={{ x: 0, y: 0 }}>
-                                {/* 1. 連線層 */}
                                 <svg className="absolute overflow-visible pointer-events-none" style={{ left: 0, top: 0 }}>
                                     {lines.map(line => (
                                         <g key={line.targetId}>
                                             <path d={line.d} fill="none" stroke="#cbd5e1" strokeWidth="2" />
-                                            {/* 直接畫三角形 */}
                                             <ArrowHead x={line.arrowX} y={line.arrowY} rotation={line.rotation} />
                                         </g>
                                     ))}
                                 </svg>
 
-                                {/* 2. 節點層 (UI 微調：縮小尺寸與字體) */}
                                 {nodes.map(node => {
                                     const isCenter = node.id === 'center';
                                     const isSelected = selectedNodeId === node.id;
@@ -300,13 +292,9 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                             <div className={`relative px-3 py-1.5 rounded-md shadow-sm border transition-all duration-200 flex items-center justify-center
                                                 ${isCenter ? (client.gender === '男' ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white border-blue-600' : 'bg-gradient-to-r from-pink-500 to-pink-600 text-white border-pink-600') 
                                                            : (isSelected ? 'bg-white border-blue-400 ring-2 ring-blue-200 scale-105' : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-md')}`}
-                                                // 微調 minWidth: 100px -> 80px
                                                 style={{ minWidth: isCenter ? '80px' : 'auto', cursor: isCenter ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
                                             >
-                                                {/* 微調字級: text-sm -> text-xs */}
                                                 <span className={`text-xs font-bold ${isCenter ? 'text-white' : 'text-gray-700'}`}>{node.data.name}</span>
-                                                
-                                                {/* 微調性別標籤字級 */}
                                                 {!isCenter && (<span className={`ml-1 text-[10px] px-1 rounded ${node.data.gender === '男' ? 'bg-blue-50 text-blue-500' : 'bg-pink-50 text-pink-500'}`}>{node.data.gender}</span>)}
                                             </div>
 
