@@ -40,22 +40,37 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
       useRef<HTMLInputElement>(null)
   ];
 
-  // 初始化
+  // 初始化與權限判斷
   useEffect(() => {
       if (isOpen) {
+          // 每次打開 Modal 重置步驟與數字
           setStep(1);
           setDigits(['', '', '', '']);
+          
+          // 如果是手動模式，執行權限檢查來決定是否帶入預設值
           if (mode === 'manual') {
               supabase.auth.getUser().then(({ data: { user } }) => {
+                  // 嚴格比對 Email
                   if (user?.email === SUPER_ADMIN_EMAIL) {
-                      setYear('1979'); setMonth('09'); setDay('26'); setHour('18'); setMinute('26'); setGender('男');
+                      setYear('1979'); 
+                      setMonth('09'); 
+                      setDay('26'); 
+                      setHour('18'); 
+                      setMinute('26'); 
+                      setGender('男');
                   } else {
-                      setYear(''); setMonth(''); setDay(''); setHour(''); setMinute(''); setGender('女');
+                      // 非管理員，確保欄位清空
+                      setYear(''); 
+                      setMonth(''); 
+                      setDay(''); 
+                      setHour(''); 
+                      setMinute(''); 
+                      setGender('女');
                   }
               });
           }
       }
-  }, [isOpen, mode]);
+  }, [isOpen, mode]); // 當 Modal 開啟或模式切換時觸發
 
   // 時間輸入處理
   const handleDateInput = (e: React.ChangeEvent<HTMLInputElement>, setter: (v: string) => void, maxLen: number, nextRef?: React.RefObject<HTMLInputElement>) => {
