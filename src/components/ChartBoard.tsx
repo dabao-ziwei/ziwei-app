@@ -239,6 +239,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   const resetTime = () => { setCurrentHour(client!.birthHour); resetAllStates(); };
   const handleBack = () => { onBack ? onBack() : navigate('/'); };
   
+  // 截圖邏輯
   const isBenMingState = daXianSeq === -1 && liuNianYear === null;
   const isCleanState = isBenMingState && flyingPalace === null && selectedPalace === null && mode !== 'divination';
 
@@ -264,7 +265,6 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   let currentHourZhi = ZHI[Math.floor((currentHour + 1) / 2) % 12];
   if (Math.floor((currentHour + 1) / 2) % 12 === 0) { currentHourZhi = currentHour === 23 ? '晚子' : '早子'; }
 
-  // 16格網格陣列：中間 4 格為 null (indices: 5, 6, 9, 10)
   const gridLayout = [5, 6, 7, 8, 4, null, null, 9, 3, null, null, 10, 2, 1, 0, 11];
   const connections = (() => { if (selectedPalace === null) return { self: -1, tri1: -1, tri2: -1, opp: -1 }; return { self: selectedPalace, tri1: (selectedPalace + 4) % 12, tri2: (selectedPalace + 8) % 12, opp: (selectedPalace + 6) % 12 }; })();
   const getAnchorCoord = (palaceIdx: number) => { const map: { [key: number]: { x: number; y: number } } = { 5: { x: 25, y: 25 }, 6: { x: 37.5, y: 25 }, 7: { x: 62.5, y: 25 }, 8: { x: 75, y: 25 }, 4: { x: 25, y: 37.5 }, 9: { x: 75, y: 37.5 }, 3: { x: 25, y: 62.5 }, 10: { x: 75, y: 62.5 }, 2: { x: 25, y: 75 }, 1: { x: 37.5, y: 75 }, 0: { x: 62.5, y: 75 }, 11: { x: 75, y: 75 } }; return map[palaceIdx] || { x: 50, y: 50 }; };
@@ -290,12 +290,15 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
   return (
     <div className="flex flex-col h-[100dvh] w-full bg-white relative overflow-hidden">
       
+      {/* Header */}
       <div className="flex justify-between items-center px-4 py-2 bg-white border-b border-gray-200 shadow-sm shrink-0 z-50 h-[56px]">
+        {/* 左側：永遠只有返回列表 */}
         <button onClick={handleBack} className="bg-white text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm">
             <ChevronLeft size={16} />
             列表
         </button>
 
+        {/* 右側：他人生年 + 截圖 */}
         {mode === 'standard' && (
             <div className="flex gap-2">
                 {externalGan !== null ? (
@@ -314,6 +317,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                     </button>
                 )}
 
+                {/* 截圖按鈕 (嚴格條件) */}
                 {isCleanState && (
                     <button 
                         onClick={handleDownload}
@@ -329,6 +333,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
       </div>
 
       <div className="flex-1 min-h-0 w-full relative">
+        {/* Modals */}
         {isExternalInputOpen && (
             <div className="absolute inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
                 <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 relative animate-in fade-in zoom-in">
@@ -353,7 +358,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
             </svg>
 
             {gridLayout.map((palaceIdx, gridPos) => {
-                // 修正：遇到中間左上角 (index 5) 時，渲染跨欄的 CenterInfoBoard
+                // 中間區塊渲染
                 if (gridPos === 5) {
                     return (
                         <div key="center-board" className="col-span-2 row-span-2 z-0 relative">
@@ -375,6 +380,7 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                                 divNum={divNum}
                                 isDivinationReady={isDivinationReady}
                                 
+                                // 傳遞功能鍵狀態
                                 onToggleTwin={() => setIsTwinMode(!isTwinMode)}
                                 onToggleInverted={() => setIsReverse(!isReverse)}
                                 onToggleSmallLimit={toggleXiaoXian}
@@ -388,12 +394,11 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                     );
                 }
                 
-                // 修正：忽略中間其他三個空位，避免重疊渲染
+                // 忽略中間其他三個空位
                 if (gridPos === 6 || gridPos === 9 || gridPos === 10) {
                     return null;
                 }
 
-                // 其餘為宮位
                 if (palaceIdx === null) return null;
 
                 const { daName, liuName, xiaoName } = getRelativeNames(palaceIdx);
