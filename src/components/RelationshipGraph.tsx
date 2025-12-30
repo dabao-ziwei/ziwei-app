@@ -12,10 +12,8 @@ interface RelationshipGraphProps {
 
 // 佈局設定
 const CONFIG = {
-  // 節點大小
   NODE_WIDTH: 100,
   NODE_HEIGHT: 40,
-  // 間距
   Y_GAP: 180, // 上下層垂直距離
   X_GAP: 240, // 左右層水平距離
   SIBLING_GAP: 120, // 同層級節點間距
@@ -26,7 +24,7 @@ interface GraphNode {
   x: number;
   y: number;
   data: Client;
-  relType: string; // 僅用於分類邏輯，顯示時不使用
+  relType: string;
 }
 
 export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
@@ -37,8 +35,21 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  
+  // 1. 產生唯一的 marker ID，避免多個組件衝突
+  const markerId = useMemo(() => `arrow-head-${Math.random().toString(36).substr(2, 9)}`, []);
+  
+  // 2. 取得當前頁面路徑，解決 SPA 路由下 url(#id) 被誤判為 404 請求的問題
+  const [pageUrl, setPageUrl] = useState('');
 
-  // 1. 自動佈局演算法
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // 取得當前的路徑 (例如 /chart/123)，確保 SVG 引用的是「當前頁面內的 ID」
+      setPageUrl(window.location.pathname + window.location.search);
+    }
+  }, []);
+
+  // 3. 自動佈局演算法
   const { nodes, lines } = useMemo(() => {
     const calculatedNodes: GraphNode[] = [];
     
@@ -69,7 +80,6 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
         let y = 0;
 
         // 計算偏移量 (讓節點置中對稱)
-        // index: 0, 1, 2 -> shift: -1, 0, 1 (if gap=1)
         const centerOffset = (count - 1) * CONFIG.SIBLING_GAP / 2;
         const offset = index * CONFIG.SIBLING_GAP - centerOffset;
 
@@ -107,18 +117,17 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
     layoutGroup(others, 'left');
     layoutGroup(partners, 'right');
 
-    // 生成連線路徑 (從 0,0 到 node.x, node.y)
+    // 生成連線路徑
     const calculatedLines = calculatedNodes
       .filter(n => n.id !== 'center')
       .map(node => {
-        // 貝茲曲線控制點
         let d = '';
         if (Math.abs(node.y) > Math.abs(node.x)) {
-          // 垂直連線 (上下) - 控制點在 Y 軸中段
+          // 垂直連線 (上下)
           const cY = node.y / 2;
           d = `M 0 0 C 0 ${cY}, ${node.x} ${cY}, ${node.x} ${node.y}`;
         } else {
-          // 水平連線 (左右) - 控制點在 X 軸中段
+          // 水平連線 (左右)
           const cX = node.x / 2;
           d = `M 0 0 C ${cX} 0, ${cX} ${node.y}, ${node.x} ${node.y}`;
         }
@@ -128,7 +137,6 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
     return { nodes: calculatedNodes, lines: calculatedLines };
   }, [client, relationships]);
 
-  // 點擊空白處關閉選單
   const handleBgClick = () => {
     setSelectedNodeId(null);
   };
@@ -139,16 +147,16 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
       className="w-full h-full bg-slate-50 relative overflow-hidden cursor-grab active:cursor-grabbing select-none"
       onClick={handleBgClick}
     >
-      {/* 無限畫布區域 (可拖曳) */}
+      {/* 無限畫布區域 */}
       <motion.div
         drag
-        dragMomentum={false} // 關閉慣性，避免滑太遠
+        dragMomentum={false}
         className="absolute left-1/2 top-1/2 flex items-center justify-center w-0 h-0"
       >
-        {/* 1. 連線層 (SVG) */}
-        <svg className="absolute overflow-visible pointer-events-none" style={{ left: 0, top: 0 }}>
+        {/* 1. 連線層 (SVG) - 關鍵修正：width/height 100% 且 overflow: visible */}
+        <svg className="absolute overflow-visible pointer-events-none" style={{ left: 0, top: 0, width: '100%', height: '100%' }}>
           <defs>
-            <marker id="arrow-head" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto" fill="#cbd5e1">
+            <marker id={markerId} markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto" fill="#cbd5e1">
               <path d="M0,0 L0,6 L6,3 z" />
             </marker>
           </defs>
@@ -159,7 +167,8 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
               fill="none"
               stroke="#cbd5e1"
               strokeWidth="2"
-              markerEnd="url(#arrow-head)"
+              // 關鍵修正：使用 pageUrl 確保引用正確，避免 404
+              markerEnd={`url(${pageUrl}#${markerId})`}
             />
           ))}
         </svg>
@@ -176,7 +185,7 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
               style={{
                 left: node.x,
                 top: node.y,
-                transform: 'translate(-50%, -50%)', // 讓座標點位於元素的正中心
+                transform: 'translate(-50%, -50%)',
                 zIndex: isSelected ? 50 : 10,
               }}
               onClick={(e) => {
@@ -184,7 +193,6 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
                 if (!isCenter) setSelectedNodeId(isSelected ? null : node.id);
               }}
             >
-              {/* 節點本體 */}
               <div 
                 className={`
                   relative px-4 py-2 rounded-lg shadow-sm border transition-all duration-200 flex items-center justify-center
@@ -202,7 +210,6 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
                   {node.data.name}
                 </span>
                 
-                {/* 簡單的性別標記 (如果是中心點則不需要) */}
                 {!isCenter && (
                    <span className={`ml-2 text-[10px] px-1 rounded ${node.data.gender === '男' ? 'bg-blue-50 text-blue-500' : 'bg-pink-50 text-pink-500'}`}>
                      {node.data.gender}
@@ -210,7 +217,7 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
                 )}
               </div>
 
-              {/* 3. 互動選單 (Popover) - 僅在選中時顯示 */}
+              {/* 3. 互動選單 */}
               {isSelected && !isCenter && (
                 <motion.div 
                   initial={{ opacity: 0, y: 10, scale: 0.9 }}
@@ -245,7 +252,6 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
         })}
       </motion.div>
       
-      {/* 提示文字 */}
       <div className="absolute bottom-2 right-2 text-[10px] text-gray-300 pointer-events-none select-none">
         可拖曳移動畫布
       </div>
