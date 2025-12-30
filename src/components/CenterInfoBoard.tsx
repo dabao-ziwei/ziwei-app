@@ -81,17 +81,22 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     }
 
     return (
-        // 外層容器：p-0.5 用於內縮，移除所有 border/shadow
+        // 外層容器
         <div className="col-span-2 row-span-2 flex z-10 relative overflow-hidden p-0.5">
             
-            {/* Flex 容器：將左右兩欄包在一起 */}
+            {/* Flex 容器：確保左右兩欄高度撐滿 */}
             <div className={`flex w-full h-full bg-white`}>
                 
                 {/* --- [左側：個人資料欄] --- */}
-                {/* 若有關聯資料，左側寬度固定為 35%；若無關聯，則佔滿 100% */}
-                <div className={`${hasRelations ? 'w-full md:w-[35%]' : 'w-full'} h-full flex flex-col p-1 border-r border-gray-100 bg-white z-20 relative transition-all duration-300`}>
+                {/* 使用 flex-basis 和 shrink-0 來鎖定寬度，避免被右側擠壓 */}
+                <div 
+                    className={`
+                        h-full flex flex-col p-1 border-r border-gray-100 bg-white z-20 relative transition-all duration-300
+                        ${hasRelations ? 'basis-[35%] shrink-0' : 'w-full'}
+                    `}
+                >
                     
-                    {/* 麵包屑返回導航 (Breadcrumbs) */}
+                    {/* 麵包屑返回導航 */}
                     {historyStack.length > 0 && (
                          <div className="absolute top-0 left-0 w-full px-2 py-1 z-50 bg-white/90 backdrop-blur-sm border-b border-gray-100 flex items-center gap-1 overflow-hidden">
                             <button 
@@ -103,7 +108,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                             </button>
                             
                             <div className="flex items-center text-[10px] text-gray-400 overflow-hidden whitespace-nowrap">
-                                {/* 為了節省空間，只顯示上一層的名字，或者顯示路徑 */}
                                 {historyStack.length > 1 && <span className="shrink-0">...</span>}
                                 {historyStack.length > 0 && (
                                     <>
@@ -121,7 +125,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                          </div>
                     )}
                     
-                    {/* 給頂部留一點空間 (如果有麵包屑) */}
                     <div className={`${historyStack.length > 0 ? 'mt-6' : 'mt-1'}`}></div>
 
                     {/* 1. 頂部：時辰切換 */}
@@ -153,7 +156,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                             </div>
                         )}
 
-                        {/* 純文字時間顯示 */}
                         <div className="mt-2 flex items-center justify-center gap-1 text-[12px] font-mono text-gray-700 bg-gray-50/50 px-2 py-1 rounded">
                             <span className="font-bold">{client.birthYear}</span>
                             <span className="text-gray-300">-</span>
@@ -201,11 +203,12 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                         </div>
                     )}
                 </div> 
-                {/* [左側欄結束] */}
 
-                {/* --- [右側：關係圖欄] (全新的無限畫布) --- */}
+                {/* --- [右側：關係圖欄] --- */}
+                {/* 使用 flex-1 自動填滿剩餘空間，並設定 overflow-hidden 防止撐開父層 */}
                 {hasRelations && (
-                    <div className="hidden md:block w-[65%] h-full relative bg-white border-l border-gray-100">
+                    <div className="hidden md:block flex-1 h-full relative bg-white border-l border-gray-100 overflow-hidden">
+                       {/* 這裡確保 RelationshipGraph 接收正確的 props */}
                        <RelationshipGraph 
                           client={client}
                           relationships={relationships}
@@ -214,7 +217,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                        />
                     </div>
                 )}
-                {/* [右側欄結束] */}
 
             </div>
         </div>
