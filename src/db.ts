@@ -48,18 +48,24 @@ export interface Relationship {
 
 // --- 輔助：關係稱謂反轉邏輯 ---
 const getInverseRelationType = (type: string, fromGender: '男' | '女'): string => {
+    // 伴侶類
     if (['配偶', '老公', '老婆', '丈夫', '妻子', '另一半', '太太'].includes(type)) return '配偶';
     if (['情侶', '男朋友', '女朋友', '男友', '女友'].includes(type)) return '情侶';
     
-    // 如果我設對方為子女，且我是男 -> 對方叫我父親
+    // 長輩對晚輩 (子女 -> 父母)
     if (['子女', '兒子', '女兒', '孩子'].includes(type)) return fromGender === '男' ? '父親' : '母親';
     
-    // 如果我設對方為父母，對方叫我子女
+    // 晚輩對長輩 (父母 -> 子女)
     if (['父親', '爸爸', '父', '爹', '母親', '媽媽', '母', '娘', '父母', '雙親'].includes(type)) return '子女';
 
-    // 平輩
-    if (['兄弟', '姊妹', '兄妹', '姐弟', '兄弟姊妹', '哥哥', '弟弟', '姊姊', '妹妹'].includes(type)) return '兄弟姊妹';
+    // 平輩 (詳細)
+    // 注意：因為無法得知對方的出生年來判斷長幼，故反向一律統稱 "兄弟姊妹" 比較安全
+    if (['哥哥', '弟弟', '姐姐', '妹妹', '姊姊', '兄', '弟', '姐', '妹'].includes(type)) return '兄弟姊妹';
+    if (['兄弟', '姊妹', '兄妹', '姐弟', '兄弟姊妹'].includes(type)) return '兄弟姊妹';
+    
+    // 其他
     if (['朋友', '好友', '閨蜜', '死黨'].includes(type)) return '朋友';
+    if (['親戚', '親人', '家族'].includes(type)) return '親戚';
     if (['同事', '合作夥伴', '合夥人'].includes(type)) return '合作夥伴';
     
     // 職場
@@ -116,35 +122,77 @@ export const getRelationships = async (clientId: string): Promise<Relationship[]
 };
 
 /**
- * 自動化家庭連動 (Auto Family Linking)
- * 這是解決 "爸爸看不到兒子" 的核心邏輯
+ * 取得使用者自訂的關係類型 (用於下拉選單)
+ * 邏輯：從 relationships 表中撈出該 user_id 建立過的所有 relation_type，去重複
  */
+export const getUserCustomRelationTypes = async (): Promise<string[]> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    const { data, error } = await supabase
+        .from('relationships')
+        .select('relation_type')
+        .eq('user_id', user.id);
+
+    if (error || !data) return [];
+
+    // 使用 Set 去重複
+    const types = new Set(data.map((r: any) => r.relation_type));
+    return Array.from(types).filter(t => t) as string[]; // 過濾空值
+};
+
+// --- 雙向新增關係 ---
+export const addRelationship = async (fromId: string, toId: string, type: string): Promise<boolean> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+
+    const { data: fromClient } = await supabase.from('clients').select('gender').eq('id', fromId).single();
+    if (!fromClient) return false;
+
+    const inverseType = getInverseRelationType(type, fromClient.gender as '男' | '女');
+
+    const { data: exists } = await supabase.from('relationships')
+        .select('id')
+        .eq('from_client_id', fromId).eq('to_client_id', toId);
+    
+    if (exists && exists.length > 0) return true;
+
+    const payloadForward = { user_id: user.id, from_client_id: fromId, to_client_id: toId, relation_type: type };
+    const payloadReverse = { user_id: user.id, from_client_id: toId, to_client_id: fromId, relation_type: inverseType };
+
+    const { error: err1 } = await supabase.from('relationships').insert(payloadForward);
+    const { error: err2 } = await supabase.from('relationships').insert(payloadReverse);
+    if (err2) console.warn("Reverse link failed", err2);
+
+    if (!err1) {
+        autoLinkFamily(user.id, fromId, toId, type);
+    }
+
+    return !err1;
+};
+
+// --- 自動家庭連動 ---
 const autoLinkFamily = async (user_id: string, fromId: string, toId: string, type: string) => {
-    // 情境 1: 新增了 "子女" (To)
-    // 動作: 找出 From (我) 的所有配偶，將 To (子女) 也加給配偶
+    // 情境 1: 新增 "子女" -> 幫 "配偶" 加子女
     if (['子女', '兒子', '女兒'].includes(type)) {
         const { data: spouses } = await supabase.from('relationships')
-            .select('to_client_id, to_c:clients!to_client_id(gender)')
+            .select('to_client_id')
             .eq('from_client_id', fromId)
             .in('relation_type', ['配偶', '老公', '老婆', '丈夫', '妻子']);
         
         if (spouses) {
             for (const spouse of spouses) {
-                // 檢查 配偶 <-> 子女 是否已存在
                 const { data: exists } = await supabase.from('relationships').select('id')
                     .eq('from_client_id', spouse.to_client_id).eq('to_client_id', toId);
                 
                 if (!exists || exists.length === 0) {
-                    // 自動幫配偶加子女
                     await addRelationship(spouse.to_client_id, toId, '子女'); 
-                    console.log(`[AutoLink] 自動連結配偶 ${spouse.to_client_id} 與 子女 ${toId}`);
                 }
             }
         }
     }
 
-    // 情境 2: 新增了 "配偶" (To)
-    // 動作: 找出 From (我) 的所有子女，將 子女 也加給這個新配偶 (To)
+    // 情境 2: 新增 "配偶" -> 幫配偶加 "子女"
     if (['配偶', '老公', '老婆', '丈夫', '妻子'].includes(type)) {
         const { data: children } = await supabase.from('relationships')
             .select('to_client_id')
@@ -153,57 +201,15 @@ const autoLinkFamily = async (user_id: string, fromId: string, toId: string, typ
         
         if (children) {
             for (const child of children) {
-                // 檢查 新配偶 <-> 子女 是否已存在
                 const { data: exists } = await supabase.from('relationships').select('id')
                     .eq('from_client_id', toId).eq('to_client_id', child.to_client_id);
                 
                 if (!exists || exists.length === 0) {
-                    // 自動幫新配偶加子女
                     await addRelationship(toId, child.to_client_id, '子女');
-                    console.log(`[AutoLink] 自動連結新配偶 ${toId} 與 子女 ${child.to_client_id}`);
                 }
             }
         }
     }
-};
-
-/**
- * 新增關係 (包含雙向寫入 + 自動家庭連動)
- */
-export const addRelationship = async (fromId: string, toId: string, type: string): Promise<boolean> => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return false;
-
-    // 1. 準備資料
-    const { data: fromClient } = await supabase.from('clients').select('gender').eq('id', fromId).single();
-    if (!fromClient) return false;
-
-    const inverseType = getInverseRelationType(type, fromClient.gender as '男' | '女');
-
-    // 2. 檢查是否存在
-    const { data: exists } = await supabase.from('relationships')
-        .select('id')
-        .eq('from_client_id', fromId).eq('to_client_id', toId);
-    
-    if (exists && exists.length > 0) return true;
-
-    // 3. 雙向寫入
-    const payloadForward = { user_id: user.id, from_client_id: fromId, to_client_id: toId, relation_type: type };
-    const payloadReverse = { user_id: user.id, from_client_id: toId, to_client_id: fromId, relation_type: inverseType };
-
-    const { error: err1 } = await supabase.from('relationships').insert(payloadForward);
-    
-    // 反向寫入 (如果失敗不影響正向，但會 log)
-    const { error: err2 } = await supabase.from('relationships').insert(payloadReverse);
-    if (err2) console.warn("Reverse link failed", err2);
-
-    // 4. 觸發自動家庭連動 (Auto Family Linking)
-    if (!err1) {
-        // 使用非同步執行，不卡 UI
-        autoLinkFamily(user.id, fromId, toId, type);
-    }
-
-    return !err1;
 };
 
 export const deleteRelationship = async (relId: string): Promise<boolean> => {
@@ -214,8 +220,6 @@ export const deleteRelationship = async (relId: string): Promise<boolean> => {
         .or(`and(from_client_id.eq.${rel.from_client_id},to_client_id.eq.${rel.to_client_id}),and(from_client_id.eq.${rel.to_client_id},to_client_id.eq.${rel.from_client_id})`);
     return !error;
 };
-
-// 移除 suggestTriangles (因為已經改為全自動 autoLinkFamily)
 
 // --- 輔助函數 ---
 const mapClientToEntity = (data: any): Client => ({

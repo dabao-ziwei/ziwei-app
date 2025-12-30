@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Loader2, Link as LinkIcon, Search } from 'lucide-react'; 
-import { loadClients, type Client } from '../db';
+import { loadClients, getUserCustomRelationTypes, type Client } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
 import { TagSelect } from './TagSelect'; 
 
@@ -12,7 +12,7 @@ interface AddChartModalProps {
 }
 
 const CATEGORIES = ['我', '家人', '朋友', '客戶', '名人', '其他'];
-const RELATIONS = ['配偶', '父親', '母親', '子女', '朋友'];
+const DEFAULT_RELATIONS = ['配偶', '情侶', '父親', '母親', '子女', '姐姐', '妹妹', '哥哥', '弟弟', '親戚', '朋友'];
 
 export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, onSave, editData }) => {
   const [gender, setGender] = useState<'男' | '女'>('女');
@@ -32,6 +32,9 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
   const [isSearchingLink, setIsSearchingLink] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [allClients, setAllClients] = useState<Client[]>([]);
+  
+  // 關係選項 (預設+自訂)
+  const [relationOptions, setRelationOptions] = useState<string[]>(DEFAULT_RELATIONS);
 
   const yearRef = useRef<HTMLInputElement>(null);
   const monthRef = useRef<HTMLInputElement>(null);
@@ -42,6 +45,11 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
   useEffect(() => {
     if (isOpen) {
       loadClients().then(setAllClients);
+      // 載入自訂關係選項
+      getUserCustomRelationTypes().then(customTypes => {
+          const merged = Array.from(new Set([...DEFAULT_RELATIONS, ...customTypes]));
+          setRelationOptions(merged);
+      });
       
       if (editData) {
         setName(editData.name);
@@ -246,10 +254,10 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
                             <span className="text-gray-600">的...</span>
                         </div>
                         <TagSelect 
-                            options={RELATIONS} 
+                            options={relationOptions} // 使用合併後的選項
                             value={linkType} 
                             onChange={setLinkType} 
-                            allowCustom={false}
+                            allowCustom={false} // 快速關聯通常用預設的即可，要自訂去完整介面
                         />
                     </div>
                 )}

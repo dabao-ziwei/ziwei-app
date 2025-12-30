@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, Link as LinkIcon, Trash2, Plus, Users, HeartHandshake, ArrowRight, Info, Check } from 'lucide-react';
-import { getRelationships, addRelationship, deleteRelationship, loadClients, type Client, type Relationship } from '../db';
+import { X, Search, Link as LinkIcon, Trash2, Plus, Users, HeartHandshake, Check, Info } from 'lucide-react';
+import { getRelationships, addRelationship, deleteRelationship, loadClients, getUserCustomRelationTypes, type Client, type Relationship } from '../db';
 import { TagSelect } from './TagSelect';
 import { GAN, SIHUA_TABLE } from '../logic/constants';
 
@@ -10,7 +10,8 @@ interface Props {
   currentClient: Client;
 }
 
-const DEFAULT_RELATIONS = ['配偶', '父親', '母親', '子女', '兄弟', '姊妹', '朋友', '合作夥伴', '員工', '上司', '情侶'];
+// 預設關係清單
+const DEFAULT_RELATIONS = ['配偶', '情侶', '父親', '母親', '子女', '姐姐', '妹妹', '哥哥', '弟弟', '親戚', '朋友'];
 
 const getBirthYearSiHua = (year: number) => {
     const ganIdx = (year - 4) % 10;
@@ -31,11 +32,21 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
   const [selectedTarget, setSelectedTarget] = useState<Client | null>(null);
   const [relationType, setRelationType] = useState('配偶');
   
+  // 關係選項清單 (預設 + 自訂)
+  const [relationOptions, setRelationOptions] = useState<string[]>(DEFAULT_RELATIONS);
+
   useEffect(() => {
     if (isOpen) {
       fetchRelationships();
       loadClients().then(data => setAllClients(data.filter(c => c.id !== currentClient.id && c.type !== '紫占')));
       
+      // 載入預設 + 使用者自訂的關係
+      getUserCustomRelationTypes().then(customTypes => {
+          // 合併並去重複
+          const merged = Array.from(new Set([...DEFAULT_RELATIONS, ...customTypes]));
+          setRelationOptions(merged);
+      });
+
       setIsAdding(false);
       setSearchTerm('');
       setSelectedTarget(null);
@@ -54,11 +65,14 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
     if (!selectedTarget || !relationType.trim()) return;
     
     setLoading(true);
-    // addRelationship 現在會自動處理：雙向寫入 + 家庭三角連動 (配偶的子女自動加)
     const success = await addRelationship(currentClient.id, selectedTarget.id, relationType.trim());
     
     if (success) {
       await fetchRelationships();
+      // 如果新增了不在清單內的自訂關係，更新選項清單
+      if (!relationOptions.includes(relationType.trim())) {
+          setRelationOptions(prev => [...prev, relationType.trim()]);
+      }
       setIsAdding(false);
       setSearchTerm('');
       setSelectedTarget(null);
@@ -191,7 +205,6 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            {/* 句子式輸入 UI - 解決語意不清問題 */}
                             <div className="flex flex-col items-center justify-center bg-blue-50 p-4 rounded-xl border border-blue-100 gap-2">
                                 <div className="text-lg font-bold text-gray-800 flex items-center gap-2">
                                     <span className="border-b-2 border-blue-400 pb-0.5">{selectedTarget.name}</span>
@@ -199,7 +212,7 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
                                 </div>
                                 
                                 <TagSelect 
-                                    options={DEFAULT_RELATIONS}
+                                    options={relationOptions} // 使用合併後的選項
                                     value={relationType}
                                     onChange={setRelationType}
                                     allowCustom={true}
