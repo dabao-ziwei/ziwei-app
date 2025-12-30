@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Loader2 } from 'lucide-react'; 
-import type { Client } from '../db';
+import { X, Loader2, Link as LinkIcon, Search } from 'lucide-react'; 
+import { loadClients, type Client } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
+import { TagSelect } from './TagSelect'; 
 
 interface AddChartModalProps {
   isOpen: boolean;
@@ -11,9 +12,9 @@ interface AddChartModalProps {
 }
 
 const CATEGORIES = ['我', '家人', '朋友', '客戶', '名人', '其他'];
+const RELATIONS = ['配偶', '父親', '母親', '子女', '朋友'];
 
 export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, onSave, editData }) => {
-  // 修改 1: 這裡初始值改為 '女'
   const [gender, setGender] = useState<'男' | '女'>('女');
   const [name, setName] = useState('');
   
@@ -26,6 +27,12 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
   const [category, setCategory] = useState('客戶');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [linkTarget, setLinkTarget] = useState<Client | null>(null);
+  const [linkType, setLinkType] = useState('配偶');
+  const [isSearchingLink, setIsSearchingLink] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [allClients, setAllClients] = useState<Client[]>([]);
+
   const yearRef = useRef<HTMLInputElement>(null);
   const monthRef = useRef<HTMLInputElement>(null);
   const dayRef = useRef<HTMLInputElement>(null);
@@ -34,6 +41,8 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
 
   useEffect(() => {
     if (isOpen) {
+      loadClients().then(setAllClients);
+      
       if (editData) {
         setName(editData.name);
         setGender(editData.gender);
@@ -44,7 +53,6 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
         setMinute(editData.birthMinute.toString().padStart(2, '0'));
         setCategory(editData.type);
       } else {
-        // 修改 2: 新增模式時，強制設定為 '女'
         setGender('女');
         setName('');
         setYear('');
@@ -53,12 +61,12 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
         setHour('');
         setMinute('');
         setCategory('客戶');
+        setLinkTarget(null);
       }
       setTimeout(() => yearRef.current?.focus(), 100);
     }
   }, [isOpen, editData]);
 
-  // 修改：輸入自動跳轉邏輯
   const handleDateInput = (
     e: React.ChangeEvent<HTMLInputElement>,
     setValue: (val: string) => void,
@@ -68,21 +76,17 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
     const val = e.target.value.replace(/\D/g, '');
     if (val.length > maxLength) return;
     setValue(val);
-    
-    // 如果長度到了，直接跳下一格並全選 (提升 UX)
     if (val.length === maxLength && nextRef && nextRef.current) {
       nextRef.current.focus();
       nextRef.current.select();
     }
   };
 
-  // 新增：處理 Backspace 倒退邏輯
   const handleKeyDown = (
     e: React.KeyboardEvent<HTMLInputElement>,
     currentValue: string,
     prevRef?: React.RefObject<HTMLInputElement>
   ) => {
-    // 當按下 Backspace 且目前格子是空的，就跳回上一格
     if (e.key === 'Backspace' && currentValue === '' && prevRef && prevRef.current) {
       e.preventDefault();
       prevRef.current.focus();
@@ -90,7 +94,6 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
   };
 
   const handleSubmit = async () => {
-    // 1. 基本驗證
     if (!name || !year || !month || !day || !hour || !minute) {
       alert("請填寫完整資訊");
       return;
@@ -105,21 +108,13 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
       const birthHour = parseInt(hour);
       const birthMinute = parseInt(minute);
 
-      console.log('開始計算排盤...', { birthYear, birthMonth, birthDay, birthHour, birthMinute, gender });
-
-      // 2. 嘗試執行排盤引擎
       const engine = new ZiWeiEngine(birthYear, birthMonth, birthDay, birthHour, birthMinute, gender);
       const chart = engine.getChartData();
-      
-      // 3. 取得主星
       const mingPos = engine.getMingPos();
       const mingPalace = chart.palaces[mingPos];
-      if (!mingPalace) throw new Error(`找不到命宮 (MingPos: ${mingPos})`);
-      
       const majorStarNames = mingPalace.majorStars.map(s => s.name).join('') || '無主星';
       
-      // 4. 執行儲存
-      await onSave({
+      const clientData = {
         id: editData?.id,
         name,
         gender,
@@ -130,105 +125,73 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
         birthMinute,
         type: category as any,
         majorStars: majorStarNames
-      });
+      };
+
+      const payload: any = { ...clientData };
+      if (linkTarget) {
+          payload.linkRequest = {
+              targetId: linkTarget.id,
+              type: linkType
+          };
+      }
+      
+      await onSave(payload);
 
       onClose();
 
     } catch (err: any) {
-      // 5. 捕捉錯誤並顯示
       console.error('Save Error:', err);
-      alert(`發生錯誤：${err.message}\n請截圖提供給工程師`);
+      alert(`發生錯誤：${err.message}`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (!isOpen) return null;
+  const filteredClients = allClients.filter(c => 
+    c.name.includes(searchTerm) || c.birthYear.toString().includes(searchTerm)
+  ).slice(0, 5);
 
-  // 定義輸入框共用樣式
-  const inputClass = "px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none transition-all";
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden relative animate-in fade-in zoom-in duration-200">
-        <div className="flex justify-between items-center p-4 border-b border-gray-100">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden relative animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]">
+        <div className="flex justify-between items-center p-4 border-b border-gray-100 shrink-0">
           <h2 className="text-lg font-bold text-gray-900">{editData ? '編輯命盤' : '新增命盤'}</h2>
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full transition-colors">
             <X size={20} className="text-gray-500" />
           </button>
         </div>
-        <div className="p-6 space-y-6">
+        
+        <div className="p-6 space-y-6 overflow-y-auto">
           <div className="space-y-2">
             <label className="text-xs font-bold text-gray-500 block">性別</label>
             <div className="flex gap-4">
-              {/* 修改 3: 確認這裡 女在前，男在後 */}
               <button onClick={() => setGender('女')} className={`flex-1 py-2 rounded border transition-all ${gender === '女' ? 'border-pink-500 text-pink-600 bg-pink-50 font-bold ring-1 ring-pink-500' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>♀ 女</button>
               <button onClick={() => setGender('男')} className={`flex-1 py-2 rounded border transition-all ${gender === '男' ? 'border-blue-500 text-blue-600 bg-blue-50 font-bold ring-1 ring-blue-500' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>♂ 男</button>
             </div>
           </div>
+          
           <div className="space-y-2">
             <label className="text-xs font-bold text-gray-500 block">姓名</label>
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="輸入姓名" className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
           </div>
+
           <div className="space-y-2">
             <label className="text-xs font-bold text-gray-500 block">時間 (西元 / 24小時制)</label>
             <div className="flex items-center gap-2">
-              <input 
-                ref={yearRef} 
-                type="text" 
-                inputMode="numeric" pattern="[0-9]*" 
-                value={year} 
-                onChange={(e) => handleDateInput(e, setYear, 4, monthRef)} 
-                onKeyDown={(e) => handleKeyDown(e, year, undefined)} 
-                placeholder="YYYY" 
-                className={`${inputClass} w-[28%]`} 
-              />
+              <input ref={yearRef} type="text" inputMode="numeric" pattern="[0-9]*" value={year} onChange={(e) => handleDateInput(e, setYear, 4, monthRef)} onKeyDown={(e) => handleKeyDown(e, year, undefined)} placeholder="YYYY" className="px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none w-[28%]" />
               <span className="text-gray-400">-</span>
-              <input 
-                ref={monthRef} 
-                type="text" 
-                inputMode="numeric" pattern="[0-9]*"
-                value={month} 
-                onChange={(e) => handleDateInput(e, setMonth, 2, dayRef)} 
-                onKeyDown={(e) => handleKeyDown(e, month, yearRef)}
-                placeholder="MM" 
-                className={`${inputClass} w-[18%]`} 
-              />
+              <input ref={monthRef} type="text" inputMode="numeric" pattern="[0-9]*" value={month} onChange={(e) => handleDateInput(e, setMonth, 2, dayRef)} onKeyDown={(e) => handleKeyDown(e, month, yearRef)} placeholder="MM" className="px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none w-[18%]" />
               <span className="text-gray-400">-</span>
-              <input 
-                ref={dayRef} 
-                type="text" 
-                inputMode="numeric" pattern="[0-9]*"
-                value={day} 
-                onChange={(e) => handleDateInput(e, setDay, 2, hourRef)} 
-                onKeyDown={(e) => handleKeyDown(e, day, monthRef)}
-                placeholder="DD" 
-                className={`${inputClass} w-[18%]`} 
-              />
+              <input ref={dayRef} type="text" inputMode="numeric" pattern="[0-9]*" value={day} onChange={(e) => handleDateInput(e, setDay, 2, hourRef)} onKeyDown={(e) => handleKeyDown(e, day, monthRef)} placeholder="DD" className="px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none w-[18%]" />
               <span className="text-gray-300 mx-1">|</span>
-              <input 
-                ref={hourRef} 
-                type="text" 
-                inputMode="numeric" pattern="[0-9]*"
-                value={hour} 
-                onChange={(e) => handleDateInput(e, setHour, 2, minuteRef)} 
-                onKeyDown={(e) => handleKeyDown(e, hour, dayRef)}
-                placeholder="hh" 
-                className={`${inputClass} w-[18%]`} 
-              />
+              <input ref={hourRef} type="text" inputMode="numeric" pattern="[0-9]*" value={hour} onChange={(e) => handleDateInput(e, setHour, 2, minuteRef)} onKeyDown={(e) => handleKeyDown(e, hour, dayRef)} placeholder="hh" className="px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none w-[18%]" />
               <span className="text-gray-400">:</span>
-              <input 
-                ref={minuteRef} 
-                type="text" 
-                inputMode="numeric" pattern="[0-9]*"
-                value={minute} 
-                onChange={(e) => handleDateInput(e, setMinute, 2, undefined)} 
-                onKeyDown={(e) => handleKeyDown(e, minute, hourRef)}
-                placeholder="mm" 
-                className={`${inputClass} w-[18%]`} 
-              />
+              <input ref={minuteRef} type="text" inputMode="numeric" pattern="[0-9]*" value={minute} onChange={(e) => handleDateInput(e, setMinute, 2, undefined)} onKeyDown={(e) => handleKeyDown(e, minute, hourRef)} placeholder="mm" className="px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none w-[18%]" />
             </div>
           </div>
+
           <div className="space-y-2">
             <label className="text-xs font-bold text-gray-500 block">分類</label>
             <div className="flex flex-wrap gap-2">
@@ -237,8 +200,65 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
               ))}
             </div>
           </div>
+
+          {!editData && (
+            <div className="space-y-2 pt-2 border-t border-gray-100">
+                <div className="flex justify-between items-center">
+                    <label className="text-xs font-bold text-blue-600 flex items-center gap-1">
+                        <LinkIcon size={12}/> 快速建立關聯 (選填)
+                    </label>
+                    {linkTarget && (
+                        <button onClick={() => setLinkTarget(null)} className="text-xs text-red-500 hover:underline">清除關聯</button>
+                    )}
+                </div>
+
+                {!linkTarget ? (
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                        <input 
+                            type="text" 
+                            placeholder="搜尋要關聯的對象..." 
+                            className="w-full pl-8 pr-3 py-2 border border-blue-100 bg-blue-50/50 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all focus:bg-white"
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            onFocus={() => setIsSearchingLink(true)}
+                        />
+                        {isSearchingLink && searchTerm && (
+                            <div className="absolute top-full left-0 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-32 overflow-y-auto">
+                                {filteredClients.map(c => (
+                                    <div 
+                                        key={c.id} 
+                                        onClick={() => { setLinkTarget(c); setIsSearchingLink(false); setSearchTerm(''); }}
+                                        className="p-2 hover:bg-blue-50 cursor-pointer text-sm flex justify-between"
+                                    >
+                                        <span>{c.name}</span>
+                                        <span className="text-gray-400 text-xs">{c.birthYear}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className="bg-blue-50 p-3 rounded-lg border border-blue-200 space-y-2">
+                        <div className="flex justify-between items-center text-sm">
+                            <span className="text-gray-600">他是</span>
+                            <span className="font-bold text-blue-800">{linkTarget.name}</span>
+                            <span className="text-gray-600">的...</span>
+                        </div>
+                        <TagSelect 
+                            options={RELATIONS} 
+                            value={linkType} 
+                            onChange={setLinkType} 
+                            allowCustom={false}
+                        />
+                    </div>
+                )}
+            </div>
+          )}
+
         </div>
-        <div className="p-4 bg-gray-50 flex gap-3">
+        
+        <div className="p-4 bg-gray-50 flex gap-3 shrink-0">
           <button onClick={onClose} disabled={isSubmitting} className="flex-1 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50">取消</button>
           <button 
             onClick={handleSubmit} 

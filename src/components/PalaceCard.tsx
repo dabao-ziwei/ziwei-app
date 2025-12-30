@@ -24,8 +24,10 @@ interface PalaceCardProps {
   reverseDaName?: string;
   reverseLiuName?: string;
   
-  // 新增：紫占專用名稱
   divinationName?: string;
+
+  // 新增: 接收外來四化
+  externalSiHua?: Record<string, '祿' | '權' | '科' | '忌'>;
 }
 
 export const PalaceCard: React.FC<PalaceCardProps> = ({
@@ -45,12 +47,34 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   isReverse,
   reverseDaName,
   reverseLiuName,
-  divinationName, // 接收參數
+  divinationName, 
+  externalSiHua,
 }) => {
   const palaceGanZhi = `${GAN[palace.ganIndex]}${ZHI[palace.zhiIndex]}`;
   const isBenMing = !daName && !liuName && !xiaoName;
 
-  const bgColorClass = isLiuNianMing ? 'bg-blue-50' : '';
+  // --- 計算外來四化影響 ---
+  let hasExternalLu = false;
+  let hasExternalJi = false;
+  
+  if (externalSiHua) {
+      [...palace.majorStars, ...palace.minorStars, ...palace.miscStars].forEach(star => {
+          const type = externalSiHua[star.name];
+          if (type === '祿') hasExternalLu = true;
+          if (type === '忌') hasExternalJi = true;
+      });
+  }
+
+  // 背景色判斷優先順序：外來化忌 > 外來化祿 > 流年 > 預設
+  let bgColorClass = '';
+  if (hasExternalJi) {
+      bgColorClass = 'bg-gray-200 ring-inset ring-2 ring-gray-400'; // 化忌
+  } else if (hasExternalLu) {
+      bgColorClass = 'bg-red-50 ring-inset ring-2 ring-pink-300'; // 化祿
+  } else if (isLiuNianMing) {
+      bgColorClass = 'bg-blue-50';
+  }
+
   const borderClass = isBenMingMing ? 'border-2 border-red-600' : '';
   const xiaoXianClass = isXiaoXianMingPalace
     ? 'shadow-[inset_0_0_15px_rgba(34,197,94,0.6)] border-green-400'
@@ -63,8 +87,6 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
     ...palace.limitStars,
   ];
 
-  // 1. 決定本命宮位顯示名稱 (Red Text)
-  // 優先順序：紫占名稱 > 雙胞胎名稱 > 原本名稱
   let baseName = palace.name;
   if (divinationName) {
       baseName = divinationName;
@@ -72,55 +94,36 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
       baseName = PALACE_REVERSE_MAP[palace.name];
   }
 
-  // 2. 決定顛倒盤顯示名稱 (Purple Text)
-  // 顛倒盤永遠顯示「目前紅色文字的對宮」
   const reverseBaseName = isReverse ? PALACE_REVERSE_MAP[baseName] : null;
 
-  // 飛化標籤 (Chips)
   const renderFlyingChips = () => {
     if (!flyingStars) return null;
-
     const chips: React.ReactNode[] = [];
-
     allStarsInPalace.forEach((star, idx) => {
       const type = flyingStars[star.name];
       if (type) {
         const abbr = STAR_ABBR_MAP[star.name] || star.name[0];
-
         let colorClass = '';
         if (type === '祿') colorClass = 'bg-green-600 text-white';
         else if (type === '權') colorClass = 'bg-red-600 text-white';
         else if (type === '科') colorClass = 'bg-blue-600 text-white';
-        else if (type === '忌')
-          colorClass = 'bg-gray-900 text-white border border-red-500';
+        else if (type === '忌') colorClass = 'bg-gray-900 text-white border border-red-500';
 
         chips.push(
-          <div
-            key={`fly-${idx}`}
-            className={`px-1 py-[1px] rounded text-[12px] font-bold leading-none shadow-sm animate-pulse ${colorClass} select-none`}
-            style={{ animationIterationCount: 3 }}
-          >
-            {abbr}
-            {type}
+          <div key={`fly-${idx}`} className={`px-1 py-[1px] rounded text-[12px] font-bold leading-none shadow-sm animate-pulse ${colorClass} select-none`} style={{ animationIterationCount: 3 }}>
+            {abbr}{type}
           </div>
         );
       }
     });
-
     if (chips.length === 0) return null;
-
-    return (
-      <div className="absolute top-0.5 right-0.5 flex flex-col gap-0.5 items-end z-30 pointer-events-none">
-        {chips}
-      </div>
-    );
+    return <div className="absolute top-0.5 right-0.5 flex flex-col gap-0.5 items-end z-30 pointer-events-none">{chips}</div>;
   };
 
   return (
     <div
-      className={`w-full h-full flex flex-col p-0.5 box-border relative overflow-hidden ${bgColorClass} ${borderClass} ${xiaoXianClass}`}
+      className={`w-full h-full flex flex-col p-0.5 box-border relative overflow-hidden ${bgColorClass} ${borderClass} ${xiaoXianClass} transition-colors duration-300`}
     >
-      {/* 飛化標籤層 (右上角) */}
       {renderFlyingChips()}
 
       <div className="flex-1 flex flex-row gap-0.5 relative z-10 min-h-0 items-start content-start overflow-hidden pointer-events-none">
@@ -129,12 +132,8 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
             key={`maj-${idx}`}
             star={star}
             color="text-red-700"
-            bgSiHua={{
-              ben: 'bg-red-600',
-              da: 'bg-gray-500',
-              liu: 'bg-blue-500',
-              xiao: 'bg-green-600',
-            }}
+            bgSiHua={{ ben: 'bg-red-600', da: 'bg-gray-500', liu: 'bg-blue-500', xiao: 'bg-green-600' }}
+            externalType={externalSiHua ? externalSiHua[star.name] : undefined}
           />
         ))}
 
@@ -143,12 +142,8 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
             key={`min-${idx}`}
             star={star}
             color="text-black"
-            bgSiHua={{
-              ben: 'bg-red-600',
-              da: 'bg-gray-500',
-              liu: 'bg-blue-500',
-              xiao: 'bg-green-600',
-            }}
+            bgSiHua={{ ben: 'bg-red-600', da: 'bg-gray-500', liu: 'bg-blue-500', xiao: 'bg-green-600' }}
+            externalType={externalSiHua ? externalSiHua[star.name] : undefined}
           />
         ))}
 
@@ -157,12 +152,8 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
             key={`mic-${idx}`}
             star={star}
             color="text-blue-600"
-            bgSiHua={{
-              ben: 'bg-red-600',
-              da: 'bg-gray-500',
-              liu: 'bg-blue-500',
-              xiao: 'bg-green-600',
-            }}
+            bgSiHua={{ ben: 'bg-red-600', da: 'bg-gray-500', liu: 'bg-blue-500', xiao: 'bg-green-600' }}
+            externalType={externalSiHua ? externalSiHua[star.name] : undefined}
           />
         ))}
 
@@ -171,116 +162,45 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
             key={`lim-${idx}`}
             star={star}
             color="text-black"
-            bgSiHua={{
-              ben: 'bg-red-600',
-              da: 'bg-gray-500',
-              liu: 'bg-blue-500',
-              xiao: 'bg-green-600',
-            }}
+            bgSiHua={{ ben: 'bg-red-600', da: 'bg-gray-500', liu: 'bg-blue-500', xiao: 'bg-green-600' }}
+            externalType={undefined}
           />
         ))}
       </div>
 
       <div className="absolute right-1 top-[35%] flex flex-col gap-1 items-end pointer-events-none z-20">
-        {isBody && isBenMing && (
-          <div className="w-4 h-4 bg-blue-600 text-white text-[10px] flex items-center justify-center rounded-[2px] shadow-sm">
-            身
-          </div>
-        )}
-
-        {isXiaoXianMing && (
-          <div className="w-4 h-4 bg-blue-600 text-white text-[10px] flex items-center justify-center rounded-[2px] shadow-sm">
-            限
-          </div>
-        )}
+        {isBody && isBenMing && <div className="w-4 h-4 bg-blue-600 text-white text-[10px] flex items-center justify-center rounded-[2px] shadow-sm">身</div>}
+        {isXiaoXianMing && <div className="w-4 h-4 bg-blue-600 text-white text-[10px] flex items-center justify-center rounded-[2px] shadow-sm">限</div>}
       </div>
 
-      {/* 底部資訊區 (左側神煞) */}
       <div className="mt-auto flex justify-between items-end z-10 shrink-0 w-full relative pointer-events-none">
         <div className="flex flex-col gap-0 leading-none pb-[1px]">
-          <span className="text-[9px] text-blue-500 scale-95 origin-bottom-left whitespace-nowrap">
-            {palace.sui12}
-          </span>
-          <span className="text-[9px] text-blue-500 scale-95 origin-bottom-left whitespace-nowrap">
-            {palace.jiang12}
-          </span>
+          <span className="text-[9px] text-blue-500 scale-95 origin-bottom-left whitespace-nowrap">{palace.sui12}</span>
+          <span className="text-[9px] text-blue-500 scale-95 origin-bottom-left whitespace-nowrap">{palace.jiang12}</span>
           <div className="flex items-end gap-1">
-            <span className="text-[9px] text-gray-500 scale-95 origin-bottom-left whitespace-nowrap">
-              {palace.boshi12}
-            </span>
-
-            <span className="text-[9px] text-gray-400 scale-95 origin-bottom-left whitespace-nowrap leading-none font-medium ml-0.5">
-              {palace.changsheng12}
-            </span>
-
-            {isBenMing && (
-              <span className="text-[9px] text-black scale-95 origin-bottom-left whitespace-nowrap font-medium ml-0.5">
-                {palace.ages[0]}-{palace.ages[1]}
-              </span>
-            )}
+            <span className="text-[9px] text-gray-500 scale-95 origin-bottom-left whitespace-nowrap">{palace.boshi12}</span>
+            <span className="text-[9px] text-gray-400 scale-95 origin-bottom-left whitespace-nowrap leading-none font-medium ml-0.5">{palace.changsheng12}</span>
+            {isBenMing && <span className="text-[9px] text-black scale-95 origin-bottom-left whitespace-nowrap font-medium ml-0.5">{palace.ages[0]}-{palace.ages[1]}</span>}
           </div>
         </div>
       </div>
 
-      {/* 飛化觸發區 (Trigger Zone) - 獨立的 Absolute Layer */}
       <div
         className="absolute bottom-0 right-0 h-[50%] min-w-[30%] flex items-end justify-end gap-1 p-1 rounded-tl-lg cursor-pointer hover:bg-purple-100/50 transition-colors select-none group z-30"
-        onClick={(e) => {
-          e.stopPropagation();
-          onTriggerClick && onTriggerClick();
-        }}
+        onClick={(e) => { e.stopPropagation(); onTriggerClick && onTriggerClick(); }}
         title="點擊查看此宮位之飛化 (四化)"
       >
         <div className="flex flex-col-reverse items-end leading-tight pointer-events-none">
           <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right">
-              {/* 顛倒盤顯示 (紫色) */}
-              {reverseBaseName && (
-                  <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none">
-                      {reverseBaseName}
-                  </span>
-              )}
-              {/* 本命宮位顯示 (紅色，包含紫占、雙胞胎、本命) */}
-              <span className="text-[13px] font-bold text-red-600 whitespace-nowrap leading-none">
-                {baseName}
-              </span>
+              {reverseBaseName && <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none">{reverseBaseName}</span>}
+              <span className="text-[13px] font-bold text-red-600 whitespace-nowrap leading-none">{baseName}</span>
           </div>
-
-          {daName && (
-            <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right">
-                {isReverse && reverseDaName && (
-                    <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none mb-[1px]">
-                        {reverseDaName}
-                    </span>
-                )}
-                <span className="text-[13px] font-bold text-gray-500 whitespace-nowrap leading-none mb-[1px]">
-                  {daName}
-                </span>
-            </div>
-          )}
-
-          {liuName && (
-            <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right">
-                {isReverse && reverseLiuName && (
-                    <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none mb-[1px]">
-                        {reverseLiuName}
-                    </span>
-                )}
-                <span className="text-[13px] font-bold text-blue-600 whitespace-nowrap leading-none mb-[1px]">
-                  {liuName}
-                </span>
-            </div>
-          )}
-
-          {xiaoName && (
-            <span className="text-[13px] font-bold text-green-600 whitespace-nowrap leading-none mb-[1px]">
-              {xiaoName}
-            </span>
-          )}
+          {daName && <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right">{isReverse && reverseDaName && <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none mb-[1px]">{reverseDaName}</span>}<span className="text-[13px] font-bold text-gray-500 whitespace-nowrap leading-none mb-[1px]">{daName}</span></div>}
+          {liuName && <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right">{isReverse && reverseLiuName && <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none mb-[1px]">{reverseLiuName}</span>}<span className="text-[13px] font-bold text-blue-600 whitespace-nowrap leading-none mb-[1px]">{liuName}</span></div>}
+          {xiaoName && <span className="text-[13px] font-bold text-green-600 whitespace-nowrap leading-none mb-[1px]">{xiaoName}</span>}
         </div>
         <div className="flex flex-col leading-none text-[15px] font-bold text-black mb-[2px] ml-1 pointer-events-none">
-          <span className="group-hover:text-purple-600 transition-colors">
-            {palaceGanZhi[0]}
-          </span>
+          <span className="group-hover:text-purple-600 transition-colors">{palaceGanZhi[0]}</span>
           <span>{palaceGanZhi[1]}</span>
         </div>
       </div>
@@ -292,56 +212,45 @@ const VerticalStar = ({
   star,
   color,
   bgSiHua,
+  externalType, 
 }: {
   star: Star;
   color: string;
   bgSiHua: any;
+  externalType?: '祿' | '權' | '科' | '忌';
 }) => {
   return (
     <div className="flex flex-col items-center w-[18px] mr-[1px] relative">
-      <span
-        className={`text-[13px] font-bold ${color} leading-[0.9] select-none`}
-      >
-        {star.name[0]}
-      </span>
-      <span
-        className={`text-[13px] font-bold ${color} leading-[0.9] select-none`}
-      >
-        {star.name[1]}
-      </span>
-
-      <span className="text-[10px] text-gray-400 font-normal leading-none scale-90 origin-center my-0">
-        {star.brightness || ''}
-      </span>
+      <span className={`text-[13px] font-bold ${color} leading-[0.9] select-none`}>{star.name[0]}</span>
+      <span className={`text-[13px] font-bold ${color} leading-[0.9] select-none`}>{star.name[1]}</span>
+      <span className="text-[10px] text-gray-400 font-normal leading-none scale-90 origin-center my-0">{star.brightness || ''}</span>
 
       <div className="flex flex-col gap-0 w-full items-center mt-0">
         <SiHuaSlot star={star} scope="ben" bg={bgSiHua.ben} />
         <SiHuaSlot star={star} scope="da" bg={bgSiHua.da} />
         <SiHuaSlot star={star} scope="liu" bg={bgSiHua.liu} />
         <SiHuaSlot star={star} scope="xiao" bg={bgSiHua.xiao} />
+        
+        {/* 外來四化標籤 (來祿/來忌) */}
+        {externalType && (
+            <div className={`w-full text-[9px] font-bold text-center mt-0.5 leading-none px-[1px] rounded-sm transform scale-90
+                ${externalType === '祿' ? 'bg-pink-100 text-pink-700 border border-pink-200' : ''}
+                ${externalType === '權' ? 'bg-orange-100 text-orange-700' : ''}
+                ${externalType === '科' ? 'bg-indigo-100 text-indigo-700' : ''}
+                ${externalType === '忌' ? 'bg-gray-700 text-white' : ''}
+            `}>
+                來{externalType}
+            </div>
+        )}
       </div>
     </div>
   );
 };
 
-const SiHuaSlot = ({
-  star,
-  scope,
-  bg,
-}: {
-  star: Star;
-  scope: 'ben' | 'da' | 'liu' | 'xiao';
-  bg: string;
-}) => {
+const SiHuaSlot = ({ star, scope, bg }: { star: Star; scope: 'ben' | 'da' | 'liu' | 'xiao'; bg: string; }) => {
   const sihua = star.sihua?.find((s) => s.scope === scope);
   if (sihua) {
-    return (
-      <div
-        className={`w-3.5 h-3.5 flex items-center justify-center text-[11px] text-white rounded-[1px] leading-none shadow-sm ${bg} mb-[1px]`}
-      >
-        {sihua.type}
-      </div>
-    );
+    return <div className={`w-3.5 h-3.5 flex items-center justify-center text-[11px] text-white rounded-[1px] leading-none shadow-sm ${bg} mb-[1px]`}>{sihua.type}</div>;
   }
   return <div className="w-3.5 h-3.5 mb-[1px]" />;
 };
