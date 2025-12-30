@@ -361,7 +361,8 @@ export const ChartBoard: React.FC<ChartBoardProps> = ({ client: propClient, onBa
                 // 中間區塊渲染
                 if (gridPos === 5) {
                     return (
-                        <div key="center-board" className="col-span-2 row-span-2 z-0 relative">
+                        // 【關鍵修正】這裡加上了 h-full w-full，確保父層把空間傳遞給 CenterInfoBoard
+                        <div key="center-board" className="col-span-2 row-span-2 z-0 relative h-full w-full">
                              <CenterInfoBoard 
                                 key="center"
                                 client={client!}
