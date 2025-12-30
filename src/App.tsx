@@ -19,16 +19,35 @@ function App() {
   const [editingClient, setEditingClient] = useState<Client | null>(null);
 
   useEffect(() => {
+    // 1. 初始化讀取 session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    // 2. 監聽身分變化 (加入防抖動與過濾邏輯)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+      
+      // 如果是密碼重設事件，必須處理並強制更新
       if (event === 'PASSWORD_RECOVERY') {
         setIsRecovery(true);
+        setSession(newSession);
+        setLoading(false);
+        return;
       }
-      setSession(session);
+
+      // 【關鍵修正】使用 functional update 來檢查是否真的需要更新
+      // 只有當「使用者 ID 不同」時才觸發 React 重繪
+      // 這能有效防止切換視窗(Focus)時的自動刷新閃爍
+      setSession((prevSession: any) => {
+          // 如果新舊 session 的使用者 ID 一樣，代表只是 token 刷新或視窗聚焦，不需要重繪
+          if (prevSession?.user?.id === newSession?.user?.id) {
+              return prevSession; 
+          }
+          // 否則確實是登入/登出，更新狀態
+          return newSession;
+      });
+
       setLoading(false);
     });
 
