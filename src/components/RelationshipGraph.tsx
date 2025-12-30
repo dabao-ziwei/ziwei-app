@@ -27,11 +27,11 @@ interface GraphNode {
   relType: string;
 }
 
-// 新增：箭頭圖形組件，取代原本的 marker
-const ArrowHead = ({ x, y, rotation, color = "#cbd5e1" }: { x: number, y: number, rotation: number, color?: string }) => (
+// 【關鍵修正】手動繪製箭頭元件，不使用 url(#id) 避免路徑 404 錯誤
+const ArrowHead = ({ x, y, rotation }: { x: number, y: number, rotation: number }) => (
   <polygon
-    points="0,-6 10,0 0,6" // 箭頭形狀
-    fill={color}
+    points="0,0 -8,-5 -8,5" // 箭頭形狀：尖端在 (0,0)，向後延伸
+    fill="#cbd5e1"
     transform={`translate(${x}, ${y}) rotate(${rotation})`}
   />
 );
@@ -45,7 +45,7 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   
-  // 3. 自動佈局演算法
+  // 自動佈局演算法
   const { nodes, lines } = useMemo(() => {
     const calculatedNodes: GraphNode[] = [];
     
@@ -101,26 +101,46 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
       .map(node => {
         let d = '';
         let arrowRotation = 0;
-        // 修正箭頭位置：縮短一點點以免被 Node 遮住
-        const offset = 40; // 根據 Node 大小調整
+        let arrowX = node.x;
+        let arrowY = node.y;
+        
+        // 節點半寬高 (用於計算箭頭停在卡片邊緣，避免被遮住)
+        const halfW = 55; // 稍微多一點留白
+        const halfH = 25;
 
         if (Math.abs(node.y) > Math.abs(node.x)) {
-          // 垂直佈局
+          // 垂直佈局 (上下)
           const cY = node.y / 2;
           d = `M 0 0 C 0 ${cY}, ${node.x} ${cY}, ${node.x} ${node.y}`;
-          // 計算箭頭角度：如果 y > 0 (下方)，箭頭朝下 (90度)；如果 y < 0 (上方)，箭頭朝上 (-90度)
-          arrowRotation = node.y > 0 ? 90 : -90;
+          
+          if (node.y > 0) { // 下方
+             arrowRotation = 90;
+             arrowY = node.y - halfH; // 箭頭停在卡片上方邊緣
+          } else { // 上方
+             arrowRotation = -90;
+             arrowY = node.y + halfH; // 箭頭停在卡片下方邊緣
+          }
         } else {
-          // 水平佈局
+          // 水平佈局 (左右)
           const cX = node.x / 2;
           d = `M 0 0 C ${cX} 0, ${cX} ${node.y}, ${node.x} ${node.y}`;
-          // 計算箭頭角度：如果 x > 0 (右方)，箭頭朝右 (0度)；如果 x < 0 (左方)，箭頭朝左 (180度)
-          arrowRotation = node.x > 0 ? 0 : 180;
+          
+          if (node.x > 0) { // 右方
+             arrowRotation = 0;
+             arrowX = node.x - halfW; // 箭頭停在卡片左側邊緣
+          } else { // 左方
+             arrowRotation = 180;
+             arrowX = node.x + halfW; // 箭頭停在卡片右側邊緣
+          }
         }
 
-        // 我們需要把箭頭放在線條的「幾乎」末端，但不要與 Node 重疊
-        // 簡單起見，直接放在 Node 中心，Node 會蓋住箭頭的尖端，看起來就像連在一起
-        return { targetId: node.id, d, x: node.x, y: node.y, rotation: arrowRotation };
+        return { 
+            targetId: node.id, 
+            d, 
+            arrowX, 
+            arrowY, 
+            rotation: arrowRotation 
+        };
       });
 
     return { nodes: calculatedNodes, lines: calculatedLines };
@@ -145,28 +165,25 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
       <motion.div
         drag
         dragMomentum={false}
-        // 修正：給予明確的寬高，確保內容不會因為尺寸為0而被隱藏
+        // 【關鍵修正】確保容器佔滿空間，中心點對齊
         className="absolute left-0 top-0 w-full h-full flex items-center justify-center"
         style={{ touchAction: 'none' }}
       >
-        {/* 使用 Group 來模擬中心點位移 */}
-        <motion.div className="relative" style={{ x: '50%', y: '50%' }}>
+        {/* 使用 Group 模擬中心點 */}
+        <motion.div className="relative" style={{ x: 0, y: 0 }}>
             
-            {/* 1. 連線層 (SVG) */}
+            {/* 1. 連線層 (SVG) - 移除所有 marker 引用 */}
             <svg className="absolute overflow-visible pointer-events-none" style={{ left: 0, top: 0, width: '0px', height: '0px' }}>
               {lines.map(line => (
                 <g key={line.targetId}>
-                    {/* 線條 */}
                     <path
                       d={line.d}
                       fill="none"
                       stroke="#cbd5e1"
                       strokeWidth="2"
                     />
-                    {/* 手動繪製的箭頭 (完全取代 markerUrl) */}
-                    {/* 這裡我們稍微調整箭頭位置，讓它位於線條末端 */}
-                    {/* 為了簡單，我們直接畫在 Node 座標上，依靠 Node 的背景色蓋住箭頭尖端，或者利用 rotation 偏移 */}
-                    <ArrowHead x={line.x} y={line.y} rotation={line.rotation} />
+                    {/* 直接繪製箭頭 */}
+                    <ArrowHead x={line.arrowX} y={line.arrowY} rotation={line.rotation} />
                 </g>
               ))}
             </svg>
@@ -183,7 +200,7 @@ export const RelationshipGraph: React.FC<RelationshipGraphProps> = ({
                   style={{
                     left: node.x,
                     top: node.y,
-                    transform: 'translate(-50%, -50%)', // 確保節點中心對齊座標
+                    transform: 'translate(-50%, -50%)',
                     zIndex: isSelected ? 50 : 10,
                   }}
                   onClick={(e) => {
