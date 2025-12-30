@@ -96,27 +96,58 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
 
   const reverseBaseName = isReverse ? PALACE_REVERSE_MAP[baseName] : null;
 
+  // [修改點] 整合宮干飛化與外來生年飛化
   const renderFlyingChips = () => {
-    if (!flyingStars) return null;
     const chips: React.ReactNode[] = [];
+    
     allStarsInPalace.forEach((star, idx) => {
-      const type = flyingStars[star.name];
-      if (type) {
-        const abbr = STAR_ABBR_MAP[star.name] || star.name[0];
-        let colorClass = '';
-        if (type === '祿') colorClass = 'bg-green-600 text-white';
-        else if (type === '權') colorClass = 'bg-red-600 text-white';
-        else if (type === '科') colorClass = 'bg-blue-600 text-white';
-        else if (type === '忌') colorClass = 'bg-gray-900 text-white border border-red-500';
+      // 1. 宮干飛化 (原本的邏輯)
+      if (flyingStars) {
+          const type = flyingStars[star.name];
+          if (type) {
+            const abbr = STAR_ABBR_MAP[star.name] || star.name[0];
+            let colorClass = '';
+            if (type === '祿') colorClass = 'bg-green-600 text-white';
+            else if (type === '權') colorClass = 'bg-red-600 text-white';
+            else if (type === '科') colorClass = 'bg-blue-600 text-white';
+            else if (type === '忌') colorClass = 'bg-gray-900 text-white border border-red-500';
 
-        chips.push(
-          <div key={`fly-${idx}`} className={`px-1 py-[1px] rounded text-[12px] font-bold leading-none shadow-sm animate-pulse ${colorClass} select-none`} style={{ animationIterationCount: 3 }}>
-            {abbr}{type}
-          </div>
-        );
+            chips.push(
+              <div key={`fly-${idx}`} className={`px-1 py-[1px] rounded text-[12px] font-bold leading-none shadow-sm animate-pulse ${colorClass} select-none`} style={{ animationIterationCount: 3 }}>
+                {abbr}{type}
+              </div>
+            );
+          }
+      }
+
+      // 2. 外來生年飛化 (新增的邏輯)
+      if (externalSiHua) {
+          const extType = externalSiHua[star.name];
+          if (extType) {
+             const abbr = STAR_ABBR_MAP[star.name] || star.name[0];
+             // 使用紫色系區隔，代表「外來/生年」
+             // 祿: 紫紅, 權: 紫橘, 科: 紫藍, 忌: 深紫
+             let colorClass = ''; 
+             let label = '';
+
+             // 這裡您可以決定顯示 "飛祿" 或 "生祿" 或 "乙祿"
+             // 為了版面整潔，建議顯示 "飛+化" (例如: 飛祿)
+             if (extType === '祿') { colorClass = 'bg-fuchsia-600 text-white'; label = '飛祿'; }
+             else if (extType === '權') { colorClass = 'bg-orange-600 text-white'; label = '飛權'; }
+             else if (extType === '科') { colorClass = 'bg-indigo-500 text-white'; label = '飛科'; }
+             else if (extType === '忌') { colorClass = 'bg-slate-800 text-white border border-fuchsia-400'; label = '飛忌'; }
+
+             chips.push(
+                <div key={`ext-${idx}`} className={`px-1 py-[1px] rounded text-[11px] font-bold leading-none shadow-md ${colorClass} select-none border border-white/20`}>
+                   {abbr}{extType} {/* 顯示範例: 機祿 (天機化祿) */}
+                </div>
+             );
+          }
       }
     });
+
     if (chips.length === 0) return null;
+    // 使用 flex-col gap-0.5 讓多個名牌垂直堆疊，避免擋住太多橫向空間
     return <div className="absolute top-0.5 right-0.5 flex flex-col gap-0.5 items-end z-30 pointer-events-none">{chips}</div>;
   };
 
@@ -133,7 +164,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
             star={star}
             color="text-red-700"
             bgSiHua={{ ben: 'bg-red-600', da: 'bg-gray-500', liu: 'bg-blue-500', xiao: 'bg-green-600' }}
-            externalType={externalSiHua ? externalSiHua[star.name] : undefined}
+            // 移除 externalType 傳遞
           />
         ))}
 
@@ -143,7 +174,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
             star={star}
             color="text-black"
             bgSiHua={{ ben: 'bg-red-600', da: 'bg-gray-500', liu: 'bg-blue-500', xiao: 'bg-green-600' }}
-            externalType={externalSiHua ? externalSiHua[star.name] : undefined}
+            // 移除 externalType 傳遞
           />
         ))}
 
@@ -153,7 +184,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
             star={star}
             color="text-blue-600"
             bgSiHua={{ ben: 'bg-red-600', da: 'bg-gray-500', liu: 'bg-blue-500', xiao: 'bg-green-600' }}
-            externalType={externalSiHua ? externalSiHua[star.name] : undefined}
+            // 移除 externalType 傳遞
           />
         ))}
 
@@ -163,7 +194,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
             star={star}
             color="text-black"
             bgSiHua={{ ben: 'bg-red-600', da: 'bg-gray-500', liu: 'bg-blue-500', xiao: 'bg-green-600' }}
-            externalType={undefined}
+            // 移除 externalType 傳遞
           />
         ))}
       </div>
@@ -208,16 +239,15 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   );
 };
 
+// [修改點] 移除 externalType 參數
 const VerticalStar = ({
   star,
   color,
   bgSiHua,
-  externalType, 
 }: {
   star: Star;
   color: string;
   bgSiHua: any;
-  externalType?: '祿' | '權' | '科' | '忌';
 }) => {
   return (
     <div className="flex flex-col items-center w-[18px] mr-[1px] relative">
@@ -231,17 +261,7 @@ const VerticalStar = ({
         <SiHuaSlot star={star} scope="liu" bg={bgSiHua.liu} />
         <SiHuaSlot star={star} scope="xiao" bg={bgSiHua.xiao} />
         
-        {/* 外來四化標籤 (來祿/來忌) */}
-        {externalType && (
-            <div className={`w-full text-[9px] font-bold text-center mt-0.5 leading-none px-[1px] rounded-sm transform scale-90
-                ${externalType === '祿' ? 'bg-pink-100 text-pink-700 border border-pink-200' : ''}
-                ${externalType === '權' ? 'bg-orange-100 text-orange-700' : ''}
-                ${externalType === '科' ? 'bg-indigo-100 text-indigo-700' : ''}
-                ${externalType === '忌' ? 'bg-gray-700 text-white' : ''}
-            `}>
-                來{externalType}
-            </div>
-        )}
+        {/* 已移除底部的外來四化文字 */}
       </div>
     </div>
   );
