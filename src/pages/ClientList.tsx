@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, UserCog, LogOut, User, Sparkles, Network } from 'lucide-react';
-import { loadClients, deleteClient, getMyProfile, getUsedChartCount, saveClient, type Client, type UserProfile } from '../db';
+import { loadClients, deleteClient, getMyProfile, getUsedChartCount, type Client, type UserProfile } from '../db';
 import { supabase } from '../supabase';
 import { useNavigate } from 'react-router-dom';
 import { ZHI } from '../logic/constants';
 import { UserManagementModal } from '../components/UserManagementModal'; 
 import { DivinationSetupModal } from '../components/DivinationSetupModal';
 import { RelationshipModal } from '../components/RelationshipModal';
+import { AddChartModal } from '../components/AddChartModal'; // 確保引用 AddChartModal
 
 const CATEGORIES = ["我", "家人", "朋友", "客戶", "名人", "其他"];
 const STORAGE_KEY_CATS = 'ziwei_expanded_cats';
@@ -31,6 +32,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     }
   });
 
+  // 預設 true，只有 admin 會用到這個狀態
   const [showOnlyMine, setShowOnlyMine] = useState<boolean>(() => {
     try {
         const saved = localStorage.getItem(STORAGE_KEY_FILTER);
@@ -115,6 +117,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     const isSearchMatch = nameMatch || yearMatch || starMatch || creatorMatch;
 
     let isOwnerMatch = true;
+    // 修正：只有 Admin 且開啟 "只看我的" 時才過濾，一般使用者本來就只看得到自己的 (在 loadClients 已處理)
     if (userProfile?.email === SUPER_ADMIN_EMAIL && showOnlyMine) {
         isOwnerMatch = c.user_id === userProfile.id;
     }
@@ -215,6 +218,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
 
         <div className="flex gap-4 items-center">
             
+            {/* 修正：只看我的 開關，僅 Admin 可見 */}
             {isSuperAdmin && (
                 <div 
                     className="hidden sm:flex items-center gap-2 cursor-pointer select-none bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-200 transition-colors"
@@ -343,7 +347,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                             {/* 操作按鈕區 */}
                             <div className="flex items-center gap-2 shrink-0">
                                 
-                                {/* 建立者標籤 */}
                                 {!isMine && c.creatorEmail && (
                                     <div className="hidden sm:flex items-center gap-1 text-[10px] text-gray-400 bg-gray-50 px-2 py-1 rounded border border-gray-100 select-none mr-1">
                                         <User size={10} /> 
@@ -353,7 +356,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                                 )}
 
                                 <div className="flex gap-1">
-                                  {/* 1. 關係網按鈕 (綠色，常駐顯示) */}
                                   {!isZiZhan && isMine && (
                                       <button 
                                         onClick={(e) => { e.stopPropagation(); setRelationClient(c); }} 
@@ -364,7 +366,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                                       </button>
                                   )}
 
-                                  {/* 2. 編輯按鈕 */}
                                   {!isZiZhan && (
                                       <button 
                                         onClick={(e) => { e.stopPropagation(); if(isMine) onEdit(c); }} 
@@ -379,7 +380,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                                       </button>
                                   )}
                                   
-                                  {/* 3. 刪除按鈕 */}
                                   <button 
                                     onClick={(e) => { if(isMine) handleDelete(e, c.id); else e.stopPropagation(); }} 
                                     className={`p-2 rounded-full transition-colors ${
@@ -418,7 +418,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         onConfirm={handleCreateDivination}
       />
 
-      {/* 關係管理 Modal */}
       {relationClient && (
           <RelationshipModal 
             isOpen={!!relationClient}
