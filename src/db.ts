@@ -46,26 +46,16 @@ export interface Relationship {
   inferred_from?: string;
 }
 
-/**
- * 核心邏輯：取得「反向」稱謂
- * @param type 正向關係 (例如：A 稱呼 B 為 "子女")
- * @param fromGender A 的性別 (例如：A 是 "女")
- * @returns 反向關係 (例如：B 稱呼 A 為 "母親")
- */
+// --- 輔助：關係稱謂反轉邏輯 ---
 const getInverseRelationType = (type: string, fromGender: '男' | '女'): string => {
-    // 伴侶 (互為配偶)
     if (['配偶', '老公', '老婆', '丈夫', '妻子', '另一半', '太太'].includes(type)) return '配偶';
     if (['情侶', '男朋友', '女朋友', '男友', '女友'].includes(type)) return '情侶';
     
-    // 長輩對晚輩 (子女 -> 父母)
-    // 如果 A 叫 B "子女"，且 A 是男，則 B 叫 A "父親"
+    // 如果我設對方為子女，且我是男 -> 對方叫我父親
     if (['子女', '兒子', '女兒', '孩子'].includes(type)) return fromGender === '男' ? '父親' : '母親';
     
-    // 晚輩對長輩 (父母 -> 子女)
-    // 如果 A 叫 B "父親"，則 B 叫 A "子女" (系統暫無法區分兒或女，統稱子女，或可擴充)
-    if (['父親', '爸爸', '父', '爹'].includes(type)) return '子女';
-    if (['母親', '媽媽', '母', '娘'].includes(type)) return '子女';
-    if (['父母', '雙親'].includes(type)) return '子女';
+    // 如果我設對方為父母，對方叫我子女
+    if (['父親', '爸爸', '父', '爹', '母親', '媽媽', '母', '娘', '父母', '雙親'].includes(type)) return '子女';
 
     // 平輩
     if (['兄弟', '姊妹', '兄妹', '姐弟', '兄弟姊妹', '哥哥', '弟弟', '姊姊', '妹妹'].includes(type)) return '兄弟姊妹';
@@ -76,7 +66,7 @@ const getInverseRelationType = (type: string, fromGender: '男' | '女'): string
     if (['上司', '老闆', '主管'].includes(type)) return '下屬';
     if (['下屬', '員工', '部下'].includes(type)) return '上司';
 
-    return '關係人'; // 預設
+    return '關係人'; 
 };
 
 // --- 核心載入邏輯 ---
@@ -126,48 +116,94 @@ export const getRelationships = async (clientId: string): Promise<Relationship[]
 };
 
 /**
- * 新增關係 (包含雙向寫入)
- * @param fromId 主體 ID (我)
- * @param toId 對象 ID (他)
- * @param type 關係 (我是他的...) -> 修正：這裡傳入的通常是 "他是我" 的關係
- * 修正定義：type 代表 "To 是 From 的 [Type]"。例如 A 加 B，type="子女"，代表 B 是 A 的子女。
+ * 自動化家庭連動 (Auto Family Linking)
+ * 這是解決 "爸爸看不到兒子" 的核心邏輯
+ */
+const autoLinkFamily = async (user_id: string, fromId: string, toId: string, type: string) => {
+    // 情境 1: 新增了 "子女" (To)
+    // 動作: 找出 From (我) 的所有配偶，將 To (子女) 也加給配偶
+    if (['子女', '兒子', '女兒'].includes(type)) {
+        const { data: spouses } = await supabase.from('relationships')
+            .select('to_client_id, to_c:clients!to_client_id(gender)')
+            .eq('from_client_id', fromId)
+            .in('relation_type', ['配偶', '老公', '老婆', '丈夫', '妻子']);
+        
+        if (spouses) {
+            for (const spouse of spouses) {
+                // 檢查 配偶 <-> 子女 是否已存在
+                const { data: exists } = await supabase.from('relationships').select('id')
+                    .eq('from_client_id', spouse.to_client_id).eq('to_client_id', toId);
+                
+                if (!exists || exists.length === 0) {
+                    // 自動幫配偶加子女
+                    await addRelationship(spouse.to_client_id, toId, '子女'); 
+                    console.log(`[AutoLink] 自動連結配偶 ${spouse.to_client_id} 與 子女 ${toId}`);
+                }
+            }
+        }
+    }
+
+    // 情境 2: 新增了 "配偶" (To)
+    // 動作: 找出 From (我) 的所有子女，將 子女 也加給這個新配偶 (To)
+    if (['配偶', '老公', '老婆', '丈夫', '妻子'].includes(type)) {
+        const { data: children } = await supabase.from('relationships')
+            .select('to_client_id')
+            .eq('from_client_id', fromId)
+            .in('relation_type', ['子女', '兒子', '女兒']);
+        
+        if (children) {
+            for (const child of children) {
+                // 檢查 新配偶 <-> 子女 是否已存在
+                const { data: exists } = await supabase.from('relationships').select('id')
+                    .eq('from_client_id', toId).eq('to_client_id', child.to_client_id);
+                
+                if (!exists || exists.length === 0) {
+                    // 自動幫新配偶加子女
+                    await addRelationship(toId, child.to_client_id, '子女');
+                    console.log(`[AutoLink] 自動連結新配偶 ${toId} 與 子女 ${child.to_client_id}`);
+                }
+            }
+        }
+    }
+};
+
+/**
+ * 新增關係 (包含雙向寫入 + 自動家庭連動)
  */
 export const addRelationship = async (fromId: string, toId: string, type: string): Promise<boolean> => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
 
-    // 1. 獲取 "我" (fromId) 的性別，用於決定 "他" 怎麼稱呼 "我"
+    // 1. 準備資料
     const { data: fromClient } = await supabase.from('clients').select('gender').eq('id', fromId).single();
     if (!fromClient) return false;
 
-    // 2. 獲取 "他" (toId) 的性別，(可選，用於未來更精細的稱謂，如：長子、長女)
-    // 目前先主要用 fromClient 的性別來決定反向稱謂
-
-    // 計算反向稱謂：
-    // 如果我設他為 "子女"，我是 "男"，那他看我就是 "父親"
     const inverseType = getInverseRelationType(type, fromClient.gender as '男' | '女');
 
-    // 3. 檢查是否已存在
+    // 2. 檢查是否存在
     const { data: exists } = await supabase.from('relationships')
         .select('id')
-        .or(`and(from_client_id.eq.${fromId},to_client_id.eq.${toId}),and(from_client_id.eq.${toId},to_client_id.eq.${fromId})`);
+        .eq('from_client_id', fromId).eq('to_client_id', toId);
     
     if (exists && exists.length > 0) return true;
 
-    // 4. 雙向寫入
-    // 正向：我 -> 他 (Type)
-    const payloadForward = {
-        user_id: user.id, from_client_id: fromId, to_client_id: toId, relation_type: type
-    };
-    // 反向：他 -> 我 (InverseType)
-    const payloadReverse = {
-        user_id: user.id, from_client_id: toId, to_client_id: fromId, relation_type: inverseType
-    };
+    // 3. 雙向寫入
+    const payloadForward = { user_id: user.id, from_client_id: fromId, to_client_id: toId, relation_type: type };
+    const payloadReverse = { user_id: user.id, from_client_id: toId, to_client_id: fromId, relation_type: inverseType };
 
     const { error: err1 } = await supabase.from('relationships').insert(payloadForward);
+    
+    // 反向寫入 (如果失敗不影響正向，但會 log)
     const { error: err2 } = await supabase.from('relationships').insert(payloadReverse);
+    if (err2) console.warn("Reverse link failed", err2);
 
-    return !err1 && !err2;
+    // 4. 觸發自動家庭連動 (Auto Family Linking)
+    if (!err1) {
+        // 使用非同步執行，不卡 UI
+        autoLinkFamily(user.id, fromId, toId, type);
+    }
+
+    return !err1;
 };
 
 export const deleteRelationship = async (relId: string): Promise<boolean> => {
@@ -179,47 +215,7 @@ export const deleteRelationship = async (relId: string): Promise<boolean> => {
     return !error;
 };
 
-/**
- * 智慧推導建議 (Triangle Suggestion)
- * 情境：A (User) 新增了 C (Target) 為 "子女"。
- * 檢查：A 是否有 "配偶" B？
- * 若有，建議：建立 B -> C 為 "子女" (雙向會自動變成 C -> B 為 父親/母親)
- */
-export const suggestTriangles = async (clientId: string, newTargetId: string, newType: string): Promise<{suggest: boolean, spouseId: string, spouseName: string, childId: string, childName: string} | null> => {
-    
-    if (['子女', '兒子', '女兒'].includes(newType)) {
-        // 1. 找出我的配偶
-        const { data: spouses } = await supabase.from('relationships')
-            .select(`to_client_id, to_c:clients!to_client_id(name, gender)`)
-            .eq('from_client_id', clientId)
-            .in('relation_type', ['配偶', '老公', '老婆', '丈夫', '妻子']);
-        
-        if (spouses && spouses.length > 0) {
-            const spouse = spouses[0];
-            const spouseId = spouse.to_client_id;
-            
-            // 2. 檢查配偶是否已經跟這個孩子有關係
-            const { data: exists } = await supabase.from('relationships')
-                .select('id')
-                .eq('from_client_id', spouseId)
-                .eq('to_client_id', newTargetId);
-            
-            // 3. 找出孩子的名字 (顯示用)
-            const { data: child } = await supabase.from('clients').select('name').eq('id', newTargetId).single();
-
-            if ((!exists || exists.length === 0) && child) {
-                return {
-                    suggest: true,
-                    spouseId: spouseId,
-                    spouseName: (spouse.to_c as any).name,
-                    childId: newTargetId,
-                    childName: child.name
-                };
-            }
-        }
-    }
-    return null;
-};
+// 移除 suggestTriangles (因為已經改為全自動 autoLinkFamily)
 
 // --- 輔助函數 ---
 const mapClientToEntity = (data: any): Client => ({
@@ -285,7 +281,6 @@ export const addClient = async (client: any): Promise<string | null> => {
     const { data, error } = await supabase.from('clients').insert(dbPayload).select().single();
     if (error) throw error;
 
-    // 支援快速關聯
     if (client.linkRequest && data?.id) {
         try {
             await addRelationship(data.id, client.linkRequest.targetId, client.linkRequest.type);
