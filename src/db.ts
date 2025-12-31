@@ -7,11 +7,12 @@ const SUPER_VIEW_EMAIL = 'stephenwu.0926@gmail.com';
 export interface UserProfile {
   id: string;
   email: string;
-  role: string;
+  role: string; // 'admin' | 'student' | 'general'
   maxCharts: number;
   maxEditsPerChart: number;
   isBanned: boolean;
   can_use_divination: boolean;
+  accessExpiry?: string; // [新增] 權限到期日 (ISO string)
   activeCount?: number;
   deletedCount?: number;
 }
@@ -47,26 +48,14 @@ export interface Relationship {
 
 // --- 輔助：關係稱謂反轉邏輯 (Strict) ---
 const getInverseRelationType = (type: string, fromGender: '男' | '女'): string => {
-    // 伴侶類
     if (['配偶'].includes(type)) return '配偶';
     if (['情侶'].includes(type)) return '情侶';
-    
-    // 親子
     if (['子女'].includes(type)) return fromGender === '男' ? '父親' : '母親';
     if (['父親', '母親'].includes(type)) return '子女';
-
-    // 手足 (反向統稱家人或對應稱謂，但在不知道對方年紀時，回傳"親戚"或對應稱謂比較保險，這裡為了簡單反向邏輯：)
-    // 哥哥/姐姐/弟弟/妹妹 -> 對方看我是什麼？ 
-    // 因為系統沒去算對方年紀，這裡回傳 "兄弟姊妹" 或 "親戚" 會比亂猜好。
-    // 但配合您的需求，我們可以讓系統存精確的，顯示時再轉。
-    // 若 A 是 B 的哥哥，那 B 是 A 的弟弟或妹妹。
-    // 簡化起見，反向存 "手足" 或 "親戚" 較安全，或者直接存 "親戚"。
     if (['哥哥', '姐姐', '弟弟', '妹妹'].includes(type)) return '親戚'; 
-    
     if (['親戚'].includes(type)) return '親戚';
     if (['朋友'].includes(type)) return '朋友';
-    
-    return '朋友'; // 預設 fallback
+    return '朋友'; 
 };
 
 // --- 核心載入邏輯 ---
@@ -115,9 +104,6 @@ export const getRelationships = async (clientId: string): Promise<Relationship[]
     }));
 };
 
-/**
- * 取得使用者自訂的關係類型
- */
 export const getUserCustomRelationTypes = async (): Promise<string[]> => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return [];
@@ -157,24 +143,18 @@ export const addRelationship = async (fromId: string, toId: string, type: string
     if (err2) console.warn("Reverse link failed", err2);
 
     if (!err1) {
-        // 非同步執行自動連動
         autoLinkFamily(user.id, fromId, toId, type);
     }
 
     return !err1;
 };
 
-/**
- * 自動家庭連動 (修正版：防止亂倫 Bug)
- * 只允許 "父母-子女" 的垂直自動連結，嚴格禁止水平(兄弟)或跨層級配偶的自動推導。
- */
 const autoLinkFamily = async (user_id: string, fromId: string, toId: string, type: string) => {
-    // 情境 1: 新增 "子女" -> 幫 "配偶" 加子女
     if (['子女'].includes(type)) {
         const { data: spouses } = await supabase.from('relationships')
             .select('to_client_id')
             .eq('from_client_id', fromId)
-            .in('relation_type', ['配偶']); // 嚴格鎖定配偶
+            .in('relation_type', ['配偶']);
         
         if (spouses) {
             for (const spouse of spouses) {
@@ -188,7 +168,6 @@ const autoLinkFamily = async (user_id: string, fromId: string, toId: string, typ
         }
     }
 
-    // 情境 2: 新增 "配偶" -> 幫配偶加 "子女"
     if (['配偶'].includes(type)) {
         const { data: children } = await supabase.from('relationships')
             .select('to_client_id')
@@ -217,7 +196,6 @@ export const deleteRelationship = async (relId: string): Promise<boolean> => {
     return !error;
 };
 
-// --- 輔助函數 ---
 const mapClientToEntity = (data: any): Client => ({
     id: data.id,
     user_id: data.user_id,
@@ -244,7 +222,8 @@ export const getMyProfile = async (): Promise<UserProfile | null> => {
     maxCharts: data.max_charts,
     maxEditsPerChart: data.max_edits_per_chart,
     isBanned: data.is_banned || false,
-    can_use_divination: data.can_use_divination ?? true
+    can_use_divination: data.can_use_divination ?? true,
+    accessExpiry: data.access_expiry // [新增]
   };
 };
 
@@ -330,6 +309,7 @@ export const getAllProfilesWithStats = async (): Promise<UserProfile[]> => {
     id: p.id, email: p.email, role: p.role, maxCharts: p.max_charts,
     maxEditsPerChart: p.max_edits_per_chart, isBanned: p.is_banned,
     can_use_divination: p.can_use_divination ?? true,
+    accessExpiry: p.access_expiry, // [新增]
     activeCount: p.active_count, deletedCount: p.deleted_count
   }));
 };
@@ -344,7 +324,8 @@ export const updateProfile = async (id: string, updates: Partial<UserProfile>): 
     role: updates.role,
     max_charts: updates.maxCharts,
     max_edits_per_chart: updates.maxEditsPerChart,
-    can_use_divination: updates.can_use_divination
+    can_use_divination: updates.can_use_divination,
+    access_expiry: updates.accessExpiry // [新增] 寫入到期日
   };
   const { error } = await supabase.from('profiles').update(dbUpdates).eq('id', id);
   return !error;
