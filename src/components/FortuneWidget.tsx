@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { Sun, Cloud, CloudRain, Lock, ChevronRight, RefreshCw, X } from 'lucide-react';
-import { DailyFortune } from '../logic/fortune';
+import { Sun, Cloud, CloudRain, Lock, ChevronRight } from 'lucide-react';
+// 修正重點：這裡加上 type
+import type { DailyFortune } from '../logic/fortune';
 import { UserProfile } from '../db';
 
 interface Props {
@@ -13,13 +14,11 @@ export const FortuneWidget: React.FC<Props> = ({ fortune, userProfile, clientNam
   const [isExpanded, setIsExpanded] = useState(false);
 
   // 判斷是否為 VIP (學員 或 Admin)
-  // 學員判斷：role === 'student' 且 沒過期
-  // 或是 role === 'admin'
   const isVip = useMemo(() => {
     if (!userProfile) return false;
     if (userProfile.role === 'admin') return true;
     if (userProfile.role === 'student') {
-        if (!userProfile.accessExpiry) return false; // 沒壓日期視為無效? 或視為永久? 這裡假設必須壓日期
+        if (!userProfile.accessExpiry) return false; 
         return new Date(userProfile.accessExpiry) > new Date();
     }
     return false;
