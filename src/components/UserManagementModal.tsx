@@ -79,13 +79,16 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
   };
 
   const handleBanToggle = async (user: UserProfile) => {
-    if (user.email === SUPER_ADMIN_EMAIL) return; // 邏輯防呆
+    // [防呆修正] 忽略大小寫比對，確保不會停權到自己
+    if (user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) return;
     await toggleUserBan(user.id, user.isBanned);
     loadData();
   };
 
   const handleDeleteUser = async (user: UserProfile) => {
-    if (user.email === SUPER_ADMIN_EMAIL) return; // 邏輯防呆
+    // [防呆修正] 忽略大小寫比對，確保不會刪除到自己
+    if (user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) return;
+    
     if (confirm(`【危險】確定要永久刪除使用者 ${user.email} 嗎？\n刪除後，該使用者的所有命盤資料也將一併消失，無法復原。`)) {
         setLoading(true);
         const success = await deleteUserProfile(user.id);
@@ -176,7 +179,8 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
               <tbody className="divide-y divide-gray-50">
                 {paginatedData.map(user => {
                   const isEditing = editingId === user.id;
-                  const isSuperAdmin = user.email === SUPER_ADMIN_EMAIL;
+                  // [防呆修正] 列表渲染時也忽略大小寫比對，確保顯示皇冠與保護樣式
+                  const isSuperAdmin = user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
                   const isActive = !user.isBanned;
                   
                   return (
