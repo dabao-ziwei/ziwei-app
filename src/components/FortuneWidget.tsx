@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Lock, ChevronRight, Eye, EyeOff } from 'lucide-react';
+import { Lock, ChevronRight } from 'lucide-react';
 import type { DailyFortune } from '../logic/fortune';
 import type { UserProfile } from '../db';
 
@@ -7,15 +7,14 @@ interface Props {
   fortune: DailyFortune;
   userProfile: UserProfile | null;
   clientName: string;
-  forceLock?: boolean; // 新增：強制鎖定 (用於預覽)
+  forceLock?: boolean;
 }
 
 export const FortuneWidget: React.FC<Props> = ({ fortune, userProfile, clientName, forceLock = false }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // 判斷是否為 VIP
   const isVip = useMemo(() => {
-    if (forceLock) return false; // 如果開啟預覽模式，強制視為非 VIP
+    if (forceLock) return false;
     if (!userProfile) return false;
     if (userProfile.role === 'admin') return true;
     if (userProfile.role === 'student') {
@@ -25,63 +24,54 @@ export const FortuneWidget: React.FC<Props> = ({ fortune, userProfile, clientNam
     return false;
   }, [userProfile, forceLock]);
 
-  const bgColor = {
-      sunny: 'bg-gradient-to-br from-amber-50 to-orange-50 border-orange-200',
-      cloudy: 'bg-gradient-to-br from-blue-50 to-slate-50 border-blue-200',
-      rainy: 'bg-gradient-to-br from-gray-100 to-slate-200 border-gray-300'
-  }[fortune.weather];
-
   return (
-    <div className={`w-full rounded-2xl border p-5 shadow-sm transition-all duration-500 relative overflow-hidden ${bgColor}`}>
+    <div className="w-full bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
       
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+      {/* 上半部：大總分儀表板 */}
+      <div className="p-6 pb-2 flex flex-col items-center justify-center relative bg-gradient-to-b from-blue-50/50 to-white">
           
-          {/* 左側：儀表板 (Gauge) */}
-          <div className="relative w-40 h-24 shrink-0 flex justify-center items-end">
-             <GaugeChart score={fortune.score} />
-             <div className="absolute bottom-0 text-center">
-                <span className="text-3xl font-black text-slate-800">{fortune.score}</span>
-                <span className="text-xs text-slate-500 font-medium block -mt-1">今日運勢</span>
-             </div>
+          <div className="absolute top-4 left-4 flex flex-col">
+               <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full mb-1">
+                  {clientName} · 流日{fortune.debug?.flowDayZhi}位
+               </span>
+               <h2 className="text-xl font-black text-slate-800 tracking-tight">今日運勢</h2>
           </div>
 
-          {/* 中間：文字資訊 */}
-          <div className="flex-1 text-center sm:text-left">
-              <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
-                  <span className="text-[10px] bg-white/60 px-2 py-0.5 rounded-full text-slate-500 border border-white/50">
-                      {clientName} · 流日{fortune.debug?.flowDayZhi}位
-                  </span>
-                  {/* VIP 標記 */}
-                  {!isVip && <span className="text-[10px] bg-gray-800 text-white px-1.5 py-0.5 rounded">Free</span>}
-                  {isVip && <span className="text-[10px] bg-amber-400 text-amber-900 px-1.5 py-0.5 rounded font-bold">VIP</span>}
-              </div>
-              <h2 className="text-lg font-bold text-slate-800 mb-1">{fortune.summary}</h2>
-              <p className="text-xs text-slate-500">
-                  {fortune.weather === 'sunny' && '吉星高照，把握良機。'}
-                  {fortune.weather === 'cloudy' && '局勢不明，謹慎判斷。'}
-                  {fortune.weather === 'rainy' && '風雨欲來，保守為宜。'}
-              </p>
+          <div className="mt-6 mb-2">
+             <BigGauge score={fortune.score} label="綜合評比" />
           </div>
           
-          {/* 右側：展開按鈕 */}
+          <p className="text-sm font-bold text-slate-600 mb-4 bg-white/60 px-4 py-1 rounded-full border border-slate-100 shadow-sm">
+              {fortune.summary}
+          </p>
+
           <button 
             onClick={() => setIsExpanded(!isExpanded)}
-            className="p-2 rounded-full hover:bg-black/5 transition-colors self-center sm:self-start"
+            className="absolute top-4 right-4 p-2 rounded-full hover:bg-slate-100 transition-colors"
           >
             <ChevronRight size={20} className={`text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-90' : ''}`} />
           </button>
       </div>
 
-      {/* 展開：詳細指數 */}
-      <div className={`grid gap-3 transition-all duration-500 ease-in-out ${isExpanded ? 'grid-rows-[1fr] opacity-100 mt-4' : 'grid-rows-[0fr] opacity-0 h-0 overflow-hidden mt-0'}`}>
-          <div className="min-h-0 space-y-3 pt-2 border-t border-black/5">
+      {/* 下半部：三大生活指數 */}
+      <div className={`bg-slate-50 border-t border-slate-100 transition-all duration-500 ease-in-out ${isExpanded ? 'py-6' : 'py-4'}`}>
+          
+          {/* 三個小儀表板 (已改為生活化名稱) */}
+          <div className="flex justify-around items-start px-2">
+              <SmallGauge score={fortune.indexOverall} label="今日氣場" color="#3b82f6" />
+              <SmallGauge score={fortune.indexLoveCareer} label="事業感情" color="#ec4899" />
+              <SmallGauge score={fortune.indexWealth} label="荷包財運" color="#f59e0b" />
+          </div>
+
+          {/* 詳細建議文字 (展開才顯示) */}
+          <div className={`px-6 space-y-4 transition-all duration-500 overflow-hidden ${isExpanded ? 'max-h-96 opacity-100 mt-6' : 'max-h-0 opacity-0 mt-0'}`}>
               
-              <MeterRow label="財運" score={fortune.moneyScore} color="bg-red-500" detail={fortune.details.money} isLocked={!isVip} />
-              <MeterRow label="感情" score={fortune.loveScore} color="bg-pink-500" detail={fortune.details.love} isLocked={!isVip} />
-              <MeterRow label="外出" score={fortune.travelScore} color="bg-green-500" detail={fortune.details.travel} isLocked={!isVip} />
+              <DetailRow label="氣場分析" text={fortune.details.overall} isLocked={!isVip} />
+              <DetailRow label="關係與事業" text={fortune.details.loveCareer} isLocked={!isVip} />
+              <DetailRow label="財運建議" text={fortune.details.wealth} isLocked={!isVip} />
 
               {!isVip && (
-                  <div className="mt-2 p-3 bg-white/60 rounded-xl flex items-center justify-center gap-2 text-xs text-slate-500 border border-white shadow-sm cursor-pointer hover:bg-white/80 transition-colors">
+                  <div className="mt-4 p-3 bg-white rounded-xl flex items-center justify-center gap-2 text-xs text-slate-500 border border-slate-200 shadow-sm">
                       <Lock size={14} />
                       <span className="font-bold">升級學員解鎖詳細建議</span>
                   </div>
@@ -92,75 +82,88 @@ export const FortuneWidget: React.FC<Props> = ({ fortune, userProfile, clientNam
   );
 };
 
-// 很炫炮的 SVG 儀表板組件
-const GaugeChart = ({ score }: { score: number }) => {
-    // 限制分數 0-100
+// 大儀表板 (SVG)
+const BigGauge = ({ score, label }: { score: number, label: string }) => {
     const clampedScore = Math.max(0, Math.min(100, score));
-    // 半圓周長 (r=40) => 2 * pi * 40 / 2 = 125.6
-    const radius = 40;
+    const radius = 60;
     const circumference = Math.PI * radius; 
-    
-    // 顏色判定
-    let strokeColor = '#94a3b8'; // gray
-    if (clampedScore >= 75) strokeColor = '#f59e0b'; // amber (sunny)
-    else if (clampedScore >= 50) strokeColor = '#3b82f6'; // blue (cloudy)
-    else strokeColor = '#64748b'; // slate (rainy)
-
-    // 指針角度 (0分 = -90度, 100分 = 90度)
+    let strokeColor = '#94a3b8';
+    if (clampedScore >= 75) strokeColor = '#f59e0b'; // sunny
+    else if (clampedScore >= 50) strokeColor = '#3b82f6'; // cloudy
+    else strokeColor = '#64748b'; // rainy
     const rotation = -90 + (clampedScore / 100) * 180;
 
     return (
-        <svg width="160" height="90" viewBox="0 0 160 90" className="overflow-visible">
-            {/* 背景軌道 */}
-            <path d="M 40 80 A 40 40 0 0 1 120 80" fill="none" stroke="#e2e8f0" strokeWidth="12" strokeLinecap="round" />
-            
-            {/* 分數軌道 (動態長度) */}
-            <path 
-                d="M 40 80 A 40 40 0 0 1 120 80" 
-                fill="none" 
-                stroke={strokeColor} 
-                strokeWidth="12" 
-                strokeLinecap="round"
-                strokeDasharray={circumference}
-                strokeDashoffset={circumference - (circumference * clampedScore) / 100}
-                className="transition-all duration-1000 ease-out"
-            />
-
-            {/* 指針 (中心點在 80, 80) */}
-            <g transform={`translate(80, 80) rotate(${rotation})`} className="transition-all duration-1000 ease-out origin-center">
-                 {/* 針身 */}
-                <path d="M -4 0 L 0 -35 L 4 0 Z" fill="#334155" />
-                {/* 針尾圓點 */}
-                <circle cx="0" cy="0" r="6" fill="#334155" />
-                <circle cx="0" cy="0" r="3" fill="white" />
-            </g>
-        </svg>
+        <div className="relative w-48 h-28 flex justify-center items-end">
+             <svg width="200" height="110" viewBox="0 0 200 110" className="overflow-visible">
+                <path d="M 40 100 A 60 60 0 0 1 160 100" fill="none" stroke="#e2e8f0" strokeWidth="16" strokeLinecap="round" />
+                <path 
+                    d="M 40 100 A 60 60 0 0 1 160 100" 
+                    fill="none" 
+                    stroke={strokeColor} 
+                    strokeWidth="16" 
+                    strokeLinecap="round"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={circumference - (circumference * clampedScore) / 100}
+                    className="transition-all duration-1000 ease-out"
+                />
+                <g transform={`translate(100, 100) rotate(${rotation})`} className="transition-all duration-1000 ease-out origin-center">
+                    <path d="M -5 0 L 0 -50 L 5 0 Z" fill="#1e293b" />
+                    <circle cx="0" cy="0" r="8" fill="#1e293b" />
+                    <circle cx="0" cy="0" r="4" fill="white" />
+                </g>
+            </svg>
+            <div className="absolute bottom-0 flex flex-col items-center translate-y-2">
+                <span className="text-4xl font-black text-slate-800">{score}</span>
+            </div>
+        </div>
     );
 };
 
-const MeterRow = ({ label, score, color, detail, isLocked }: any) => (
-    <div className="bg-white/40 rounded-xl p-3 flex items-start gap-3">
-        {/* 左側：進度條 */}
-        <div className="flex-1">
-            <div className="flex justify-between items-end mb-1">
-                <span className="text-xs font-bold text-slate-600">{label}</span>
-                <span className="text-xs font-black text-slate-800">{score}%</span>
-            </div>
-            <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
-                <div className={`h-full ${color} rounded-full transition-all duration-1000`} style={{ width: `${score}%` }} />
-            </div>
+// 小儀表板 (SVG)
+const SmallGauge = ({ score, label, color }: { score: number, label: string, color: string }) => {
+    const clampedScore = Math.max(0, Math.min(100, score));
+    const radius = 25;
+    const circumference = Math.PI * radius; 
+    const rotation = -90 + (clampedScore / 100) * 180;
+
+    return (
+        <div className="flex flex-col items-center gap-1">
+             <div className="relative w-20 h-12 flex justify-center items-end">
+                <svg width="80" height="45" viewBox="0 0 80 45" className="overflow-visible">
+                    <path d="M 15 40 A 25 25 0 0 1 65 40" fill="none" stroke="#e2e8f0" strokeWidth="6" strokeLinecap="round" />
+                    <path 
+                        d="M 15 40 A 25 25 0 0 1 65 40" 
+                        fill="none" 
+                        stroke={color} 
+                        strokeWidth="6" 
+                        strokeLinecap="round"
+                        strokeDasharray={circumference}
+                        strokeDashoffset={circumference - (circumference * clampedScore) / 100}
+                        className="transition-all duration-1000 ease-out"
+                    />
+                    <g transform={`translate(40, 40) rotate(${rotation})`} className="transition-all duration-1000 ease-out origin-center">
+                        <path d="M -2 0 L 0 -22 L 2 0 Z" fill={color} />
+                        <circle cx="0" cy="0" r="3" fill={color} />
+                    </g>
+                </svg>
+             </div>
+             <span className="text-[10px] font-bold text-slate-500">{label}</span>
+             <span className="text-xs font-black text-slate-800">{score}</span>
         </div>
-        
-        {/* 右側：文字 (根據鎖定狀態模糊化) */}
-        <div className="flex-[2] text-xs leading-relaxed text-slate-600 relative">
-            <p className={isLocked ? 'blur-sm select-none opacity-50' : ''}>
-                {detail}
-            </p>
-            {isLocked && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <Lock size={12} className="text-slate-400 opacity-80" />
-                </div>
-            )}
-        </div>
+    );
+};
+
+const DetailRow = ({ label, text, isLocked }: any) => (
+    <div className="relative">
+        <h4 className="text-xs font-bold text-slate-400 mb-1">{label}</h4>
+        <p className={`text-sm text-slate-600 leading-relaxed ${isLocked ? 'blur-sm select-none opacity-60' : ''}`}>
+            {text}
+        </p>
+        {isLocked && (
+            <div className="absolute inset-0 flex items-center justify-center">
+                {/* 鎖定遮罩 */}
+            </div>
+        )}
     </div>
 );
