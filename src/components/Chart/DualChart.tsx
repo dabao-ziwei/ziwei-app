@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PalaceGrid } from './PalaceGrid';
 import { ZiWeiEngine } from '../../logic/engine';
-import { GAN, SIHUA_TABLE } from '../../logic/constants';
+import { GAN, ZHI, SIHUA_TABLE } from '../../logic/constants';
 import { Loader2, ChevronLeft, Lock, Unlock, ArrowRightLeft } from 'lucide-react';
 import type { Client } from '../../db';
 
@@ -26,11 +26,14 @@ const getSiHuaMap = (ganIndex: number) => {
 // 輔助：產生 10 年流年列表
 const getLiuNianList = (engine: ZiWeiEngine, chartData: any, daXianSeq: number) => {
     if (!engine || !chartData || daXianSeq < 0) return [];
+    
+    // 找出該大限的命宮位置
     const startPos = engine.getMingPos();
     const direction = chartData.direction || 1;
     const offset = daXianSeq * direction;
     const daXianPalaceIdx = (startPos + offset + 120) % 12;
     const palace = chartData.palaces[daXianPalaceIdx];
+    
     if (!palace) return [];
     
     const startYear = chartData.lunarYear + palace.ages[0];
@@ -40,7 +43,8 @@ const getLiuNianList = (engine: ZiWeiEngine, chartData: any, daXianSeq: number) 
         const age = palace.ages[0] + i;
         const gan = (year - 4) % 10;
         const zhi = (year - 4) % 12;
-        list.push({ year, age, label: `${year} ${age}歲` }); // 簡化顯示
+        // 顯示：2025 (乙巳) 41歲
+        list.push({ year, age, label: `${year} ${GAN[gan]}${ZHI[zhi]} ${age}` });
     }
     return list;
 };
@@ -146,20 +150,30 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   }, [engineB, daSeqB, liuYearB, showXiaoB]);
 
   // --- Helper Functions ---
-  // 取得大限列表 (包含該大限起始年與結束年，用於同步搜尋)
+  // [修正] 取得大限列表，必須包含 palaceIdx，否則 PalaceGrid 會當機
   const daListA = useMemo(() => {
       if (!engineA || !chartA) return [];
       const list = [];
       const startPos = engineA.getMingPos();
       const dir = chartA.direction;
       for (let i=0; i<10; i++) {
-          const idx = (startPos + i*dir + 120) % 12;
+          const idx = (startPos + i*dir + 120) % 12; // 計算大限命宮 Index
           const p = chartA.palaces[idx];
-          list.push({ seq: i, startYear: chartA.lunarYear + p.ages[0], endYear: chartA.lunarYear + p.ages[1], name: `${p.ages[0]}-${p.ages[1]}` });
+          const startYear = chartA.lunarYear + p.ages[0];
+          // 這裡補上了 palaceIdx
+          list.push({ 
+              seq: i, 
+              palaceIdx: idx, 
+              startYear: startYear, 
+              endYear: chartA.lunarYear + p.ages[1], 
+              name: `${['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'][i]}限`,
+              label: `${p.ages[0]}-${p.ages[1]}` 
+          });
       }
       return list;
   }, [chartA, engineA]);
 
+  // [修正] 同上，補上 palaceIdx
   const daListB = useMemo(() => {
       if (!engineB || !chartB) return [];
       const list = [];
@@ -168,7 +182,15 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       for (let i=0; i<10; i++) {
           const idx = (startPos + i*dir + 120) % 12;
           const p = chartB.palaces[idx];
-          list.push({ seq: i, startYear: chartB.lunarYear + p.ages[0], endYear: chartB.lunarYear + p.ages[1], name: `${p.ages[0]}-${p.ages[1]}` });
+          const startYear = chartB.lunarYear + p.ages[0];
+          list.push({ 
+              seq: i, 
+              palaceIdx: idx, 
+              startYear: startYear, 
+              endYear: chartB.lunarYear + p.ages[1], 
+              name: `${['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'][i]}限`,
+              label: `${p.ages[0]}-${p.ages[1]}` 
+          });
       }
       return list;
   }, [chartB, engineB]);
@@ -270,7 +292,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
             {/* Left Chart (A) */}
             <div className="flex-1 flex flex-col border-r-2 border-gray-300 relative">
                 <div className="flex-1 relative">
-                    {/* 我們使用剛重構好的 PalaceGrid，並傳入 calculated props */}
                     <PalaceGrid
                         client={clientA}
                         chartData={chartA}
@@ -296,20 +317,20 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         currentHourZhi={`${hourA}`}
                         isTimeModified={hourA !== clientA.birthHour}
                         connections={dummyConnections}
-                        daXianList={[]} // Grid 內部不需要大限列表邏輯
+                        
+                        // [修正] 傳入正確的大限列表
+                        daXianList={daListA} 
+                        
                         xiaoXianMingIdx={-1}
                         
-                        // Helpers (Stubbed)
+                        // Helpers
                         getRelativeNames={(idx) => {
-                            // 這裡可以複製 SingleChart 的邏輯，或是簡化
-                            // 為了省空間，我們暫時簡化，之後可以補上大限流年的標示
-                            const engine = engineA!;
-                            const benMingPos = engine.getMingPos();
-                            if (daSeqA >= 0) {
-                                // 顯示大限宮位名
-                                // ... (可選實作)
+                            // 簡單顯示大限命宮標記
+                            let daName = undefined;
+                            if (daSeqA >= 0 && daListA[daSeqA]?.palaceIdx === idx) {
+                                daName = '大命';
                             }
-                            return {};
+                            return { daName };
                         }}
                         getIsBenMingMing={(idx) => idx === engineA!.getMingPos()}
                         getAnchorCoord={getDummyCoords}
@@ -329,14 +350,19 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                 </div>
                 {/* Chart A Control Bar */}
                 <div className="h-12 bg-white border-t border-gray-200 flex overflow-x-auto scrollbar-hide shrink-0">
-                    {/* 簡化版：只顯示大限與流年切換 */}
                     <div className="flex w-full">
                         {daListA.map(limit => (
                             <button key={limit.seq} 
-                                onClick={() => { setDaSeqA(limit.seq); setLiuYearA(null); }}
-                                className={`px-2 py-1 text-[10px] border-r border-gray-100 whitespace-nowrap ${daSeqA === limit.seq ? 'bg-gray-600 text-white' : 'text-gray-600'}`}
+                                onClick={() => { 
+                                    // 切換大限，若有鎖定要清除流年
+                                    setDaSeqA(limit.seq); 
+                                    setLiuYearA(null); 
+                                    if(isLocked) setLiuYearB(null); 
+                                }}
+                                className={`px-2 py-1 text-[10px] border-r border-gray-100 whitespace-nowrap min-w-[60px] flex flex-col items-center justify-center ${daSeqA === limit.seq ? 'bg-gray-600 text-white' : 'text-gray-600'}`}
                             >
-                                {limit.name}
+                                <span>{limit.name}</span>
+                                <span className="text-[9px] opacity-80">{limit.label}</span>
                             </button>
                         ))}
                     </div>
@@ -351,7 +377,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                                     setLiuYearA(newYear);
                                     syncTime('A', newYear); // 觸發同步
                                 }}
-                                className={`px-2 text-[10px] border-r border-blue-200 whitespace-nowrap ${liuYearA === item.year ? 'bg-blue-600 text-white' : 'text-blue-600'}`}
+                                className={`px-2 text-[10px] border-r border-blue-200 whitespace-nowrap min-w-[60px] ${liuYearA === item.year ? 'bg-blue-600 text-white' : 'text-blue-600'}`}
                             >
                                 {item.label}
                             </button>
@@ -385,10 +411,19 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         currentHourZhi={`${hourB}`}
                         isTimeModified={hourB !== clientB.birthHour}
                         connections={dummyConnections}
-                        daXianList={[]}
+                        
+                        // [修正] 傳入正確的大限列表
+                        daXianList={daListB} 
+                        
                         xiaoXianMingIdx={-1}
                         
-                        getRelativeNames={(idx) => ({})}
+                        getRelativeNames={(idx) => {
+                            let daName = undefined;
+                            if (daSeqB >= 0 && daListB[daSeqB]?.palaceIdx === idx) {
+                                daName = '大命';
+                            }
+                            return { daName };
+                        }}
                         getIsBenMingMing={(idx) => idx === engineB!.getMingPos()}
                         getAnchorCoord={getDummyCoords}
 
@@ -409,10 +444,15 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                     <div className="flex w-full">
                         {daListB.map(limit => (
                             <button key={limit.seq} 
-                                onClick={() => { setDaSeqB(limit.seq); setLiuYearB(null); }}
-                                className={`px-2 py-1 text-[10px] border-r border-gray-100 whitespace-nowrap ${daSeqB === limit.seq ? 'bg-gray-600 text-white' : 'text-gray-600'}`}
+                                onClick={() => { 
+                                    setDaSeqB(limit.seq); 
+                                    setLiuYearB(null); 
+                                    if(isLocked) setLiuYearA(null);
+                                }}
+                                className={`px-2 py-1 text-[10px] border-r border-gray-100 whitespace-nowrap min-w-[60px] flex flex-col items-center justify-center ${daSeqB === limit.seq ? 'bg-gray-600 text-white' : 'text-gray-600'}`}
                             >
-                                {limit.name}
+                                <span>{limit.name}</span>
+                                <span className="text-[9px] opacity-80">{limit.label}</span>
                             </button>
                         ))}
                     </div>
@@ -426,7 +466,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                                     setLiuYearB(newYear);
                                     syncTime('B', newYear); // 觸發同步
                                 }}
-                                className={`px-2 text-[10px] border-r border-blue-200 whitespace-nowrap ${liuYearB === item.year ? 'bg-blue-600 text-white' : 'text-blue-600'}`}
+                                className={`px-2 text-[10px] border-r border-blue-200 whitespace-nowrap min-w-[60px] ${liuYearB === item.year ? 'bg-blue-600 text-white' : 'text-blue-600'}`}
                             >
                                 {item.label}
                             </button>
