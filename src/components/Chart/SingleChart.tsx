@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { toPng } from 'html-to-image';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { PalaceGrid } from './PalaceGrid'; // 引入剛剛建立的 Grid
+import { PalaceGrid } from './PalaceGrid';
 import { getClient, getRelationships, type Client, type Relationship } from '../../db';
 import { ZiWeiEngine } from '../../logic/engine';
 import { GAN, ZHI, PALACE_NAMES, SIHUA_TABLE } from '../../logic/constants';
@@ -396,8 +396,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
             </div>
         )}
 
-        {/* 核心改動：使用 PalaceGrid 取代原本的 HTML 結構，並傳入所有 props */}
-        {/* 這裡我們將 flyingStarsLookup 作為額外 prop 傳入 (透過 any 繞過檢查，或你可以更新 interface) */}
+        {/* 修正：正規傳遞 props，不使用 as any */}
         <PalaceGrid
             ref={chartRef}
             client={client!}
@@ -436,7 +435,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
             onToggleSmallLimit={toggleXiaoXian}
             onPalaceClick={handlePalaceClick}
             onTriggerClick={handleTriggerClick}
-            {...({ flyingStarsLookup } as any)}
+            flyingStarsLookup={flyingStarsLookup}
         />
 
       </div>

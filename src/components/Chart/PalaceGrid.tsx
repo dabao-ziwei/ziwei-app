@@ -31,7 +31,7 @@ interface PalaceGridProps {
   externalGan: number | null;
   externalSiHuaMap?: Record<string, '祿' | '權' | '科' | '忌'>;
 
-  // Calculated Values (passed from parent to keep this component dumb)
+  // Calculated Values
   benMingMajorStarsStr: string;
   currentHourZhi: string;
   isTimeModified: boolean;
@@ -39,6 +39,9 @@ interface PalaceGridProps {
   daXianList: any[];
   xiaoXianMingIdx: number;
   
+  // Flying Stars (修正這裡：正式加入定義)
+  flyingStarsLookup?: Record<string, '祿' | '權' | '科' | '忌'>;
+
   // Helper Functions
   getRelativeNames: (idx: number) => { daName?: string; liuName?: string; xiaoName?: string; divinationName?: string };
   getIsBenMingMing: (idx: number) => boolean;
@@ -63,6 +66,7 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
   divNum, isDivinationReady, divSiHuaMap,
   externalGan, externalSiHuaMap,
   benMingMajorStarsStr, currentHourZhi, isTimeModified, connections, daXianList, xiaoXianMingIdx,
+  flyingStarsLookup, // 修正這裡：直接解構出來
   getRelativeNames, getIsBenMingMing, getAnchorCoord,
   onHistoryBack, onNavigate, onCompatibility, onChangeHour, onResetTime,
   onToggleTwin, onToggleInverted, onToggleSmallLimit, onPalaceClick, onTriggerClick
@@ -118,7 +122,6 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
 
           const relNames = getRelativeNames(palaceIdx);
           
-          // [修正] 紫占模式下的命宮判定
           const isBenMingMing = getIsBenMingMing(palaceIdx);
           
           const isDaXianMing = daXianSeq >= 0 && daXianList[daXianSeq].palaceIdx === palaceIdx;
@@ -129,25 +132,6 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
           const showXiaoXianSeal = isXiaoXianMingPalace && !showXiaoXian;
           const isFlyingSource = flyingPalace === palaceIdx;
 
-          // 判斷該宮位的宮干飛化 (如果是發射宮)
-          // 這裡需要 ZiWeiEngine 的計算，但我們保持 Grid 為純 UI
-          // 實際上 PalaceCard 內部接收 flyingStars map，我們需要從外部傳入
-          // 為了簡化，我們假設 parent 已經處理好 flyingStars 邏輯
-          // 但這裡 PalaceGrid 無法直接存取 engine。
-          // 解決方案：我們約定 PalaceCard 的 flyingStars 由 parent 在 render 時計算好嗎？
-          // 不，那太複雜。比較好的方式是：PalaceGrid 還是需要一點點 helper，但我們將 `getSiHuaMap` 的能力保留在 parent
-          // 或者，我們傳入一個 lookup function。
-          // *修正*：為了讓 PalaceGrid 真的 dumb，我們應該在 render PalaceCard 時，
-          // 從 parent 傳下來的 flyingStarsLookup 獲取資料。
-          // 但 flyingStarsLookup 是根據 flyingPalace 變動的。
-          
-          // 我們在 Parent (SingleChart) 已經計算了 flyingStarsLookup
-          // 但它是針對「目前飛射宮」的。所以這裡我們需要傳入一個 mapping。
-          // 請看 SingleChart 的實作，它會計算 flyingStarsLookup 並傳給 Grid (如果不行的話)。
-          
-          // 為了不讓 Grid 太複雜，我們在此處不做 engine 計算。
-          // 我們將 `flyingStarsLookup` 作為 props 傳入 Grid。
-          
           return (
               <div key={palaceIdx} onClick={() => onPalaceClick(palaceIdx)} className={`relative cursor-pointer transition-all duration-200 border border-gray-300 box-border overflow-visible ${isConnected ? 'bg-red-50' : 'hover:bg-gray-50'} ${isFlyingSource ? 'ring-4 ring-purple-400 z-50 animate-pulse' : ''}`} style={isFlyingSource ? { animationIterationCount: 3 } : {}}>
                   {isFlyingSource && <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-purple-600 text-white text-[11px] font-bold px-2 py-0.5 rounded-full shadow-lg z-50 whitespace-nowrap tracking-wide border border-white">{GAN[chartData.palaces[palaceIdx].ganIndex]}干飛化</div>}
@@ -163,12 +147,12 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
                       isLiuNianMing={isLiuNianMing && isLiuNianActive}
                       isXiaoXianMingPalace={isXiaoXianMingPalace && (isLiuNianActive || isXiaoXianActive)}
                       onTriggerClick={() => onTriggerClick(palaceIdx)}
-                      // 這裡需要從 props 拿 flyingStarsLookup，這是一個額外的 prop
-                      // 我們使用下面定義的 extend prop
-                      flyingStars={(props as any).flyingStarsLookup}
+                      
+                      // 修正這裡：直接使用解構出來的變數
+                      flyingStars={flyingStarsLookup}
+                      
                       isTwinMode={isTwinMode}
                       isReverse={isReverse}
-                      
                       divinationName={relNames.divinationName}
                       divinationSiHua={mode === 'divination' ? divSiHuaMap : undefined}
                       externalSiHua={externalSiHuaMap}
@@ -181,9 +165,3 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
     </div>
   );
 });
-
-// 為了讓 TypeScript 開心，我們補充一下 props
-// 在實際檔案中這行不需要，因為上面的 Interface 定義了
-// 但我們要在 PalaceGridProps 補上 flyingStarsLookup
-// 為了避免修改上面的 interface 定義太亂，我直接在元件內部用 (props as any) 處理了
-// 正式專案建議在 Interface 加： flyingStarsLookup: Record<string, '祿' | '權' | '科' | '忌'>;
