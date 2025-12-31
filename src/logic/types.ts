@@ -1,14 +1,14 @@
-// 定義星曜等級
+// 星曜等級
 export type StarLevel = 'major' | 'minor' | 'misc' | 'limit';
 
-// 定義四化類型
+// 星曜亮度
+export type Brightness = '廟' | '旺' | '得' | '利' | '平' | '不' | '陷';
+
+// 四化類型
 export type SiHuaType = '祿' | '權' | '科' | '忌';
 
-// 定義四化作用範圍
+// 四化範圍 (本命、大限、流年、小限)
 export type Scope = 'ben' | 'da' | 'liu' | 'xiao';
-
-// 定義亮度
-export type Brightness = '廟' | '旺' | '得' | '利' | '平' | '不' | '陷';
 
 export interface SiHua {
   type: SiHuaType;
@@ -30,24 +30,25 @@ export interface Palace {
   majorStars: Star[];
   minorStars: Star[];
   miscStars: Star[];
-  limitStars: Star[]; // 運限流曜 (祿羊陀)
-  ages: number[]; // [起始歲, 結束歲]
-  isBody: boolean; // 是否身宮
-  boshi12: string; // 博士十二神
-  changsheng12?: string; // 長生十二神
-  sui12?: string; // 歲建十二神
-  jiang12?: string; // 將前十二神
+  limitStars: Star[];
+  ages: number[];
+  isBody: boolean;
+  boshi12: string;      // 博士十二神
+  sui12: string;        // 歲建十二神
+  jiang12: string;      // 將前十二神
+  changsheng12?: string; // 長生十二神 (選填，因為有些舊資料可能沒有)
 }
 
+// 完整的命盤資料結構
 export interface ChartData {
   gender: '男' | '女';
   solarDate: string;
   lunarDate: string;
-  lunarYear: number; // 新增：農曆年份 (用於精確計算虛歲)
+  lunarYear: number;
   bazi: string;
-  bureau: string;
-  mingZhu: string;
-  shenZhu: string;
-  palaces: Palace[];
-  direction: number; // 1: 順行, -1: 逆行
+  bureau: string;      // 五行局
+  mingZhu: string;     // 命主
+  shenZhu: string;     // 身主
+  palaces: Palace[];   // 十二宮資料
+  direction: number;   // 陰陽順逆 (1 or -1)
 }
