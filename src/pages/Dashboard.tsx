@@ -13,7 +13,6 @@ export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  
   const [meClient, setMeClient] = useState<Client | null>(null);
   const [dailyFortune, setDailyFortune] = useState<DailyFortune | null>(null);
   
@@ -40,18 +39,16 @@ export const Dashboard: React.FC = () => {
         const allClients = await loadClients();
         const loadedClients = Array.isArray(allClients) ? allClients : [];
 
-        // 尋找「我」的命盤
+        // 尋找「我」的命盤 (寬鬆比對)
         const myCharts = loadedClients.filter(c => {
             const isOwner = c.user_id === profile?.id;
             const cleanType = (c.type || '').trim();
-            // 寬鬆比對：只要是 '我' 或 'Me' 都算
             return isOwner && (cleanType === '我' || cleanType === 'Me');
         });
 
         if (myCharts.length > 0) {
             const target = myCharts[0];
             setMeClient(target);
-            
             try {
                 const engine = new ZiWeiEngine(
                     target.birthYear, target.birthMonth, target.birthDay, 
@@ -107,10 +104,11 @@ export const Dashboard: React.FC = () => {
   if (loading) return <div className="flex h-screen items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-slate-400" /></div>;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans relative overflow-x-hidden">
+    // [修正] 移除 overflow-x-hidden 並確保 min-h-screen 允許垂直捲動
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans w-full overflow-y-auto">
         
         {/* Header */}
-        <header className="px-6 py-4 flex justify-between items-center bg-white border-b border-slate-100 relative z-20">
+        <header className="px-6 py-4 flex justify-between items-center bg-white border-b border-slate-100 shrink-0 sticky top-0 z-50 shadow-sm">
             <div className="relative">
                 <button 
                     onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -145,47 +143,54 @@ export const Dashboard: React.FC = () => {
         </header>
 
         {/* Content */}
-        <main className="flex-1 max-w-2xl mx-auto w-full p-6 flex flex-col items-center">
+        <main className="flex-1 max-w-4xl mx-auto w-full p-6 flex flex-col items-center">
             
             {/* 情境 A: 有命盤 -> 顯示儀表板 */}
             {meClient && dailyFortune && (
                 <>
-                    <div className="w-full mb-8 transform hover:scale-[1.02] transition-transform duration-300">
-                        <FortuneWidget 
-                            fortune={dailyFortune}
-                            userProfile={userProfile}
-                            clientName={meClient.name}
-                        />
-                    </div>
+                    {/* Widget 本身已經很大，不需要額外縮放動畫 */}
+                    <FortuneWidget 
+                        fortune={dailyFortune}
+                        userProfile={userProfile}
+                        clientName={meClient.name}
+                    />
 
-                    <button
-                        onClick={() => navigate('/list')}
-                        className="w-full bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 font-bold py-5 rounded-2xl shadow-sm transition-all flex items-center justify-between px-6 group"
-                    >
-                        <div className="flex flex-col items-start">
-                            <span className="text-lg text-slate-800 group-hover:text-blue-700 transition-colors">管理命盤列表</span>
-                            <span className="text-xs text-slate-400 font-normal">查看所有客戶與紫占記錄</span>
-                        </div>
-                        <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all">
-                            <ArrowRight size={20} />
-                        </div>
-                    </button>
-                    
-                    {userProfile?.can_use_divination && (
+                    {/* 功能按鈕區 */}
+                    <div className="w-full grid md:grid-cols-2 gap-4 mt-2">
                         <button
-                            onClick={() => navigate('/list', { state: { openDivination: true } })}
-                            className="w-full mt-4 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-100 hover:border-purple-300 text-purple-800 font-bold py-4 rounded-2xl shadow-sm transition-all flex items-center justify-center gap-2"
+                            onClick={() => navigate('/list')}
+                            className="w-full bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 font-bold py-5 rounded-2xl shadow-sm transition-all flex items-center justify-between px-6 group"
                         >
-                            <Sparkles size={18} />
-                            快速進行紫微占卜
+                            <div className="flex flex-col items-start">
+                                <span className="text-lg text-slate-800 group-hover:text-blue-700 transition-colors">管理命盤列表</span>
+                                <span className="text-xs text-slate-400 font-normal">查看所有客戶與紫占記錄</span>
+                            </div>
+                            <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all">
+                                <ArrowRight size={20} />
+                            </div>
                         </button>
-                    )}
+                        
+                        {userProfile?.can_use_divination && (
+                            <button
+                                onClick={() => navigate('/list', { state: { openDivination: true } })}
+                                className="w-full bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-100 hover:border-purple-300 text-purple-800 font-bold py-5 rounded-2xl shadow-sm transition-all flex items-center justify-between px-6 group"
+                            >
+                                <div className="flex flex-col items-start">
+                                    <span className="text-lg text-purple-900 group-hover:text-purple-700 transition-colors">紫微占卜</span>
+                                    <span className="text-xs text-purple-400 font-normal">遇事不決，可問斗數</span>
+                                </div>
+                                <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all">
+                                    <Sparkles size={20} />
+                                </div>
+                            </button>
+                        )}
+                    </div>
                 </>
             )}
 
             {/* 情境 B: 沒命盤 -> 顯示新手引導 */}
             {!meClient && (
-                 <div className="w-full bg-white rounded-3xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-500">
+                 <div className="w-full max-w-md bg-white rounded-3xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-500 mt-10">
                   <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-8 text-white text-center">
                       <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
                           <Sparkles size={32} className="text-yellow-300" />

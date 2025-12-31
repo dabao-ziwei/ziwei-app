@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Lock, ChevronRight } from 'lucide-react';
+import { Lock, FileText, ChevronDown, ChevronUp } from 'lucide-react';
 import type { DailyFortune } from '../logic/fortune';
 import type { UserProfile } from '../db';
 
@@ -11,7 +11,8 @@ interface Props {
 }
 
 export const FortuneWidget: React.FC<Props> = ({ fortune, userProfile, clientName, forceLock = false }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  // 開發階段預設展開算式
+  const [showDebug, setShowDebug] = useState(true);
 
   const isVip = useMemo(() => {
     if (forceLock) return false;
@@ -24,9 +25,8 @@ export const FortuneWidget: React.FC<Props> = ({ fortune, userProfile, clientNam
     return false;
   }, [userProfile, forceLock]);
 
-  // 雷達圖數據
   const radarData = [
-    { label: '氣場', value: fortune.scores.self },
+    { label: '自身', value: fortune.scores.self },
     { label: '交友', value: fortune.scores.social },
     { label: '感情', value: fortune.scores.love },
     { label: '外出', value: fortune.scores.travel },
@@ -34,137 +34,150 @@ export const FortuneWidget: React.FC<Props> = ({ fortune, userProfile, clientNam
   ];
 
   return (
-    <div className="w-full bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+    <div className="w-full bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden mb-6">
       
-      {/* 上半部：五角雷達圖 */}
-      <div className="p-6 pb-2 flex flex-col items-center justify-center relative bg-gradient-to-b from-purple-50/50 to-white">
-          
-          <div className="absolute top-4 left-4 flex flex-col">
-               <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full mb-1">
-                  {clientName} · 流日{fortune.debug?.flowDayZhi}位
-               </span>
-               <h2 className="text-xl font-black text-slate-800 tracking-tight">今日運勢</h2>
+      {/* 標題列 */}
+      <div className="bg-slate-50 px-6 py-3 border-b border-slate-100 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                {clientName}
+            </span>
+            <span className="text-xs text-slate-500">
+                農曆: {fortune.devInfo.lunarDateStr}
+            </span>
+            <span className="text-xs text-slate-400">
+               (流月{fortune.devInfo.flowMonthZhi}, 流日{fortune.devInfo.flowDayZhi})
+            </span>
           </div>
-
-          <div className="mt-8 mb-4">
-             <RadarChart data={radarData} size={180} />
-          </div>
-          
-          <div className="flex items-baseline gap-2 mb-4">
-              <span className="text-3xl font-black text-slate-800">{fortune.score}</span>
-              <span className="text-xs font-bold text-slate-400">總分</span>
-          </div>
-
-          <p className="text-sm font-bold text-slate-600 mb-2 bg-white/60 px-4 py-1 rounded-full border border-slate-100 shadow-sm">
-              {fortune.summary}
-          </p>
-
-          <button 
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="absolute top-4 right-4 p-2 rounded-full hover:bg-slate-100 transition-colors"
-          >
-            <ChevronRight size={20} className={`text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-90' : ''}`} />
-          </button>
+          <div className="text-sm font-bold text-slate-700">總分: {fortune.score}</div>
       </div>
 
-      {/* 下半部：詳細指數與建議 */}
-      <div className={`bg-slate-50 border-t border-slate-100 transition-all duration-500 ease-in-out ${isExpanded ? 'py-6' : 'py-4'}`}>
+      {/* 主要內容區 (左右佈局) */}
+      <div className="flex flex-col md:flex-row">
           
-          {/* 數值列表 */}
-          <div className="grid grid-cols-5 gap-1 px-4 mb-4 text-center">
-              {radarData.map((d, i) => (
-                  <div key={i} className="flex flex-col items-center">
-                      <div className="w-8 h-1 rounded-full mb-1" style={{ backgroundColor: getScoreColor(d.value) }}></div>
-                      <span className="text-[10px] text-slate-400">{d.label}</span>
-                      <span className="text-sm font-bold text-slate-700">{d.value}</span>
-                  </div>
-              ))}
+          {/* 左側：雷達圖 */}
+          <div className="w-full md:w-1/2 p-6 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-slate-100 bg-gradient-to-b from-white to-slate-50/50">
+             <RadarChart data={radarData} size={220} />
+             <p className="mt-4 text-sm font-bold text-slate-600 px-4 py-1 rounded-full bg-white border border-slate-200 shadow-sm">
+                 {fortune.summary}
+             </p>
           </div>
 
-          {/* 詳細建議文字 (展開才顯示) */}
-          <div className={`px-6 space-y-4 transition-all duration-500 overflow-hidden ${isExpanded ? 'max-h-96 opacity-100 mt-6' : 'max-h-0 opacity-0 mt-0'}`}>
-              
-              <DetailRow label="氣場總評" text={fortune.details.overall} isLocked={!isVip} />
-              <DetailRow label="感情與事業" text={fortune.details.loveCareer} isLocked={!isVip} />
-              <DetailRow label="財運指引" text={fortune.details.wealth} isLocked={!isVip} />
+          {/* 右側：運勢總論與詳情 (預設顯示) */}
+          <div className="w-full md:w-1/2 p-6 flex flex-col justify-center">
+             <h3 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
+                 <FileText size={20} className="text-blue-500"/> 運勢分析
+             </h3>
+             
+             <div className="space-y-4">
+                <DetailRow label="自身氣場" text={fortune.details.overall} score={fortune.scores.self} isLocked={!isVip} />
+                <DetailRow label="感情事業" text={fortune.details.loveCareer} score={fortune.scores.love} isLocked={!isVip} />
+                <DetailRow label="荷包財運" text={fortune.details.wealth} score={fortune.scores.wealth} isLocked={!isVip} />
+             </div>
 
-              {!isVip && (
-                  <div className="mt-4 p-3 bg-white rounded-xl flex items-center justify-center gap-2 text-xs text-slate-500 border border-slate-200 shadow-sm">
-                      <Lock size={14} />
-                      <span className="font-bold">升級學員解鎖詳細建議</span>
-                  </div>
-              )}
+             {!isVip && (
+                 <div className="mt-6 p-4 bg-yellow-50 rounded-xl border border-yellow-200 flex items-center gap-3">
+                     <div className="bg-yellow-100 p-2 rounded-full text-yellow-600">
+                         <Lock size={16} />
+                     </div>
+                     <div>
+                         <div className="text-xs font-bold text-yellow-800">解鎖完整解析</div>
+                         <div className="text-[10px] text-yellow-600">升級會員查看詳細避雷指南</div>
+                     </div>
+                 </div>
+             )}
           </div>
+      </div>
+
+      {/* 底部：開發驗證算式 (可摺疊) */}
+      <div className="border-t border-slate-200">
+          <button 
+            onClick={() => setShowDebug(!showDebug)}
+            className="w-full px-6 py-2 bg-slate-50 text-xs font-bold text-slate-500 hover:bg-slate-100 flex justify-between items-center transition-colors"
+          >
+              <span>🛠️ 開發驗證：分數計算明細 (點擊收合)</span>
+              {showDebug ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
+          </button>
+          
+          {showDebug && (
+             <div className="p-6 bg-slate-800 text-green-400 font-mono text-xs overflow-x-auto space-y-4">
+                 <LogSection title="自身氣場 (命/遷/官/財)" logs={fortune.devInfo.formulas.self} />
+                 <LogSection title="交友運勢 (僕/兄/父/子)" logs={fortune.devInfo.formulas.social} />
+                 <LogSection title="感情運勢 (夫/官/遷/福)" logs={fortune.devInfo.formulas.love} />
+                 <LogSection title="外出運勢 (子/田/兄/疾)" logs={fortune.devInfo.formulas.travel} />
+                 <LogSection title="理財運勢 (財/福/遷/夫)" logs={fortune.devInfo.formulas.wealth} />
+             </div>
+          )}
       </div>
     </div>
   );
 };
 
-// --- SVG 雷達圖組件 ---
+const LogSection = ({ title, logs }: { title: string, logs: string[] }) => (
+    <div>
+        <div className="font-bold text-white mb-1 border-b border-slate-600 pb-1">{title}</div>
+        {logs.length === 0 ? (
+            <div className="text-slate-500 italic">無變動 (60分)</div>
+        ) : (
+            logs.map((L, i) => <div key={i}>{L}</div>)
+        )}
+    </div>
+);
+
+const DetailRow = ({ label, text, score, isLocked }: any) => (
+    <div className="group">
+        <div className="flex justify-between items-baseline mb-1">
+            <h4 className="text-sm font-bold text-slate-600">{label}</h4>
+            <span className={`text-xs font-mono font-bold ${score >= 60 ? 'text-blue-600' : 'text-slate-400'}`}>{score}分</span>
+        </div>
+        <div className="relative bg-slate-50 p-3 rounded-lg border border-slate-100">
+            <p className={`text-sm text-slate-700 leading-relaxed ${isLocked ? 'blur-[3px] opacity-60 select-none' : ''}`}>
+                {text}
+            </p>
+            {isLocked && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                    {/* 鎖定遮罩，但不放按鈕以免干擾閱讀感 */}
+                </div>
+            )}
+        </div>
+    </div>
+);
+
+// --- 雷達圖組件 (與之前相同) ---
 const RadarChart = ({ data, size }: { data: {label:string, value:number}[], size: number }) => {
     const radius = size / 2;
     const center = size / 2;
     const angleStep = (Math.PI * 2) / 5;
     
-    // 計算頂點座標
     const getPoint = (value: number, index: number) => {
-        // 旋轉 -90度 讓第一個點在正上方
         const angle = index * angleStep - Math.PI / 2;
-        // 正規化半徑 (20~100 對應 0.2~1.0)
         const r = (value / 100) * radius; 
         const x = center + r * Math.cos(angle);
         const y = center + r * Math.sin(angle);
         return `${x},${y}`;
     };
 
-    // 背景網格 (60分, 80分, 100分)
     const levels = [60, 80, 100];
-    
-    // 數據多邊形
     const polyPoints = data.map((d, i) => getPoint(d.value, i)).join(' ');
 
     return (
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="overflow-visible">
-            {/* 網格 */}
             {levels.map((level, idx) => (
-                <polygon 
-                    key={idx}
-                    points={data.map((_, i) => getPoint(level, i)).join(' ')}
-                    fill="none"
-                    stroke="#e2e8f0"
-                    strokeWidth="1"
-                    strokeDasharray={level === 60 ? "4 2" : ""}
-                />
+                <polygon key={idx} points={data.map((_, i) => getPoint(level, i)).join(' ')}
+                    fill="none" stroke="#e2e8f0" strokeWidth="1" strokeDasharray={level === 60 ? "4 2" : ""} />
             ))}
-            
-            {/* 軸線 */}
             {data.map((_, i) => {
                 const p = getPoint(100, i);
                 return <line key={i} x1={center} y1={center} x2={p.split(',')[0]} y2={p.split(',')[1]} stroke="#f1f5f9" strokeWidth="1" />;
             })}
-
-            {/* 數據區域 */}
-            <polygon 
-                points={polyPoints} 
-                fill="rgba(59, 130, 246, 0.2)" 
-                stroke="#3b82f6" 
-                strokeWidth="2" 
-            />
-
-            {/* 數據點 */}
+            <polygon points={polyPoints} fill="rgba(59, 130, 246, 0.2)" stroke="#3b82f6" strokeWidth="2" />
             {data.map((d, i) => {
                 const [x, y] = getPoint(d.value, i).split(',');
                 return (
                     <g key={i}>
                         <circle cx={x} cy={y} r="3" fill="#3b82f6" stroke="white" strokeWidth="1.5" />
-                        {/* 標籤位置微調 */}
-                        <text 
-                            x={parseFloat(x)} 
-                            y={parseFloat(y) + (i===0 ? -10 : 15)} 
-                            textAnchor="middle" 
-                            fontSize="10" 
-                            className="font-bold fill-slate-500"
-                        >
+                        <text x={parseFloat(x)} y={parseFloat(y) + (i===0 ? -12 : (i===2||i===3)? 15 : 5)} 
+                            textAnchor="middle" fontSize="11" className="font-bold fill-slate-500">
                             {d.label}
                         </text>
                     </g>
@@ -173,21 +186,3 @@ const RadarChart = ({ data, size }: { data: {label:string, value:number}[], size
         </svg>
     );
 };
-
-const getScoreColor = (score: number) => {
-    if (score >= 80) return '#f59e0b'; // orange
-    if (score >= 60) return '#3b82f6'; // blue
-    return '#64748b'; // slate
-};
-
-const DetailRow = ({ label, text, isLocked }: any) => (
-    <div className="relative">
-        <h4 className="text-xs font-bold text-slate-400 mb-1">{label}</h4>
-        <p className={`text-sm text-slate-600 leading-relaxed ${isLocked ? 'blur-sm select-none opacity-60' : ''}`}>
-            {text}
-        </p>
-        {isLocked && (
-            <div className="absolute inset-0 flex items-center justify-center"></div>
-        )}
-    </div>
-);
