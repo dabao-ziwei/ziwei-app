@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, ArrowRight, Menu, LogOut, UserCog, Loader2, Save, Bug } from 'lucide-react';
+import { Sparkles, ArrowRight, Menu, LogOut, UserCog, Loader2, Save } from 'lucide-react';
 import { supabase } from '../supabase';
 import { loadClients, saveClient, getMyProfile, type Client, type UserProfile } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
@@ -20,9 +20,6 @@ export const Dashboard: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false);
 
-  // Debug 資訊
-  const [debugInfo, setDebugInfo] = useState<string[]>([]);
-
   const [onboardingForm, setOnboardingForm] = useState({
     name: '',
     gender: '男' as '男'|'女',
@@ -36,33 +33,24 @@ export const Dashboard: React.FC = () => {
 
   const initDashboard = async () => {
     setLoading(true);
-    const logs: string[] = []; // 用來收集診斷訊息
-    
     try {
         const profile = await getMyProfile();
         setUserProfile(profile);
         
-        if (!profile) {
-            logs.push("❌ 無法取得使用者 Profile (未登入?)");
-        } else {
-            logs.push(`登入者: ${profile.email}`);
-        }
-
         const allClients = await loadClients();
         const loadedClients = Array.isArray(allClients) ? allClients : [];
 
-        // --- 寬鬆比對邏輯 ---
+        // 尋找「我」的命盤
         const myCharts = loadedClients.filter(c => {
             const isOwner = c.user_id === profile?.id;
             const cleanType = (c.type || '').trim();
-            const isMe = cleanType === '我' || cleanType === 'Me';
-            return isOwner && isMe;
+            // 寬鬆比對：只要是 '我' 或 'Me' 都算
+            return isOwner && (cleanType === '我' || cleanType === 'Me');
         });
 
         if (myCharts.length > 0) {
             const target = myCharts[0];
             setMeClient(target);
-            logs.push(`✅ 鎖定命盤: [${target.name}]`);
             
             try {
                 const engine = new ZiWeiEngine(
@@ -70,27 +58,14 @@ export const Dashboard: React.FC = () => {
                     target.birthHour, target.birthMinute, target.gender
                 );
                 const fortune = calculateDailyFortune(engine);
-                
-                // 檢查數據是否異常
-                logs.push(`✅ 運勢計算: 分數=${fortune.score}, 天氣=${fortune.weather}`);
-                if (Number.isNaN(fortune.score)) logs.push("⚠️ 警告：分數是 NaN");
-                if (!fortune.weather) logs.push("⚠️ 警告：天氣未定義");
-
                 setDailyFortune(fortune);
-            } catch (e: any) {
-                logs.push(`❌ 運勢引擎錯誤: ${e.message}`);
+            } catch (e) {
+                console.error("Fortune calculation error", e);
             }
-        } else {
-            logs.push(`⚠️ 找不到「我」的命盤，進入新手引導。`);
-            const myOwned = loadedClients.filter(c => c.user_id === profile?.id);
-            logs.push(`您名下共有 ${myOwned.length} 張命盤`);
         }
-
-    } catch (e: any) {
-        logs.push(`❌ 初始化嚴重錯誤: ${e.message}`);
-        console.error(e);
+    } catch (e) {
+        console.error("Init error", e);
     } finally {
-        setDebugInfo(logs);
         setLoading(false);
     }
   };
@@ -172,24 +147,10 @@ export const Dashboard: React.FC = () => {
         {/* Content */}
         <main className="flex-1 max-w-2xl mx-auto w-full p-6 flex flex-col items-center">
             
-            {/* --- 強制顯示診斷面板 --- */}
-            <div className="w-full mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-xs font-mono text-yellow-800 break-all shadow-sm">
-                <div className="flex items-center gap-2 font-bold mb-2 text-yellow-900 border-b border-yellow-200 pb-2">
-                    <Bug size={14}/> 診斷模式 (所有人可見)
-                </div>
-                {debugInfo.map((line, i) => (
-                    <div key={i} className="mb-0.5 border-b border-yellow-100 pb-0.5">{line}</div>
-                ))}
-            </div>
-
             {/* 情境 A: 有命盤 -> 顯示儀表板 */}
             {meClient && dailyFortune && (
                 <>
-                    {/* 紅色邊框是用來檢查渲染範圍的，確認功能正常後可移除 */}
-                    <div className="w-full mb-8 transform hover:scale-[1.02] transition-transform duration-300 border-2 border-dashed border-red-400 p-2 relative">
-                        <div className="absolute -top-3 left-2 bg-red-500 text-white text-[10px] px-2 py-0.5 rounded">
-                            儀表板區域 ({dailyFortune.weather})
-                        </div>
+                    <div className="w-full mb-8 transform hover:scale-[1.02] transition-transform duration-300">
                         <FortuneWidget 
                             fortune={dailyFortune}
                             userProfile={userProfile}
