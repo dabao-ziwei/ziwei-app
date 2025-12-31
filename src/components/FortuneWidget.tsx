@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { Sun, Cloud, CloudRain, Lock, ChevronRight } from 'lucide-react';
-// 修正重點：這裡加上 type
+// 修正 1: 加上 type
 import type { DailyFortune } from '../logic/fortune';
-import { UserProfile } from '../db';
+// 修正 2: 加上 type (這就是剛剛報錯的地方)
+import type { UserProfile } from '../db';
 
 interface Props {
   fortune: DailyFortune;
@@ -18,6 +19,7 @@ export const FortuneWidget: React.FC<Props> = ({ fortune, userProfile, clientNam
     if (!userProfile) return false;
     if (userProfile.role === 'admin') return true;
     if (userProfile.role === 'student') {
+        // 需判斷是否有到期日，若無到期日視為無效或視為永久(依您的商業邏輯，這裡假設嚴格檢查)
         if (!userProfile.accessExpiry) return false; 
         return new Date(userProfile.accessExpiry) > new Date();
     }
