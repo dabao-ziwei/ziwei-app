@@ -24,11 +24,20 @@ export const FortuneWidget: React.FC<Props> = ({ fortune, userProfile, clientNam
     return false;
   }, [userProfile, forceLock]);
 
+  // 雷達圖數據
+  const radarData = [
+    { label: '氣場', value: fortune.scores.self },
+    { label: '交友', value: fortune.scores.social },
+    { label: '感情', value: fortune.scores.love },
+    { label: '外出', value: fortune.scores.travel },
+    { label: '理財', value: fortune.scores.wealth },
+  ];
+
   return (
     <div className="w-full bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
       
-      {/* 上半部：大總分儀表板 */}
-      <div className="p-6 pb-2 flex flex-col items-center justify-center relative bg-gradient-to-b from-blue-50/50 to-white">
+      {/* 上半部：五角雷達圖 */}
+      <div className="p-6 pb-2 flex flex-col items-center justify-center relative bg-gradient-to-b from-purple-50/50 to-white">
           
           <div className="absolute top-4 left-4 flex flex-col">
                <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full mb-1">
@@ -37,11 +46,16 @@ export const FortuneWidget: React.FC<Props> = ({ fortune, userProfile, clientNam
                <h2 className="text-xl font-black text-slate-800 tracking-tight">今日運勢</h2>
           </div>
 
-          <div className="mt-6 mb-2">
-             <BigGauge score={fortune.score} label="綜合評比" />
+          <div className="mt-8 mb-4">
+             <RadarChart data={radarData} size={180} />
           </div>
           
-          <p className="text-sm font-bold text-slate-600 mb-4 bg-white/60 px-4 py-1 rounded-full border border-slate-100 shadow-sm">
+          <div className="flex items-baseline gap-2 mb-4">
+              <span className="text-3xl font-black text-slate-800">{fortune.score}</span>
+              <span className="text-xs font-bold text-slate-400">總分</span>
+          </div>
+
+          <p className="text-sm font-bold text-slate-600 mb-2 bg-white/60 px-4 py-1 rounded-full border border-slate-100 shadow-sm">
               {fortune.summary}
           </p>
 
@@ -53,22 +67,26 @@ export const FortuneWidget: React.FC<Props> = ({ fortune, userProfile, clientNam
           </button>
       </div>
 
-      {/* 下半部：三大生活指數 */}
+      {/* 下半部：詳細指數與建議 */}
       <div className={`bg-slate-50 border-t border-slate-100 transition-all duration-500 ease-in-out ${isExpanded ? 'py-6' : 'py-4'}`}>
           
-          {/* 三個小儀表板 (已改為生活化名稱) */}
-          <div className="flex justify-around items-start px-2">
-              <SmallGauge score={fortune.indexOverall} label="今日氣場" color="#3b82f6" />
-              <SmallGauge score={fortune.indexLoveCareer} label="事業感情" color="#ec4899" />
-              <SmallGauge score={fortune.indexWealth} label="荷包財運" color="#f59e0b" />
+          {/* 數值列表 */}
+          <div className="grid grid-cols-5 gap-1 px-4 mb-4 text-center">
+              {radarData.map((d, i) => (
+                  <div key={i} className="flex flex-col items-center">
+                      <div className="w-8 h-1 rounded-full mb-1" style={{ backgroundColor: getScoreColor(d.value) }}></div>
+                      <span className="text-[10px] text-slate-400">{d.label}</span>
+                      <span className="text-sm font-bold text-slate-700">{d.value}</span>
+                  </div>
+              ))}
           </div>
 
           {/* 詳細建議文字 (展開才顯示) */}
           <div className={`px-6 space-y-4 transition-all duration-500 overflow-hidden ${isExpanded ? 'max-h-96 opacity-100 mt-6' : 'max-h-0 opacity-0 mt-0'}`}>
               
-              <DetailRow label="氣場分析" text={fortune.details.overall} isLocked={!isVip} />
-              <DetailRow label="關係與事業" text={fortune.details.loveCareer} isLocked={!isVip} />
-              <DetailRow label="財運建議" text={fortune.details.wealth} isLocked={!isVip} />
+              <DetailRow label="氣場總評" text={fortune.details.overall} isLocked={!isVip} />
+              <DetailRow label="感情與事業" text={fortune.details.loveCareer} isLocked={!isVip} />
+              <DetailRow label="財運指引" text={fortune.details.wealth} isLocked={!isVip} />
 
               {!isVip && (
                   <div className="mt-4 p-3 bg-white rounded-xl flex items-center justify-center gap-2 text-xs text-slate-500 border border-slate-200 shadow-sm">
@@ -82,76 +100,84 @@ export const FortuneWidget: React.FC<Props> = ({ fortune, userProfile, clientNam
   );
 };
 
-// 大儀表板 (SVG)
-const BigGauge = ({ score, label }: { score: number, label: string }) => {
-    const clampedScore = Math.max(0, Math.min(100, score));
-    const radius = 60;
-    const circumference = Math.PI * radius; 
-    let strokeColor = '#94a3b8';
-    if (clampedScore >= 75) strokeColor = '#f59e0b'; // sunny
-    else if (clampedScore >= 50) strokeColor = '#3b82f6'; // cloudy
-    else strokeColor = '#64748b'; // rainy
-    const rotation = -90 + (clampedScore / 100) * 180;
+// --- SVG 雷達圖組件 ---
+const RadarChart = ({ data, size }: { data: {label:string, value:number}[], size: number }) => {
+    const radius = size / 2;
+    const center = size / 2;
+    const angleStep = (Math.PI * 2) / 5;
+    
+    // 計算頂點座標
+    const getPoint = (value: number, index: number) => {
+        // 旋轉 -90度 讓第一個點在正上方
+        const angle = index * angleStep - Math.PI / 2;
+        // 正規化半徑 (20~100 對應 0.2~1.0)
+        const r = (value / 100) * radius; 
+        const x = center + r * Math.cos(angle);
+        const y = center + r * Math.sin(angle);
+        return `${x},${y}`;
+    };
+
+    // 背景網格 (60分, 80分, 100分)
+    const levels = [60, 80, 100];
+    
+    // 數據多邊形
+    const polyPoints = data.map((d, i) => getPoint(d.value, i)).join(' ');
 
     return (
-        <div className="relative w-48 h-28 flex justify-center items-end">
-             <svg width="200" height="110" viewBox="0 0 200 110" className="overflow-visible">
-                <path d="M 40 100 A 60 60 0 0 1 160 100" fill="none" stroke="#e2e8f0" strokeWidth="16" strokeLinecap="round" />
-                <path 
-                    d="M 40 100 A 60 60 0 0 1 160 100" 
-                    fill="none" 
-                    stroke={strokeColor} 
-                    strokeWidth="16" 
-                    strokeLinecap="round"
-                    strokeDasharray={circumference}
-                    strokeDashoffset={circumference - (circumference * clampedScore) / 100}
-                    className="transition-all duration-1000 ease-out"
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="overflow-visible">
+            {/* 網格 */}
+            {levels.map((level, idx) => (
+                <polygon 
+                    key={idx}
+                    points={data.map((_, i) => getPoint(level, i)).join(' ')}
+                    fill="none"
+                    stroke="#e2e8f0"
+                    strokeWidth="1"
+                    strokeDasharray={level === 60 ? "4 2" : ""}
                 />
-                <g transform={`translate(100, 100) rotate(${rotation})`} className="transition-all duration-1000 ease-out origin-center">
-                    <path d="M -5 0 L 0 -50 L 5 0 Z" fill="#1e293b" />
-                    <circle cx="0" cy="0" r="8" fill="#1e293b" />
-                    <circle cx="0" cy="0" r="4" fill="white" />
-                </g>
-            </svg>
-            <div className="absolute bottom-0 flex flex-col items-center translate-y-2">
-                <span className="text-4xl font-black text-slate-800">{score}</span>
-            </div>
-        </div>
+            ))}
+            
+            {/* 軸線 */}
+            {data.map((_, i) => {
+                const p = getPoint(100, i);
+                return <line key={i} x1={center} y1={center} x2={p.split(',')[0]} y2={p.split(',')[1]} stroke="#f1f5f9" strokeWidth="1" />;
+            })}
+
+            {/* 數據區域 */}
+            <polygon 
+                points={polyPoints} 
+                fill="rgba(59, 130, 246, 0.2)" 
+                stroke="#3b82f6" 
+                strokeWidth="2" 
+            />
+
+            {/* 數據點 */}
+            {data.map((d, i) => {
+                const [x, y] = getPoint(d.value, i).split(',');
+                return (
+                    <g key={i}>
+                        <circle cx={x} cy={y} r="3" fill="#3b82f6" stroke="white" strokeWidth="1.5" />
+                        {/* 標籤位置微調 */}
+                        <text 
+                            x={parseFloat(x)} 
+                            y={parseFloat(y) + (i===0 ? -10 : 15)} 
+                            textAnchor="middle" 
+                            fontSize="10" 
+                            className="font-bold fill-slate-500"
+                        >
+                            {d.label}
+                        </text>
+                    </g>
+                );
+            })}
+        </svg>
     );
 };
 
-// 小儀表板 (SVG)
-const SmallGauge = ({ score, label, color }: { score: number, label: string, color: string }) => {
-    const clampedScore = Math.max(0, Math.min(100, score));
-    const radius = 25;
-    const circumference = Math.PI * radius; 
-    const rotation = -90 + (clampedScore / 100) * 180;
-
-    return (
-        <div className="flex flex-col items-center gap-1">
-             <div className="relative w-20 h-12 flex justify-center items-end">
-                <svg width="80" height="45" viewBox="0 0 80 45" className="overflow-visible">
-                    <path d="M 15 40 A 25 25 0 0 1 65 40" fill="none" stroke="#e2e8f0" strokeWidth="6" strokeLinecap="round" />
-                    <path 
-                        d="M 15 40 A 25 25 0 0 1 65 40" 
-                        fill="none" 
-                        stroke={color} 
-                        strokeWidth="6" 
-                        strokeLinecap="round"
-                        strokeDasharray={circumference}
-                        strokeDashoffset={circumference - (circumference * clampedScore) / 100}
-                        className="transition-all duration-1000 ease-out"
-                    />
-                    <g transform={`translate(40, 40) rotate(${rotation})`} className="transition-all duration-1000 ease-out origin-center">
-                        <path d="M -2 0 L 0 -22 L 2 0 Z" fill={color} />
-                        <circle cx="0" cy="0" r="3" fill={color} />
-                    </g>
-                </svg>
-             </div>
-             <span className="text-[10px] font-bold text-slate-500">{label}</span>
-             <span className="text-xs font-black text-slate-800">{score}</span>
-        </div>
-    );
+const getScoreColor = (score: number) => {
+    if (score >= 80) return '#f59e0b'; // orange
+    if (score >= 60) return '#3b82f6'; // blue
+    return '#64748b'; // slate
 };
 
 const DetailRow = ({ label, text, isLocked }: any) => (
@@ -161,9 +187,7 @@ const DetailRow = ({ label, text, isLocked }: any) => (
             {text}
         </p>
         {isLocked && (
-            <div className="absolute inset-0 flex items-center justify-center">
-                {/* 鎖定遮罩 */}
-            </div>
+            <div className="absolute inset-0 flex items-center justify-center"></div>
         )}
     </div>
 );

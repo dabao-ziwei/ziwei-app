@@ -36,7 +36,7 @@ export interface Palace {
   boshi12: string;      // 博士十二神
   sui12: string;        // 歲建十二神
   jiang12: string;      // 將前十二神
-  changsheng12?: string; // 長生十二神 (選填，因為有些舊資料可能沒有)
+  changsheng12?: string; // 長生十二神
 }
 
 // 完整的命盤資料結構
