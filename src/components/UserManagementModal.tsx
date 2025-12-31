@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { X, Save, Edit2, Search, ChevronLeft, ChevronRight, Loader2, Shield, Trash2, UserPlus, Sparkles, Crown } from 'lucide-react';
+import { X, Save, Edit2, Search, ChevronLeft, ChevronRight, Loader2, Shield, Trash2, UserPlus, Sparkles } from 'lucide-react';
 import { getAllProfilesWithStats, updateProfile, toggleUserBan, deleteUserProfile, inviteUserByEmail, type UserProfile } from '../db';
 
 interface Props {
@@ -182,14 +182,10 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
               <tbody className="divide-y divide-gray-50">
                 {paginatedData.map(user => {
                   const isEditing = editingId === user.id;
+                  // [核心防呆] 嚴格判斷管理者
                   const isSuperAdmin = checkIsSuperAdmin(user.email);
                   const isActive = !user.isBanned;
 
-                  // Debug: 如果您還是沒看到，請打開 F12 Console 查看這行 Log
-                  if (user.email.includes('stephen')) {
-                      console.log(`Checking Admin: [${user.email}] vs [${SUPER_ADMIN_EMAIL}] -> Result: ${isSuperAdmin}`);
-                  }
-                  
                   return (
                     <tr 
                         key={user.id} 
@@ -199,11 +195,12 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                             ${isSuperAdmin ? 'bg-amber-50 border-l-4 border-amber-400' : ''} 
                         `}
                     >
-                      {/* Email 欄位：管理者加皇冠 */}
-                      <td className="py-3 px-4 text-sm font-bold text-gray-700 truncate max-w-[200px]" title={user.email}>
+                      {/* Email 欄位：核彈級顯示修正 (Emoji + 文字標籤) */}
+                      <td className="py-3 px-4 text-sm font-bold text-gray-700" title={user.email}>
                         <div className="flex items-center gap-2">
-                            {isSuperAdmin && <Crown size={16} className="text-amber-500 fill-amber-500" />}
-                            {user.email}
+                            {isSuperAdmin && <span className="text-xl">👑</span>} 
+                            <span className="truncate max-w-[180px]">{user.email}</span>
+                            {isSuperAdmin && <span className="text-[10px] bg-amber-200 text-amber-800 px-1 py-0.5 rounded border border-amber-300 whitespace-nowrap">主管理者</span>}
                         </div>
                       </td>
                       
@@ -218,7 +215,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                                 <div className={`w-4 h-4 bg-white rounded-full shadow transform transition-transform duration-200 ease-in-out ${isActive ? 'translate-x-5' : 'translate-x-0'}`} />
                             </div>
                         ) : (
-                            <span className="text-xs text-amber-400 font-bold">--</span>
+                            <span className="text-xs text-amber-500 font-bold">🔒</span>
                         )}
                       </td>
 
