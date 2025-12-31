@@ -5,7 +5,8 @@ import { PalaceGrid } from './PalaceGrid';
 import { getClient, getRelationships, type Client, type Relationship } from '../../db';
 import { ZiWeiEngine } from '../../logic/engine';
 import { GAN, ZHI, PALACE_NAMES, SIHUA_TABLE } from '../../logic/constants';
-import { Loader2, UserPlus, X, ChevronLeft, Camera } from 'lucide-react';
+// [新增] 引入 Users icon
+import { Loader2, UserPlus, X, ChevronLeft, Camera, Users } from 'lucide-react';
 
 interface SingleChartProps {
   client?: Client;
@@ -347,6 +348,18 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
         {mode === 'standard' && (
             <div className="flex gap-2">
+                
+                {/* [新增] 雙人合盤入口按鈕 */}
+                <button 
+                    onClick={() => navigate('/compatibility', { state: { clientA: client } })}
+                    className="bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-700 flex items-center gap-1.5 transition-all text-sm font-bold shadow-md shadow-purple-200"
+                >
+                    <Users size={16} />
+                    <span className="hidden sm:inline">雙人合盤</span>
+                    <span className="sm:hidden">合盤</span>
+                </button>
+
+                {/* 顯示外部干 (看他人生年) */}
                 {externalGan !== null ? (
                     <div className="flex items-center gap-1 bg-purple-100 border border-purple-200 px-3 py-1.5 rounded-lg animate-in fade-in">
                         <span className="text-sm font-bold text-purple-700">{GAN[externalGan]}干飛化</span>
@@ -396,7 +409,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
             </div>
         )}
 
-        {/* 修正：正規傳遞 props，不使用 as any */}
         <PalaceGrid
             ref={chartRef}
             client={client!}

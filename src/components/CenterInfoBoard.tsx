@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Users, Repeat, Clock, ArrowLeft, ChevronRight, Eye, RefreshCw, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom'; // [新增] 引入 useNavigate
 import type { Client, Relationship } from '../db';
 import type { ChartData } from '../logic/types';
 
@@ -81,6 +82,7 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     isDaXian,
     isLiuNian
 }) => {
+    const navigate = useNavigate(); // [新增] 使用 hook
     const hasRelations = relationships.length > 0;
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
@@ -277,7 +279,18 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                                     <motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="absolute top-full mt-2 bg-white rounded-xl shadow-xl border border-gray-100 p-1.5 flex flex-col gap-1 w-32 z-50 overflow-hidden">
                                                         <div className="flex justify-between items-center px-2 py-1 border-b border-gray-50 mb-1"><span className="text-[10px] text-gray-400 font-medium">功能選單</span><button onClick={(e) => { e.stopPropagation(); setSelectedNodeId(null); }} className="text-gray-400 hover:text-gray-600"><X size={12} /></button></div>
                                                         <button onClick={(e) => { e.stopPropagation(); onNavigate(node.data); }} className="flex items-center gap-2 px-2 py-2 text-xs text-gray-700 hover:bg-blue-50 rounded-lg text-left transition-colors"><Eye size={14} className="text-blue-500"/> 看他命盤</button>
-                                                        <button onClick={(e) => { e.stopPropagation(); onCompatibility(node.data); }} className="flex items-center gap-2 px-2 py-2 text-xs text-purple-700 hover:bg-purple-50 rounded-lg text-left font-bold transition-colors"><RefreshCw size={14} /> 和他合盤</button>
+                                                        
+                                                        {/* [關鍵修改] 導航至合盤路由，傳遞 state */}
+                                                        <button onClick={(e) => { 
+                                                            e.stopPropagation(); 
+                                                            navigate('/dual-chart', {
+                                                                state: {
+                                                                    clientA: client,
+                                                                    clientB: node.data
+                                                                }
+                                                            });
+                                                        }} className="flex items-center gap-2 px-2 py-2 text-xs text-purple-700 hover:bg-purple-50 rounded-lg text-left font-bold transition-colors"><RefreshCw size={14} /> 和他合盤</button>
+                                                    
                                                     </motion.div>
                                                 )}
                                             </AnimatePresence>
