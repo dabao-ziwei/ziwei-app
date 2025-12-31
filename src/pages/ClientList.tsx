@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, UserCog, LogOut, User, Sparkles, Network } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, UserCog, LogOut, User, Sparkles, Network, Eye, EyeOff } from 'lucide-react';
 import { loadClients, deleteClient, getMyProfile, getUsedChartCount, type Client, type UserProfile } from '../db';
 import { supabase } from '../supabase';
 import { useNavigate } from 'react-router-dom';
@@ -53,9 +53,10 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false); 
   const [isDivinationModalOpen, setIsDivinationModalOpen] = useState(false);
   
-  // --- 新增 State: 運勢資料 ---
+  // --- 新增 State: 運勢資料 與 預覽模式 ---
   const [dailyFortune, setDailyFortune] = useState<DailyFortune | null>(null);
   const [meClient, setMeClient] = useState<Client | null>(null);
+  const [isPreviewMode, setIsPreviewMode] = useState(false); // 預覽一般會員模式
   
   const [relationClient, setRelationClient] = useState<Client | null>(null);
 
@@ -83,14 +84,11 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
             const count = await getUsedChartCount(profile.id);
             setUsedCount(count);
 
-            // --- 新增: 尋找「我」的命盤並計算運勢 ---
-            // 條件：是我的命盤 (user_id吻合) 且 類別為 '我'
             const myChart = loadedClients.find(c => c.user_id === profile.id && c.type === '我');
             
             if (myChart) {
                 setMeClient(myChart);
                 try {
-                    // 初始化引擎
                     const engine = new ZiWeiEngine(
                         myChart.birthYear,
                         myChart.birthMonth,
@@ -99,14 +97,12 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                         myChart.birthMinute,
                         myChart.gender
                     );
-                    // 計算運勢
                     const fortune = calculateDailyFortune(engine);
                     setDailyFortune(fortune);
                 } catch (err) {
                     console.error("AI Fortune Error:", err);
                 }
             } else {
-                // 如果找不到我的命盤，清空運勢 (避免切換帳號時殘留)
                 setMeClient(null);
                 setDailyFortune(null);
             }
@@ -263,7 +259,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
             {/* 權限控制：只看我的 */}
             {isSuperAdmin && (
                 <div 
-                    className="hidden sm:flex items-center gap-2 cursor-pointer select-none bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-100 hover:bg-gray-200 transition-colors"
+                    className="hidden sm:flex items-center gap-2 cursor-pointer select-none bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-200 transition-colors"
                     onClick={() => setShowOnlyMine(!showOnlyMine)}
                     title="切換顯示模式"
                 >
@@ -272,6 +268,18 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                         <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-200 ease-in-out ${showOnlyMine ? 'translate-x-4' : 'translate-x-0'}`} />
                     </div>
                 </div>
+            )}
+
+            {/* 新增：預覽一般會員模式 (僅 Admin 可見) */}
+            {isSuperAdmin && (
+                <button 
+                    onClick={() => setIsPreviewMode(!isPreviewMode)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors ${isPreviewMode ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-gray-100 border-gray-200 text-gray-500'}`}
+                    title={isPreviewMode ? "目前為：模擬會員視角" : "切換為：模擬會員視角"}
+                >
+                    {isPreviewMode ? <EyeOff size={16} /> : <Eye size={16} />}
+                    <span className="text-xs font-bold hidden sm:inline">{isPreviewMode ? '模擬中' : '管理者'}</span>
+                </button>
             )}
 
             <div className="flex items-center gap-2">
@@ -311,13 +319,14 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         
-        {/* --- 新增: AI 運勢溫度計 (如果已載入運勢與我的命盤) --- */}
+        {/* AI 運勢溫度計 (傳入 isPreviewMode 來強制鎖定) */}
         {dailyFortune && meClient && (
             <div className="mb-4 animate-in slide-in-from-top-4 duration-500">
                 <FortuneWidget 
                     fortune={dailyFortune} 
                     userProfile={userProfile} 
                     clientName={meClient.name}
+                    forceLock={isPreviewMode} // 這裡傳入模擬狀態
                 />
             </div>
         )}
