@@ -78,17 +78,20 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
     }
   };
 
+  // 輔助檢查函數：忽略大小寫、忽略前後空白
+  const checkIsSuperAdmin = (email: string) => {
+      if (!email) return false;
+      return email.trim().toLowerCase() === SUPER_ADMIN_EMAIL.trim().toLowerCase();
+  };
+
   const handleBanToggle = async (user: UserProfile) => {
-    // [防呆修正] 忽略大小寫比對，確保不會停權到自己
-    if (user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) return;
+    if (checkIsSuperAdmin(user.email)) return;
     await toggleUserBan(user.id, user.isBanned);
     loadData();
   };
 
   const handleDeleteUser = async (user: UserProfile) => {
-    // [防呆修正] 忽略大小寫比對，確保不會刪除到自己
-    if (user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) return;
-    
+    if (checkIsSuperAdmin(user.email)) return;
     if (confirm(`【危險】確定要永久刪除使用者 ${user.email} 嗎？\n刪除後，該使用者的所有命盤資料也將一併消失，無法復原。`)) {
         setLoading(true);
         const success = await deleteUserProfile(user.id);
@@ -179,9 +182,13 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
               <tbody className="divide-y divide-gray-50">
                 {paginatedData.map(user => {
                   const isEditing = editingId === user.id;
-                  // [防呆修正] 列表渲染時也忽略大小寫比對，確保顯示皇冠與保護樣式
-                  const isSuperAdmin = user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+                  const isSuperAdmin = checkIsSuperAdmin(user.email);
                   const isActive = !user.isBanned;
+
+                  // Debug: 如果您還是沒看到，請打開 F12 Console 查看這行 Log
+                  if (user.email.includes('stephen')) {
+                      console.log(`Checking Admin: [${user.email}] vs [${SUPER_ADMIN_EMAIL}] -> Result: ${isSuperAdmin}`);
+                  }
                   
                   return (
                     <tr 
