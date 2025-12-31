@@ -97,46 +97,26 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
 
   const reverseBaseName = isReverse ? PALACE_REVERSE_MAP[baseName] : null;
 
-  const renderFlyingChips = () => {
+  // 1. 渲染右上角的靜態標籤 (僅用於外來生年四化)
+  const renderExternalChips = () => {
+    if (!externalSiHua) return null;
     const chips: React.ReactNode[] = [];
-    
+
     allStarsInPalace.forEach((star, idx) => {
-      // 1. 宮干飛化
-      if (flyingStars) {
-          const type = flyingStars[star.name];
-          if (type) {
-            const abbr = STAR_ABBR_MAP[star.name] || star.name[0];
-            let colorClass = '';
-            if (type === '祿') colorClass = 'bg-green-600 text-white';
-            else if (type === '權') colorClass = 'bg-red-600 text-white';
-            else if (type === '科') colorClass = 'bg-blue-600 text-white';
-            else if (type === '忌') colorClass = 'bg-gray-900 text-white border border-red-500';
+      const extType = externalSiHua[star.name];
+      if (extType) {
+          const abbr = STAR_ABBR_MAP[star.name] || star.name[0];
+          let colorClass = ''; 
+          if (extType === '祿') { colorClass = 'bg-fuchsia-600 text-white'; }
+          else if (extType === '權') { colorClass = 'bg-orange-600 text-white'; }
+          else if (extType === '科') { colorClass = 'bg-indigo-500 text-white'; }
+          else if (extType === '忌') { colorClass = 'bg-slate-800 text-white border border-fuchsia-400'; }
 
-            chips.push(
-              <div key={`fly-${idx}`} className={`px-1 py-[1px] rounded text-[12px] font-bold leading-none shadow-sm animate-pulse ${colorClass} select-none`} style={{ animationIterationCount: 3 }}>
-                {abbr}{type}
-              </div>
-            );
-          }
-      }
-
-      // 2. 外來生年飛化
-      if (externalSiHua) {
-          const extType = externalSiHua[star.name];
-          if (extType) {
-             const abbr = STAR_ABBR_MAP[star.name] || star.name[0];
-             let colorClass = ''; 
-             if (extType === '祿') { colorClass = 'bg-fuchsia-600 text-white'; }
-             else if (extType === '權') { colorClass = 'bg-orange-600 text-white'; }
-             else if (extType === '科') { colorClass = 'bg-indigo-500 text-white'; }
-             else if (extType === '忌') { colorClass = 'bg-slate-800 text-white border border-fuchsia-400'; }
-
-             chips.push(
-                <div key={`ext-${idx}`} className={`px-1 py-[1px] rounded text-[11px] font-bold leading-none shadow-md ${colorClass} select-none border border-white/20`}>
-                   {abbr}{extType}
-                </div>
-             );
-          }
+          chips.push(
+            <div key={`ext-${idx}`} className={`px-1 py-[1px] rounded text-[11px] font-bold leading-none shadow-md ${colorClass} select-none border border-white/20`}>
+                {abbr}{extType}
+            </div>
+          );
       }
     });
 
@@ -144,11 +124,47 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
     return <div className="absolute top-0.5 right-0.5 flex flex-col gap-0.5 items-end z-30 pointer-events-none">{chips}</div>;
   };
 
+  // 2. 渲染正上方的懸浮名牌 (用於互動飛化)
+  const renderInteractiveFlyingStars = () => {
+    if (!flyingStars) return null;
+    const chips: React.ReactNode[] = [];
+
+    allStarsInPalace.forEach((star, idx) => {
+        const type = flyingStars[star.name];
+        if (type) {
+          const abbr = STAR_ABBR_MAP[star.name] || star.name[0];
+          let colorClass = '';
+          if (type === '祿') colorClass = 'bg-green-600 text-white shadow-green-200';
+          else if (type === '權') colorClass = 'bg-red-600 text-white shadow-red-200';
+          else if (type === '科') colorClass = 'bg-blue-600 text-white shadow-blue-200';
+          else if (type === '忌') colorClass = 'bg-gray-900 text-white border border-red-500 shadow-gray-400';
+
+          chips.push(
+            <div key={`fly-${idx}`} className={`flex items-center px-1.5 py-0.5 rounded-full text-[11px] font-bold leading-none shadow-md animate-in zoom-in duration-200 border border-white ring-1 ring-black/5 ${colorClass} select-none`}>
+              <span>{abbr}</span>
+              <span className="ml-0.5 text-[9px] opacity-90">{type}</span>
+            </div>
+          );
+        }
+    });
+
+    if (chips.length === 0) return null;
+    
+    // Position: Absolute Top Center, slightly overlapping the border (top: -10px)
+    return (
+      <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 flex gap-1 z-50 pointer-events-none filter drop-shadow-sm">
+        {chips}
+      </div>
+    );
+  };
+
   return (
     <div
-      className={`w-full h-full flex flex-col p-0.5 box-border relative overflow-hidden ${bgColorClass} ${borderClass} ${xiaoXianClass} transition-colors duration-300`}
+      // [修改] overflow-hidden 改為 overflow-visible，允許名牌凸出去
+      className={`w-full h-full flex flex-col p-0.5 box-border relative overflow-visible ${bgColorClass} ${borderClass} ${xiaoXianClass} transition-colors duration-300`}
     >
-      {renderFlyingChips()}
+      {renderExternalChips()}
+      {renderInteractiveFlyingStars()}
 
       <div className="flex-1 flex flex-row gap-0.5 relative z-10 min-h-0 items-start content-start overflow-hidden pointer-events-none">
         {palace.majorStars.map((star, idx) => (
@@ -157,7 +173,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
             star={star}
             color="text-red-700"
             bgSiHua={{ ben: 'bg-red-600', da: 'bg-gray-500', liu: 'bg-blue-500', xiao: 'bg-green-600' }}
-            divinationSiHua={divinationSiHua} // [新增] 傳遞
+            divinationSiHua={divinationSiHua}
           />
         ))}
 
@@ -260,7 +276,6 @@ const VerticalStar = ({
 };
 
 const SiHuaSlot = ({ star, scope, bg, overrideType }: { star: Star; scope: 'ben' | 'da' | 'liu' | 'xiao'; bg: string; overrideType?: string }) => {
-  // [修正] 若有 overrideType 且 scope 為 ben，則直接使用 overrideType
   if (scope === 'ben' && overrideType) {
       return <div className={`w-3.5 h-3.5 flex items-center justify-center text-[11px] text-white rounded-[1px] leading-none shadow-sm ${bg} mb-[1px]`}>{overrideType}</div>;
   }
