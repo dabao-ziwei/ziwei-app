@@ -43,26 +43,9 @@ export const CompatibilitySetup = () => {
       });
   };
 
-  // 處理新增臨時對象 (不存入資料庫，或是存了但標記為臨時，這裡我們直接用 AddChartModal 的 onSave 回調拿到資料直接用)
+  // 處理新增臨時對象
   const handleTempAdd = async (data: any) => {
-      // 這裡有個小技巧：AddChartModal 通常會存檔。
-      // 如果我們想要「不存檔直接合盤」，我們可能需要修改 AddChartModal。
-      // 但為了簡化，我們讓它存檔沒關係，反正之後可以刪除。
-      // 這裡我們直接導向合盤，假設 AddChartModal 的 onSave 會回傳新 ID (它目前回傳 void)
-      // 修正策略：我們使用 AddChartModal 來產生資料，但在 onSave 中攔截，不真的寫入 DB？
-      // 不，為了系統一致性，建議還是寫入 DB。
-      // 我們直接用現有的 onSave 流程，AddChartModal 會呼叫 onSave prop。
-      // 所以我們在 onSave 裡拿到資料後，直接導向。
-      
-      // 為了適配 AddChartModal 的介面 (它預期 onSave 是一個 Promise)，我們這裡做個假的 save
-      // 實際上，AddChartModal 內部會呼叫 onSave(payload)。
-      // 如果我們傳入的 onSave 做了 saveClient，那就存檔了。
-      // 我們可以自定義 onSave。
-      
-      // 簡單起見：讓它存檔。
-      // 但 AddChartModal 內部實作是： await onSave(payload); onClose();
-      // 我們可以在這裡實作真正的儲存，然後導向。
-      
+      // 為了適配 AddChartModal 的介面，我們這裡動態載入 db 的 saveClient
       const { saveClient } = await import('../db');
       const newId = await saveClient(data);
       if (newId) {
