@@ -9,6 +9,10 @@ import { saveClient, type Client } from './db';
 import { supabase } from './supabase';
 import { Loader2 } from 'lucide-react';
 
+// [新增] 引入合盤相關組件
+import { DualChart } from './components/Chart/DualChart';
+import { CompatibilitySetup } from './pages/CompatibilitySetup';
+
 function App() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -117,6 +121,11 @@ function App() {
           } 
         />
         <Route path="/chart/:id" element={<ChartBoard />} />
+        
+        {/* [新增] 合盤相關路由 */}
+        <Route path="/compatibility" element={<CompatibilitySetup />} />
+        <Route path="/dual-chart" element={<DualChart />} />
+
         {/* 修改：紫占路由不需要 ID */}
         <Route path="/divination" element={<ChartBoard mode="divination" />} />
       </Route>
