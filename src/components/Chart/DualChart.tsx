@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PalaceGrid } from './PalaceGrid';
 import { ZiWeiEngine } from '../../logic/engine';
-import { GAN, ZHI, SIHUA_TABLE } from '../../logic/constants';
+import { GAN, SIHUA_TABLE } from '../../logic/constants';
 import { Loader2, ChevronLeft, Lock, Unlock, ArrowRightLeft } from 'lucide-react';
 import type { Client } from '../../db';
 
@@ -23,11 +23,10 @@ const getSiHuaMap = (ganIndex: number) => {
     } as Record<string, '祿' | '權' | '科' | '忌'>;
 };
 
-// 輔助：產生 10 年流年列表
+// 輔助：產生 10 年流年列表 (合盤精簡版：只顯示西元年)
 const getLiuNianList = (engine: ZiWeiEngine, chartData: any, daXianSeq: number) => {
     if (!engine || !chartData || daXianSeq < 0) return [];
     
-    // 找出該大限的命宮位置
     const startPos = engine.getMingPos();
     const direction = chartData.direction || 1;
     const offset = daXianSeq * direction;
@@ -40,36 +39,50 @@ const getLiuNianList = (engine: ZiWeiEngine, chartData: any, daXianSeq: number) 
     const list = [];
     for (let i = 0; i < 10; i++) {
         const year = startYear + i;
-        const age = palace.ages[0] + i;
-        const gan = (year - 4) % 10;
-        const zhi = (year - 4) % 12;
-        // 顯示：2025 (乙巳) 41歲
-        list.push({ year, age, label: `${year} ${GAN[gan]}${ZHI[zhi]} ${age}` });
+        // 為了節省空間，只顯示西元年
+        list.push({ year, label: `${year}` });
     }
     return list;
+};
+
+// 輔助：計算當前大限 Index
+const getCurrentDaLimitIndex = (chartData: any, engine: ZiWeiEngine) => {
+    if (!chartData || !engine) return 0;
+    // 計算虛歲：當前西元年 - 農曆生年 + 1
+    const currentYear = new Date().getFullYear();
+    const virtualAge = currentYear - chartData.lunarYear + 1;
+    
+    const startPos = engine.getMingPos();
+    const direction = chartData.direction || 1;
+    
+    for (let i = 0; i < 10; i++) {
+        const idx = (startPos + i * direction + 120) % 12;
+        const p = chartData.palaces[idx];
+        if (virtualAge >= p.ages[0] && virtualAge <= p.ages[1]) {
+            return i;
+        }
+    }
+    return 0; // 找不到則預設第一大限
 };
 
 export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   const location = useLocation();
   const navigate = useNavigate();
   
-  // 1. 資料來源：預期從 location.state 傳入 clientA 和 clientB
   const clientA = location.state?.clientA as Client;
   const clientB = location.state?.clientB as Client;
 
-  // 如果沒有資料，踢回首頁
   useEffect(() => {
       if (!clientA || !clientB) {
           navigate('/');
       }
   }, [clientA, clientB, navigate]);
 
-  // 2. 共用狀態
-  const [isLocked, setIsLocked] = useState(true); // 預設鎖定流年
-  const [activeSide, setActiveSide] = useState<'A' | 'B' | null>(null); // 誰是發射端
-  const [flyingPalace, setFlyingPalace] = useState<number | null>(null); // 發射宮位 Index
+  const [isLocked, setIsLocked] = useState(true);
+  const [activeSide, setActiveSide] = useState<'A' | 'B' | null>(null);
+  const [flyingPalace, setFlyingPalace] = useState<number | null>(null);
 
-  // 3. Client A 狀態
+  // Client A State
   const [hourA, setHourA] = useState(clientA?.birthHour || 0);
   const [daSeqA, setDaSeqA] = useState(-1);
   const [liuYearA, setLiuYearA] = useState<number | null>(null);
@@ -77,7 +90,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   const [isRevA, setIsRevA] = useState(false);
   const [isTwinA, setIsTwinA] = useState(false);
 
-  // 4. Client B 狀態
+  // Client B State
   const [hourB, setHourB] = useState(clientB?.birthHour || 0);
   const [daSeqB, setDaSeqB] = useState(-1);
   const [liuYearB, setLiuYearB] = useState<number | null>(null);
@@ -85,15 +98,27 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   const [isRevB, setIsRevB] = useState(false);
   const [isTwinB, setIsTwinB] = useState(false);
 
-  // --- Engine A ---
-  const engineA = useMemo(() => {
-      if (!clientA) return null;
-      return new ZiWeiEngine(clientA.birthYear, clientA.birthMonth, clientA.birthDay, hourA, clientA.birthMinute, clientA.gender);
-  }, [clientA, hourA]);
+  // --- Engines & Charts ---
+  const engineA = useMemo(() => clientA ? new ZiWeiEngine(clientA.birthYear, clientA.birthMonth, clientA.birthDay, hourA, clientA.birthMinute, clientA.gender) : null, [clientA, hourA]);
+  const engineB = useMemo(() => clientB ? new ZiWeiEngine(clientB.birthYear, clientB.birthMonth, clientB.birthDay, hourB, clientB.birthMinute, clientB.gender) : null, [clientB, hourB]);
+
+  // 初始化：當 Engine 準備好後，自動設定為當前大限 (讓流年列常駐)
+  useEffect(() => {
+      if (engineA) {
+          const chart = engineA.getChartData();
+          setDaSeqA(getCurrentDaLimitIndex(chart, engineA));
+      }
+  }, [engineA]);
+
+  useEffect(() => {
+      if (engineB) {
+          const chart = engineB.getChartData();
+          setDaSeqB(getCurrentDaLimitIndex(chart, engineB));
+      }
+  }, [engineB]);
 
   const chartA = useMemo(() => {
       if (!engineA) return null;
-      // 計算大限流年
       let daGan = -1, liuGan = -1, liuZhi = -1, xiaoGan = -1;
       const baseData = engineA.getChartData();
       const startPos = engineA.getMingPos();
@@ -117,15 +142,8 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       return engineA.getChartData();
   }, [engineA, daSeqA, liuYearA, showXiaoA]);
 
-  // --- Engine B ---
-  const engineB = useMemo(() => {
-      if (!clientB) return null;
-      return new ZiWeiEngine(clientB.birthYear, clientB.birthMonth, clientB.birthDay, hourB, clientB.birthMinute, clientB.gender);
-  }, [clientB, hourB]);
-
   const chartB = useMemo(() => {
       if (!engineB) return null;
-      // 計算大限流年
       let daGan = -1, liuGan = -1, liuZhi = -1, xiaoGan = -1;
       const baseData = engineB.getChartData();
       const startPos = engineB.getMingPos();
@@ -149,18 +167,16 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       return engineB.getChartData();
   }, [engineB, daSeqB, liuYearB, showXiaoB]);
 
-  // --- Helper Functions ---
-  // [修正] 取得大限列表，必須包含 palaceIdx，否則 PalaceGrid 會當機
+  // --- Helper Lists ---
   const daListA = useMemo(() => {
       if (!engineA || !chartA) return [];
       const list = [];
       const startPos = engineA.getMingPos();
       const dir = chartA.direction;
       for (let i=0; i<10; i++) {
-          const idx = (startPos + i*dir + 120) % 12; // 計算大限命宮 Index
+          const idx = (startPos + i*dir + 120) % 12;
           const p = chartA.palaces[idx];
           const startYear = chartA.lunarYear + p.ages[0];
-          // 這裡補上了 palaceIdx
           list.push({ 
               seq: i, 
               palaceIdx: idx, 
@@ -173,7 +189,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       return list;
   }, [chartA, engineA]);
 
-  // [修正] 同上，補上 palaceIdx
   const daListB = useMemo(() => {
       if (!engineB || !chartB) return [];
       const list = [];
@@ -195,23 +210,19 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       return list;
   }, [chartB, engineB]);
 
-  // --- 互動邏輯: 同步時間 ---
+  // --- Interaction Logic ---
   const syncTime = (source: 'A' | 'B', year: number | null) => {
-      if (!isLocked) return; // 沒鎖定就不連動
+      if (!isLocked) return; 
 
       if (source === 'A') {
-          // A 改流年 -> B 跟著改
           if (year === null) {
-              setLiuYearB(null); // A 取消流年 -> B 也取消
+              setLiuYearB(null);
           } else {
-              // 1. B 切換到該流年
               setLiuYearB(year); 
-              // 2. B 自動切換到該流年所屬的大限
               const targetDa = daListB.find(d => year >= d.startYear && year <= d.endYear);
               if (targetDa) setDaSeqB(targetDa.seq);
           }
       } else {
-          // B 改流年 -> A 跟著改
           if (year === null) {
               setLiuYearA(null);
           } else {
@@ -222,11 +233,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       }
   };
 
-  // --- 互動邏輯: 點擊宮位 ---
   const handlePalaceClick = (side: 'A' | 'B', index: number) => {
-      // 邏輯：
-      // 1. 如果點擊的是「已經是發射端」的那一邊的同一個宮位 -> 取消選取
-      // 2. 否則 -> 設定該邊為發射端，該宮位為發射源
       if (activeSide === side && flyingPalace === index) {
           setActiveSide(null);
           setFlyingPalace(null);
@@ -236,31 +243,75 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       }
   };
 
-  // --- 計算跨盤飛化 ---
-  // 當 A 是發射端，計算 A 的宮干四化，傳給 B 顯示
   const flyMapAtoB = useMemo(() => {
       if (activeSide !== 'A' || flyingPalace === null || !chartA) return undefined;
       const gan = chartA.palaces[flyingPalace].ganIndex;
       return getSiHuaMap(gan);
   }, [activeSide, flyingPalace, chartA]);
 
-  // 當 B 是發射端，計算 B 的宮干四化，傳給 A 顯示
   const flyMapBtoA = useMemo(() => {
       if (activeSide !== 'B' || flyingPalace === null || !chartB) return undefined;
       const gan = chartB.palaces[flyingPalace].ganIndex;
       return getSiHuaMap(gan);
   }, [activeSide, flyingPalace, chartB]);
 
-
   if (!clientA || !clientB || !chartA || !chartB) {
       return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin"/></div>;
   }
 
-  // --- 為了重複使用 PalaceGrid，我們需要準備一些 dummy props (例如 connections) ---
-  // 在合盤模式下，不需要顯示三方四正的線條，所以 connections 全部給 -1
   const dummyConnections = { self: -1, tri1: -1, tri2: -1, opp: -1 };
   const getDummyCoords = () => ({ x: 0, y: 0 });
   const dummyNav = () => {};
+
+  // UI Helper: Render Control Bar
+  const renderControlBar = (
+      daList: any[], 
+      daSeq: number, 
+      setDaSeq: any, 
+      setLiuYear: any,
+      targetLiuYearSetter: any,
+      engine: ZiWeiEngine,
+      chart: any,
+      liuYear: number | null,
+      source: 'A' | 'B'
+  ) => (
+      <>
+        <div className="h-12 bg-white border-t border-gray-200 flex overflow-x-auto scrollbar-hide shrink-0">
+            <div className="flex w-full">
+                {daList.map(limit => (
+                    <button key={limit.seq} 
+                        onClick={() => { 
+                            setDaSeq(limit.seq); 
+                            setLiuYear(null); 
+                            if(isLocked) targetLiuYearSetter(null); 
+                        }}
+                        className={`px-1 py-1 text-[10px] border-r border-gray-100 whitespace-nowrap flex-1 min-w-[50px] flex flex-col items-center justify-center ${daSeq === limit.seq ? 'bg-gray-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+                    >
+                        <span>{limit.name}</span>
+                        <span className="text-[9px] opacity-80 scale-90">{limit.label}</span>
+                    </button>
+                ))}
+            </div>
+        </div>
+        {/* 流年列：現在常駐顯示 (只要有 daSeq，因為我們會預設選中) */}
+        {daSeq >= 0 && (
+            <div className="h-9 bg-blue-50 border-t border-blue-100 flex overflow-x-auto scrollbar-hide shrink-0">
+                {getLiuNianList(engine, chart, daSeq).map(item => (
+                    <button key={item.year}
+                        onClick={() => { 
+                            const newYear = liuYear === item.year ? null : item.year;
+                            setLiuYear(newYear);
+                            syncTime(source, newYear);
+                        }}
+                        className={`px-1 text-[11px] font-medium border-r border-blue-200 whitespace-nowrap flex-1 min-w-[40px] ${liuYear === item.year ? 'bg-blue-600 text-white' : 'text-blue-600 hover:bg-blue-100'}`}
+                    >
+                        {item.label}
+                    </button>
+                ))}
+            </div>
+        )}
+      </>
+  );
 
   return (
     <div className="flex flex-col h-screen w-full bg-slate-100 overflow-hidden">
@@ -290,52 +341,36 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
         <div className="flex-1 flex overflow-hidden relative">
             
             {/* Left Chart (A) */}
-            <div className="flex-1 flex flex-col border-r-2 border-gray-300 relative">
-                <div className="flex-1 relative">
+            <div className="flex-1 flex flex-col border-r-2 border-gray-300 relative min-w-0">
+                <div className="flex-1 relative min-h-0">
                     <PalaceGrid
                         client={clientA}
                         chartData={chartA}
-                        relationships={[]} // 合盤不顯示關係圖
+                        relationships={[]}
                         historyStack={[]}
                         mode="standard"
-                        
-                        // 狀態
-                        selectedPalace={null} // 合盤不使用單盤的選取邏輯
-                        flyingPalace={activeSide === 'A' ? flyingPalace : null} // 顯示發射源光圈
+                        selectedPalace={null}
+                        flyingPalace={activeSide === 'A' ? flyingPalace : null}
                         daXianSeq={daSeqA}
                         liuNianYear={liuYearA}
                         showXiaoXian={showXiaoA}
                         isReverse={isRevA}
                         isTwinMode={isTwinA}
-                        
-                        // 外部四化 (接收 B 射過來的四化)
                         externalGan={null}
-                        flyingStarsLookup={flyMapBtoA} // [核心互動] 這裡接收 B 的飛化
-
-                        // 必要的計算值
+                        flyingStarsLookup={flyMapBtoA}
                         benMingMajorStarsStr=""
                         currentHourZhi={`${hourA}`}
                         isTimeModified={hourA !== clientA.birthHour}
                         connections={dummyConnections}
-                        
-                        // [修正] 傳入正確的大限列表
                         daXianList={daListA} 
-                        
                         xiaoXianMingIdx={-1}
-                        
-                        // Helpers
                         getRelativeNames={(idx) => {
-                            // 簡單顯示大限命宮標記
                             let daName = undefined;
-                            if (daSeqA >= 0 && daListA[daSeqA]?.palaceIdx === idx) {
-                                daName = '大命';
-                            }
+                            if (daSeqA >= 0 && daListA[daSeqA]?.palaceIdx === idx) daName = '大命';
                             return { daName };
                         }}
                         getIsBenMingMing={(idx) => idx === engineA!.getMingPos()}
                         getAnchorCoord={getDummyCoords}
-
-                        // Handlers
                         onHistoryBack={dummyNav}
                         onNavigate={dummyNav}
                         onCompatibility={dummyNav}
@@ -344,89 +379,44 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         onToggleTwin={() => setIsTwinA(!isTwinA)}
                         onToggleInverted={() => setIsRevA(!isRevA)}
                         onToggleSmallLimit={() => setShowXiaoA(!showXiaoA)}
-                        onPalaceClick={(idx) => handlePalaceClick('A', idx)} // 設定 A 為發射
+                        onPalaceClick={(idx) => handlePalaceClick('A', idx)}
                         onTriggerClick={() => {}}
                     />
                 </div>
-                {/* Chart A Control Bar */}
-                <div className="h-12 bg-white border-t border-gray-200 flex overflow-x-auto scrollbar-hide shrink-0">
-                    <div className="flex w-full">
-                        {daListA.map(limit => (
-                            <button key={limit.seq} 
-                                onClick={() => { 
-                                    // 切換大限，若有鎖定要清除流年
-                                    setDaSeqA(limit.seq); 
-                                    setLiuYearA(null); 
-                                    if(isLocked) setLiuYearB(null); 
-                                }}
-                                className={`px-2 py-1 text-[10px] border-r border-gray-100 whitespace-nowrap min-w-[60px] flex flex-col items-center justify-center ${daSeqA === limit.seq ? 'bg-gray-600 text-white' : 'text-gray-600'}`}
-                            >
-                                <span>{limit.name}</span>
-                                <span className="text-[9px] opacity-80">{limit.label}</span>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-                {/* Chart A Liu Nian Bar */}
-                {daSeqA >= 0 && (
-                    <div className="h-8 bg-blue-50 border-t border-blue-100 flex overflow-x-auto scrollbar-hide shrink-0">
-                        {getLiuNianList(engineA!, chartA!, daSeqA).map(item => (
-                            <button key={item.year}
-                                onClick={() => { 
-                                    const newYear = liuYearA === item.year ? null : item.year;
-                                    setLiuYearA(newYear);
-                                    syncTime('A', newYear); // 觸發同步
-                                }}
-                                className={`px-2 text-[10px] border-r border-blue-200 whitespace-nowrap min-w-[60px] ${liuYearA === item.year ? 'bg-blue-600 text-white' : 'text-blue-600'}`}
-                            >
-                                {item.label}
-                            </button>
-                        ))}
-                    </div>
-                )}
+                {renderControlBar(daListA, daSeqA, setDaSeqA, setLiuYearA, setLiuYearB, engineA!, chartA, liuYearA, 'A')}
             </div>
 
             {/* Right Chart (B) */}
-            <div className="flex-1 flex flex-col relative">
-                <div className="flex-1 relative">
+            <div className="flex-1 flex flex-col relative min-w-0">
+                <div className="flex-1 relative min-h-0">
                     <PalaceGrid
                         client={clientB}
                         chartData={chartB}
                         relationships={[]}
                         historyStack={[]}
                         mode="standard"
-                        
                         selectedPalace={null}
-                        flyingPalace={activeSide === 'B' ? flyingPalace : null} // 發射源
+                        flyingPalace={activeSide === 'B' ? flyingPalace : null}
                         daXianSeq={daSeqB}
                         liuNianYear={liuYearB}
                         showXiaoXian={showXiaoB}
                         isReverse={isRevB}
                         isTwinMode={isTwinB}
-                        
                         externalGan={null}
-                        flyingStarsLookup={flyMapAtoB} // [核心互動] 接收 A 的飛化
-
+                        flyingStarsLookup={flyMapAtoB}
                         benMingMajorStarsStr=""
                         currentHourZhi={`${hourB}`}
                         isTimeModified={hourB !== clientB.birthHour}
                         connections={dummyConnections}
-                        
-                        // [修正] 傳入正確的大限列表
                         daXianList={daListB} 
-                        
                         xiaoXianMingIdx={-1}
-                        
                         getRelativeNames={(idx) => {
                             let daName = undefined;
-                            if (daSeqB >= 0 && daListB[daSeqB]?.palaceIdx === idx) {
-                                daName = '大命';
-                            }
+                            if (daSeqB >= 0 && daListB[daSeqB]?.palaceIdx === idx) daName = '大命';
                             return { daName };
                         }}
                         getIsBenMingMing={(idx) => idx === engineB!.getMingPos()}
                         getAnchorCoord={getDummyCoords}
-
                         onHistoryBack={dummyNav}
                         onNavigate={dummyNav}
                         onCompatibility={dummyNav}
@@ -435,44 +425,11 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         onToggleTwin={() => setIsTwinB(!isTwinB)}
                         onToggleInverted={() => setIsRevB(!isRevB)}
                         onToggleSmallLimit={() => setShowXiaoB(!showXiaoB)}
-                        onPalaceClick={(idx) => handlePalaceClick('B', idx)} // 設定 B 為發射
+                        onPalaceClick={(idx) => handlePalaceClick('B', idx)}
                         onTriggerClick={() => {}}
                     />
                 </div>
-                {/* Chart B Control Bar */}
-                <div className="h-12 bg-white border-t border-gray-200 flex overflow-x-auto scrollbar-hide shrink-0">
-                    <div className="flex w-full">
-                        {daListB.map(limit => (
-                            <button key={limit.seq} 
-                                onClick={() => { 
-                                    setDaSeqB(limit.seq); 
-                                    setLiuYearB(null); 
-                                    if(isLocked) setLiuYearA(null);
-                                }}
-                                className={`px-2 py-1 text-[10px] border-r border-gray-100 whitespace-nowrap min-w-[60px] flex flex-col items-center justify-center ${daSeqB === limit.seq ? 'bg-gray-600 text-white' : 'text-gray-600'}`}
-                            >
-                                <span>{limit.name}</span>
-                                <span className="text-[9px] opacity-80">{limit.label}</span>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-                {daSeqB >= 0 && (
-                    <div className="h-8 bg-blue-50 border-t border-blue-100 flex overflow-x-auto scrollbar-hide shrink-0">
-                        {getLiuNianList(engineB!, chartB!, daSeqB).map(item => (
-                            <button key={item.year}
-                                onClick={() => { 
-                                    const newYear = liuYearB === item.year ? null : item.year;
-                                    setLiuYearB(newYear);
-                                    syncTime('B', newYear); // 觸發同步
-                                }}
-                                className={`px-2 text-[10px] border-r border-blue-200 whitespace-nowrap min-w-[60px] ${liuYearB === item.year ? 'bg-blue-600 text-white' : 'text-blue-600'}`}
-                            >
-                                {item.label}
-                            </button>
-                        ))}
-                    </div>
-                )}
+                {renderControlBar(daListB, daSeqB, setDaSeqB, setLiuYearB, setLiuYearA, engineB!, chartB, liuYearB, 'B')}
             </div>
 
         </div>
