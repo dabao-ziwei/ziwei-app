@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { X, Save, Edit2, Search, ChevronLeft, ChevronRight, Loader2, Shield, Trash2, UserPlus, Sparkles, Calendar } from 'lucide-react';
+import { X, Save, Edit2, Search, ChevronLeft, ChevronRight, Loader2, Shield, Trash2, UserPlus, Sparkles, Crown } from 'lucide-react';
 import { getAllProfilesWithStats, updateProfile, toggleUserBan, deleteUserProfile, inviteUserByEmail, type UserProfile } from '../db';
 
 interface Props {
@@ -64,7 +64,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
       maxEditsPerChart: user.maxEditsPerChart,
       role: user.role,
       can_use_divination: user.can_use_divination,
-      accessExpiry: user.accessExpiry ? user.accessExpiry.split('T')[0] : '' // 轉換格式為 YYYY-MM-DD
+      accessExpiry: user.accessExpiry ? user.accessExpiry.split('T')[0] : ''
     });
   };
 
@@ -79,13 +79,13 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
   };
 
   const handleBanToggle = async (user: UserProfile) => {
-    if (user.email === SUPER_ADMIN_EMAIL) return;
+    if (user.email === SUPER_ADMIN_EMAIL) return; // 邏輯防呆
     await toggleUserBan(user.id, user.isBanned);
     loadData();
   };
 
   const handleDeleteUser = async (user: UserProfile) => {
-    if (user.email === SUPER_ADMIN_EMAIL) return;
+    if (user.email === SUPER_ADMIN_EMAIL) return; // 邏輯防呆
     if (confirm(`【危險】確定要永久刪除使用者 ${user.email} 嗎？\n刪除後，該使用者的所有命盤資料也將一併消失，無法復原。`)) {
         setLoading(true);
         const success = await deleteUserProfile(user.id);
@@ -180,12 +180,23 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                   const isActive = !user.isBanned;
                   
                   return (
-                    <tr key={user.id} className={`hover:bg-gray-50 group ${user.isBanned ? 'bg-red-50/30' : ''}`}>
+                    <tr 
+                        key={user.id} 
+                        className={`
+                            hover:bg-gray-50 group transition-colors 
+                            ${user.isBanned ? 'bg-red-50/30' : ''}
+                            ${isSuperAdmin ? 'bg-amber-50 border-l-4 border-amber-400' : ''} 
+                        `}
+                    >
+                      {/* Email 欄位：管理者加皇冠 */}
                       <td className="py-3 px-4 text-sm font-bold text-gray-700 truncate max-w-[200px]" title={user.email}>
-                        {user.email}
+                        <div className="flex items-center gap-2">
+                            {isSuperAdmin && <Crown size={16} className="text-amber-500 fill-amber-500" />}
+                            {user.email}
+                        </div>
                       </td>
                       
-                      {/* 狀態開關 */}
+                      {/* 狀態開關：管理者顯示鎖定符號 */}
                       <td className="py-3 px-2 text-center">
                         {!isSuperAdmin ? (
                             <div 
@@ -196,18 +207,18 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                                 <div className={`w-4 h-4 bg-white rounded-full shadow transform transition-transform duration-200 ease-in-out ${isActive ? 'translate-x-5' : 'translate-x-0'}`} />
                             </div>
                         ) : (
-                            <span className="text-xs text-gray-400 font-mono">--</span>
+                            <span className="text-xs text-amber-400 font-bold">--</span>
                         )}
                       </td>
 
-                      {/* 角色選擇 */}
+                      {/* 角色選擇：管理者鎖定下拉 */}
                       <td className="py-3 px-2">
                         {isEditing ? (
                           <select 
-                            className="border rounded px-2 py-1 text-sm bg-white w-full"
+                            className={`border rounded px-2 py-1 text-sm w-full ${isSuperAdmin ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white'}`}
                             value={editForm.role}
                             onChange={e => setEditForm({...editForm, role: e.target.value as any})}
-                            disabled={isSuperAdmin}
+                            disabled={isSuperAdmin} // UI 防呆
                           >
                             <option value="general">一般</option>
                             <option value="student">學員</option>
@@ -260,7 +271,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                         {user.deletedCount}
                       </td>
 
-                      {/* 紫占權限 (目前保留開關) */}
+                      {/* 紫占權限 */}
                       <td className="py-3 px-2 text-center">
                           {isEditing ? (
                               <div 
@@ -277,6 +288,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                       <td className="py-3 px-4 text-right">
                         {isEditing ? (
                           <div className="flex justify-end gap-2 items-center">
+                            {/* 刪除按鈕：管理者直接不顯示 */}
                             {!isSuperAdmin && (
                                 <button 
                                     onClick={() => handleDeleteUser(user)}
@@ -311,7 +323,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
           )}
         </div>
 
-        {/* Footer */}
+        {/* Footer & Invite Modal ... (保持不變) */}
         <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center">
             <span className="text-sm text-gray-500">
                 顯示 {paginatedData.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredProfiles.length)} 筆，共 {filteredProfiles.length} 筆
@@ -337,7 +349,6 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
             </div>
         </div>
 
-        {/* Invite User Modal Overlay */}
         {isInviteOpen && (
             <div className="absolute inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
                 <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 relative">
