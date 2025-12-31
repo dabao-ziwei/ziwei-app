@@ -1,0 +1,167 @@
+import React, { forwardRef } from 'react';
+import { CenterInfoBoard } from '../CenterInfoBoard';
+import { PalaceCard } from '../PalaceCard';
+import { GAN, PALACE_NAMES } from '../../logic/constants';
+import type { Client, Relationship } from '../../db';
+import type { ChartData } from '../../logic/types';
+
+interface PalaceGridProps {
+  // Data
+  client: Client;
+  chartData: ChartData;
+  relationships: Relationship[];
+  historyStack: Client[];
+  
+  // UI States
+  mode: 'standard' | 'divination';
+  selectedPalace: number | null;
+  flyingPalace: number | null;
+  daXianSeq: number;
+  liuNianYear: number | null;
+  showXiaoXian: boolean;
+  isReverse: boolean;
+  isTwinMode: boolean;
+  
+  // Divination
+  divNum?: string[];
+  isDivinationReady?: boolean;
+  divSiHuaMap?: Record<string, '祿' | '權' | '科' | '忌'>;
+  
+  // External
+  externalGan: number | null;
+  externalSiHuaMap?: Record<string, '祿' | '權' | '科' | '忌'>;
+
+  // Calculated Values
+  benMingMajorStarsStr: string;
+  currentHourZhi: string;
+  isTimeModified: boolean;
+  connections: { self: number; tri1: number; tri2: number; opp: number };
+  daXianList: any[];
+  xiaoXianMingIdx: number;
+  
+  // Flying Stars (修正這裡：正式加入定義)
+  flyingStarsLookup?: Record<string, '祿' | '權' | '科' | '忌'>;
+
+  // Helper Functions
+  getRelativeNames: (idx: number) => { daName?: string; liuName?: string; xiaoName?: string; divinationName?: string };
+  getIsBenMingMing: (idx: number) => boolean;
+  getAnchorCoord: (idx: number) => { x: number; y: number };
+
+  // Handlers
+  onHistoryBack: () => void;
+  onNavigate: (target: Client) => void;
+  onCompatibility: (target: Client) => void;
+  onChangeHour: (delta: number) => void;
+  onResetTime: () => void;
+  onToggleTwin: () => void;
+  onToggleInverted: () => void;
+  onToggleSmallLimit: () => void;
+  onPalaceClick: (idx: number) => void;
+  onTriggerClick: (idx: number) => void;
+}
+
+export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
+  client, chartData, relationships, historyStack,
+  mode, selectedPalace, flyingPalace, daXianSeq, liuNianYear, showXiaoXian, isReverse, isTwinMode,
+  divNum, isDivinationReady, divSiHuaMap,
+  externalGan, externalSiHuaMap,
+  benMingMajorStarsStr, currentHourZhi, isTimeModified, connections, daXianList, xiaoXianMingIdx,
+  flyingStarsLookup, // 修正這裡：直接解構出來
+  getRelativeNames, getIsBenMingMing, getAnchorCoord,
+  onHistoryBack, onNavigate, onCompatibility, onChangeHour, onResetTime,
+  onToggleTwin, onToggleInverted, onToggleSmallLimit, onPalaceClick, onTriggerClick
+}, ref) => {
+
+  const gridLayout = [5, 6, 7, 8, 4, null, null, 9, 3, null, null, 10, 2, 1, 0, 11];
+
+  return (
+    <div ref={ref} className="w-full h-full bg-white border-2 border-gray-800 shadow-xl z-10 grid grid-cols-4 grid-rows-4 relative">
+            
+      <svg className="absolute inset-0 w-full h-full pointer-events-none z-40">
+          {selectedPalace !== null && (() => { const pSelf = getAnchorCoord(connections.self); const pTri1 = getAnchorCoord(connections.tri1); const pTri2 = getAnchorCoord(connections.tri2); const pOpp = getAnchorCoord(connections.opp); return ( <> <line x1={`${pSelf.x}%`} y1={`${pSelf.y}%`} x2={`${pTri1.x}%`} y2={`${pTri1.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> <line x1={`${pTri1.x}%`} y1={`${pTri1.y}%`} x2={`${pTri2.x}%`} y2={`${pTri2.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> <line x1={`${pTri2.x}%`} y1={`${pTri2.y}%`} x2={`${pSelf.x}%`} y2={`${pSelf.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> <line x1={`${pSelf.x}%`} y1={`${pSelf.y}%`} x2={`${pOpp.x}%`} y2={`${pOpp.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> </> ); })()}
+      </svg>
+
+      {gridLayout.map((palaceIdx, gridPos) => {
+          // 中間區塊渲染
+          if (gridPos === 5) {
+              return (
+                  <div key="center-board" className="col-span-2 row-span-2 z-0 relative h-full w-full">
+                        <CenterInfoBoard 
+                          key="center"
+                          client={client}
+                          chartData={chartData}
+                          relationships={relationships}
+                          historyStack={historyStack}
+                          onHistoryBack={onHistoryBack}
+                          onNavigate={onNavigate}
+                          onCompatibility={onCompatibility}
+                          benMingMajorStarsStr={benMingMajorStarsStr}
+                          onChangeHour={onChangeHour}
+                          onResetTime={onResetTime}
+                          currentHourZhi={currentHourZhi}
+                          isTimeModified={isTimeModified}
+                          isDivinationMode={mode === 'divination'}
+                          divNum={divNum}
+                          isDivinationReady={isDivinationReady}
+                          
+                          onToggleTwin={onToggleTwin}
+                          onToggleInverted={onToggleInverted}
+                          onToggleSmallLimit={onToggleSmallLimit}
+                          showTwin={isTwinMode}
+                          showInverted={isReverse}
+                          showSmallLimit={showXiaoXian}
+                          isDaXian={daXianSeq >= 0}
+                          isLiuNian={liuNianYear !== null}
+                      />
+                  </div>
+              );
+          }
+          
+          if (gridPos === 6 || gridPos === 9 || gridPos === 10) return null;
+          if (palaceIdx === null) return null;
+
+          const relNames = getRelativeNames(palaceIdx);
+          
+          const isBenMingMing = getIsBenMingMing(palaceIdx);
+          
+          const isDaXianMing = daXianSeq >= 0 && daXianList[daXianSeq].palaceIdx === palaceIdx;
+          const isLiuNianMing = liuNianYear !== null && chartData.palaces[palaceIdx].zhiIndex === (liuNianYear - 4) % 12;
+          const isXiaoXianMingPalace = liuNianYear !== null && palaceIdx === xiaoXianMingIdx;
+          const isDaXianActive = daXianSeq >= 0; const isLiuNianActive = liuNianYear !== null; const isXiaoXianActive = showXiaoXian;
+          const isConnected = selectedPalace !== null && Object.values(connections).includes(palaceIdx);
+          const showXiaoXianSeal = isXiaoXianMingPalace && !showXiaoXian;
+          const isFlyingSource = flyingPalace === palaceIdx;
+
+          return (
+              <div key={palaceIdx} onClick={() => onPalaceClick(palaceIdx)} className={`relative cursor-pointer transition-all duration-200 border border-gray-300 box-border overflow-visible ${isConnected ? 'bg-red-50' : 'hover:bg-gray-50'} ${isFlyingSource ? 'ring-4 ring-purple-400 z-50 animate-pulse' : ''}`} style={isFlyingSource ? { animationIterationCount: 3 } : {}}>
+                  {isFlyingSource && <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-purple-600 text-white text-[11px] font-bold px-2 py-0.5 rounded-full shadow-lg z-50 whitespace-nowrap tracking-wide border border-white">{GAN[chartData.palaces[palaceIdx].ganIndex]}干飛化</div>}
+                  <PalaceCard
+                      palace={chartData.palaces[palaceIdx]}
+                      daName={relNames.daName}
+                      liuName={relNames.liuName}
+                      xiaoName={relNames.xiaoName}
+                      isBody={mode !== 'divination' && chartData.palaces[palaceIdx].isBody}
+                      isXiaoXianMing={showXiaoXianSeal}
+                      isBenMingMing={isBenMingMing}
+                      isDaXianMing={isDaXianMing && isDaXianActive}
+                      isLiuNianMing={isLiuNianMing && isLiuNianActive}
+                      isXiaoXianMingPalace={isXiaoXianMingPalace && (isLiuNianActive || isXiaoXianActive)}
+                      onTriggerClick={() => onTriggerClick(palaceIdx)}
+                      
+                      // 修正這裡：直接使用解構出來的變數
+                      flyingStars={flyingStarsLookup}
+                      
+                      isTwinMode={isTwinMode}
+                      isReverse={isReverse}
+                      divinationName={relNames.divinationName}
+                      divinationSiHua={mode === 'divination' ? divSiHuaMap : undefined}
+                      externalSiHua={externalSiHuaMap}
+                  />
+                  {isDaXianMing && isDaXianActive && <div className="absolute inset-0 border-[3px] border-gray-600 pointer-events-none z-20 opacity-70"></div>}
+                  {isConnected && <div className="absolute inset-0 border-2 border-red-500 pointer-events-none z-30"></div>}
+              </div>
+          );
+      })}
+    </div>
+  );
+});
