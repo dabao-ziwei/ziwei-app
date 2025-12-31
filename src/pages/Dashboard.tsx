@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, ArrowRight, Menu, LogOut, UserCog, Loader2, Save } from 'lucide-react';
+import { Sparkles, ArrowRight, Menu, LogOut, UserCog, Loader2, Save, Bug } from 'lucide-react';
 import { supabase } from '../supabase';
 import { loadClients, saveClient, getMyProfile, type Client, type UserProfile } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
@@ -9,22 +9,20 @@ import { FortuneWidget } from '../components/FortuneWidget';
 import { UserManagementModal } from '../components/UserManagementModal';
 import { ZHI } from '../logic/constants';
 
-const SUPER_ADMIN_EMAIL = 'stephenwu.0926@gmail.com';
-
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   
-  // 狀態：我的命盤與運勢
   const [meClient, setMeClient] = useState<Client | null>(null);
   const [dailyFortune, setDailyFortune] = useState<DailyFortune | null>(null);
   
-  // 狀態：Menu 與 Modal
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false);
 
-  // 狀態：新手引導表單
+  // Debug 資訊
+  const [debugInfo, setDebugInfo] = useState<string[]>([]);
+
   const [onboardingForm, setOnboardingForm] = useState({
     name: '',
     gender: '男' as '男'|'女',
@@ -38,33 +36,61 @@ export const Dashboard: React.FC = () => {
 
   const initDashboard = async () => {
     setLoading(true);
+    const logs: string[] = []; // 用來收集診斷訊息
+    
     try {
         const profile = await getMyProfile();
         setUserProfile(profile);
+        
+        if (!profile) {
+            logs.push("❌ 無法取得使用者 Profile (未登入?)");
+        } else {
+            logs.push(`登入者: ${profile.email}`);
+        }
 
-        // 讀取所有命盤，尋找「我」
         const allClients = await loadClients();
-        const myChart = (Array.isArray(allClients) ? allClients : []).find(
-            c => c.user_id === profile?.id && c.type === '我'
-        );
+        const loadedClients = Array.isArray(allClients) ? allClients : [];
 
-        if (myChart) {
-            setMeClient(myChart);
-            // 計算運勢
+        // --- 寬鬆比對邏輯 ---
+        const myCharts = loadedClients.filter(c => {
+            const isOwner = c.user_id === profile?.id;
+            const cleanType = (c.type || '').trim();
+            const isMe = cleanType === '我' || cleanType === 'Me';
+            return isOwner && isMe;
+        });
+
+        if (myCharts.length > 0) {
+            const target = myCharts[0];
+            setMeClient(target);
+            logs.push(`✅ 鎖定命盤: [${target.name}]`);
+            
             try {
                 const engine = new ZiWeiEngine(
-                    myChart.birthYear, myChart.birthMonth, myChart.birthDay, 
-                    myChart.birthHour, myChart.birthMinute, myChart.gender
+                    target.birthYear, target.birthMonth, target.birthDay, 
+                    target.birthHour, target.birthMinute, target.gender
                 );
                 const fortune = calculateDailyFortune(engine);
+                
+                // 檢查數據是否異常
+                logs.push(`✅ 運勢計算: 分數=${fortune.score}, 天氣=${fortune.weather}`);
+                if (Number.isNaN(fortune.score)) logs.push("⚠️ 警告：分數是 NaN");
+                if (!fortune.weather) logs.push("⚠️ 警告：天氣未定義");
+
                 setDailyFortune(fortune);
-            } catch (e) {
-                console.error("Fortune Calc Error", e);
+            } catch (e: any) {
+                logs.push(`❌ 運勢引擎錯誤: ${e.message}`);
             }
+        } else {
+            logs.push(`⚠️ 找不到「我」的命盤，進入新手引導。`);
+            const myOwned = loadedClients.filter(c => c.user_id === profile?.id);
+            logs.push(`您名下共有 ${myOwned.length} 張命盤`);
         }
-    } catch (e) {
-        console.error("Init Error", e);
+
+    } catch (e: any) {
+        logs.push(`❌ 初始化嚴重錯誤: ${e.message}`);
+        console.error(e);
     } finally {
+        setDebugInfo(logs);
         setLoading(false);
     }
   };
@@ -84,7 +110,7 @@ export const Dashboard: React.FC = () => {
             id: crypto.randomUUID(),
             name: onboardingForm.name,
             gender: onboardingForm.gender,
-            type: '我', // 強制設定
+            type: '我',
             birthYear: onboardingForm.year,
             birthMonth: onboardingForm.month,
             birthDay: onboardingForm.day,
@@ -95,25 +121,110 @@ export const Dashboard: React.FC = () => {
             user_id: userProfile?.id
         };
         await saveClient(newClient);
-        // 重新整理頁面以進入運勢模式
         await initDashboard();
     } catch (e) {
         alert("建立失敗，請重試");
-        console.error(e);
     } finally {
         setIsSaving(false);
     }
   };
 
-  if (loading) {
-      return <div className="flex h-screen items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-slate-400" /></div>;
-  }
+  if (loading) return <div className="flex h-screen items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-slate-400" /></div>;
 
-  // --- 畫面 A: 新手引導 (沒有「我」的命盤) ---
-  if (!meClient) {
-      return (
-          <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 font-sans">
-              <div className="w-full max-w-md bg-white rounded-3xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-500">
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans relative overflow-x-hidden">
+        
+        {/* Header */}
+        <header className="px-6 py-4 flex justify-between items-center bg-white border-b border-slate-100 relative z-20">
+            <div className="relative">
+                <button 
+                    onClick={() => setIsMenuOpen(!isMenuOpen)}
+                    className="w-10 h-10 bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors rounded-xl flex items-center justify-center"
+                >
+                    <Menu size={20} />
+                </button>
+                {isMenuOpen && (
+                    <div className="absolute top-12 left-0 w-52 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
+                        {userProfile?.role === 'admin' && (
+                            <button 
+                                onClick={() => { setIsUserMgmtOpen(true); setIsMenuOpen(false); }}
+                                className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-2 text-gray-700 font-medium"
+                            >
+                                <UserCog size={16} /> 使用者管理
+                            </button>
+                        )}
+                        <button 
+                            onClick={() => supabase.auth.signOut()}
+                            className="w-full text-left px-4 py-3 hover:bg-red-50 flex items-center gap-2 text-red-600 font-medium border-t border-gray-100"
+                        >
+                            <LogOut size={16} /> 登出系統
+                        </button>
+                    </div>
+                )}
+                {isMenuOpen && <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)}></div>}
+            </div>
+
+            <h1 className="text-lg font-bold text-slate-800">首頁儀表板</h1>
+            
+            <div className="w-10"></div> 
+        </header>
+
+        {/* Content */}
+        <main className="flex-1 max-w-2xl mx-auto w-full p-6 flex flex-col items-center">
+            
+            {/* --- 強制顯示診斷面板 --- */}
+            <div className="w-full mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-xs font-mono text-yellow-800 break-all shadow-sm">
+                <div className="flex items-center gap-2 font-bold mb-2 text-yellow-900 border-b border-yellow-200 pb-2">
+                    <Bug size={14}/> 診斷模式 (所有人可見)
+                </div>
+                {debugInfo.map((line, i) => (
+                    <div key={i} className="mb-0.5 border-b border-yellow-100 pb-0.5">{line}</div>
+                ))}
+            </div>
+
+            {/* 情境 A: 有命盤 -> 顯示儀表板 */}
+            {meClient && dailyFortune && (
+                <>
+                    {/* 紅色邊框是用來檢查渲染範圍的，確認功能正常後可移除 */}
+                    <div className="w-full mb-8 transform hover:scale-[1.02] transition-transform duration-300 border-2 border-dashed border-red-400 p-2 relative">
+                        <div className="absolute -top-3 left-2 bg-red-500 text-white text-[10px] px-2 py-0.5 rounded">
+                            儀表板區域 ({dailyFortune.weather})
+                        </div>
+                        <FortuneWidget 
+                            fortune={dailyFortune}
+                            userProfile={userProfile}
+                            clientName={meClient.name}
+                        />
+                    </div>
+
+                    <button
+                        onClick={() => navigate('/list')}
+                        className="w-full bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 font-bold py-5 rounded-2xl shadow-sm transition-all flex items-center justify-between px-6 group"
+                    >
+                        <div className="flex flex-col items-start">
+                            <span className="text-lg text-slate-800 group-hover:text-blue-700 transition-colors">管理命盤列表</span>
+                            <span className="text-xs text-slate-400 font-normal">查看所有客戶與紫占記錄</span>
+                        </div>
+                        <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all">
+                            <ArrowRight size={20} />
+                        </div>
+                    </button>
+                    
+                    {userProfile?.can_use_divination && (
+                        <button
+                            onClick={() => navigate('/list', { state: { openDivination: true } })}
+                            className="w-full mt-4 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-100 hover:border-purple-300 text-purple-800 font-bold py-4 rounded-2xl shadow-sm transition-all flex items-center justify-center gap-2"
+                        >
+                            <Sparkles size={18} />
+                            快速進行紫微占卜
+                        </button>
+                    )}
+                </>
+            )}
+
+            {/* 情境 B: 沒命盤 -> 顯示新手引導 */}
+            {!meClient && (
+                 <div className="w-full bg-white rounded-3xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-500">
                   <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-8 text-white text-center">
                       <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
                           <Sparkles size={32} className="text-yellow-300" />
@@ -193,90 +304,9 @@ export const Dashboard: React.FC = () => {
                       </button>
                   </div>
               </div>
-          </div>
-      );
-  }
-
-  // --- 畫面 B: 儀表板首頁 (有「我」的命盤) ---
-  return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans relative overflow-x-hidden">
-        
-        {/* Header */}
-        <header className="px-6 py-4 flex justify-between items-center bg-white border-b border-slate-100 relative z-20">
-            <div className="relative">
-                <button 
-                    onClick={() => setIsMenuOpen(!isMenuOpen)}
-                    className="w-10 h-10 bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors rounded-xl flex items-center justify-center"
-                >
-                    <Menu size={20} />
-                </button>
-                {isMenuOpen && (
-                    <div className="absolute top-12 left-0 w-52 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
-                        {userProfile?.role === 'admin' && (
-                            <button 
-                                onClick={() => { setIsUserMgmtOpen(true); setIsMenuOpen(false); }}
-                                className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-2 text-gray-700 font-medium"
-                            >
-                                <UserCog size={16} /> 使用者管理
-                            </button>
-                        )}
-                        <button 
-                            onClick={() => supabase.auth.signOut()}
-                            className="w-full text-left px-4 py-3 hover:bg-red-50 flex items-center gap-2 text-red-600 font-medium border-t border-gray-100"
-                        >
-                            <LogOut size={16} /> 登出系統
-                        </button>
-                    </div>
-                )}
-                {isMenuOpen && <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)}></div>}
-            </div>
-
-            <h1 className="text-lg font-bold text-slate-800">今日運勢</h1>
-            
-            <div className="w-10"></div> {/* Placeholder for balance */}
-        </header>
-
-        {/* Dashboard Content */}
-        <main className="flex-1 max-w-2xl mx-auto w-full p-6 flex flex-col items-center">
-            
-            {/* 運勢儀表板 - 放大顯示 */}
-            <div className="w-full mb-8 transform hover:scale-[1.02] transition-transform duration-300">
-                {dailyFortune && (
-                    <FortuneWidget 
-                        fortune={dailyFortune}
-                        userProfile={userProfile}
-                        clientName={meClient.name}
-                    />
-                )}
-            </div>
-
-            {/* 主要行動按鈕 */}
-            <button
-                onClick={() => navigate('/list')}
-                className="w-full bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 font-bold py-5 rounded-2xl shadow-sm transition-all flex items-center justify-between px-6 group"
-            >
-                <div className="flex flex-col items-start">
-                    <span className="text-lg text-slate-800 group-hover:text-blue-700 transition-colors">管理命盤列表</span>
-                    <span className="text-xs text-slate-400 font-normal">查看所有客戶與紫占記錄</span>
-                </div>
-                <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all">
-                    <ArrowRight size={20} />
-                </div>
-            </button>
-
-            {/* 紫占快速入口 (選填) */}
-            {userProfile?.can_use_divination && (
-                <button
-                    onClick={() => navigate('/list', { state: { openDivination: true } })} // 這裡可以做更細的路由控制，暫時先導去列表
-                    className="w-full mt-4 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-100 hover:border-purple-300 text-purple-800 font-bold py-4 rounded-2xl shadow-sm transition-all flex items-center justify-center gap-2"
-                >
-                    <Sparkles size={18} />
-                    快速進行紫微占卜
-                </button>
             )}
-
         </main>
-
+        
         <UserManagementModal 
             isOpen={isUserMgmtOpen} 
             onClose={() => setIsUserMgmtOpen(false)} 
