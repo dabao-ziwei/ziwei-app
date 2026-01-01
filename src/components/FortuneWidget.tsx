@@ -140,13 +140,13 @@ export const FortuneWidget: React.FC<Props> = ({ userProfile, client, clientName
                   {activeTab === 'radar' && (
                       <div className="text-right pointer-events-auto animate-in fade-in slide-in-from-right-2">
                           <div className="text-[10px] text-slate-500 uppercase tracking-widest mb-1 flex justify-end items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"/> TODAY
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"/> 今日運勢
                           </div>
                           <div className="flex items-baseline justify-end gap-2">
                               <span className="text-3xl font-black text-white tracking-tighter drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
                                 {todayFortune.score}
                               </span>
-                              <span className="text-xs font-bold text-slate-500">PTS</span>
+                              <span className="text-xs font-bold text-slate-500">分</span>
                           </div>
                       </div>
                   )}
