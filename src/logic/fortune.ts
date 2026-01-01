@@ -1,7 +1,7 @@
 import { ZiWeiEngine } from './engine';
 import type { ChartData, Palace } from './types';
 import { Solar, LunarYear } from 'lunar-typescript';
-import { PALACE_NAMES } from './constants'; // [新增] 引入宮位名稱常數以計算斗君
+import { PALACE_NAMES } from './constants'; 
 
 // 定義五大維度
 export interface DailyFortune {
@@ -9,7 +9,7 @@ export interface DailyFortune {
   weather: 'sunny' | 'cloudy' | 'rainy';
   summary: string;
   
-  // 五角圖數據 (基準 60)
+  // 五角圖數據 (動態基礎分 + 變化分)
   scores: {
     self: number;     // 自身氣場
     social: number;   // 交友運勢
@@ -26,12 +26,14 @@ export interface DailyFortune {
 
   // 開發驗證資訊
   devInfo: {
+    baseScore: number;      // [新增] 基礎分
     lunarDateStr: string;   // 農曆日期
-    flowYearZhi: string;    // 流年地支 (流年命宮)
-    flowMonthAnchor: string;// 流年正月起點 (流年福德)
+    flowYearZhi: string;    // 流年地支
+    flowMonthAnchor: string;// 流月起點
     flowMonthZhi: string;   // 流月地支
     flowDayZhi: string;     // 流日地支
     formulas: {             // 各維度算式細節
+        base: string[];     // [新增] 基礎分算式
         self: string[];
         social: string[];
         love: string[];
@@ -74,18 +76,22 @@ export const calculateDailyFortune = (engine: ZiWeiEngine, date?: Date): DailyFo
   const chart = engine.getChartData();
   const targetDate = date || new Date();
   
-  // 1. 計算時空參數 (包含修正後的斗君邏輯)
+  // 1. 計算時空參數
   const timeParams = calcTimeParameters(chart, targetDate);
   const { flowDayIdx, flowMonthIdx, lunarStr, flowYearZhi, flowMonthAnchor } = timeParams;
 
-  // 2. 取得「流運宮位」的天干
+  // 2. 取得重要天干參數
   const flowMonthGan = chart.palaces[flowMonthIdx].ganIndex;
   const flowDayGan = chart.palaces[flowDayIdx].ganIndex;
-
-  // 3. 取得「本命」天干
   const birthGan = (chart.lunarYear - 4) % 10;
 
-  // 4. 建立掃描器
+  // 3. 計算【基礎分 (Base Score)】
+  // 邏輯：本命命宮、遷移宮的狀態 (生年四化 + 煞星)
+  const benMingPos = engine.getMingPos();
+  const baseResult = calcBaseScore(chart, benMingPos, birthGan);
+  const baseScore = baseResult.score;
+
+  // 4. 建立掃描器 (用於計算運勢變化分)
   const scanner = new StarScanner(chart, { 
       ...timeParams, 
       birthGan,      
@@ -93,24 +99,56 @@ export const calculateDailyFortune = (engine: ZiWeiEngine, date?: Date): DailyFo
       flowDayGan 
   });
 
-  // 5. 定義五大維度 (流日宮位 Offset)
+  // 5. 定義五大維度掃描範圍 (三方四正)
+  // getP(offset): 取得相對於流日命宮的宮位 Index
+  // 順序為：命(0), 父(1), 福(2), 田(3), 官(4), 友(5), 遷(6), 疾(7), 財(8), 子(9), 夫(10), 兄(11)
   const getP = (offset: number) => (flowDayIdx + offset + 12) % 12;
 
   const targets = {
-    self:   [[getP(0), '命宮'], [getP(6), '遷移'], [getP(4), '官祿'], [getP(8), '財帛']],
-    social: [[getP(5), '僕役'], [getP(11), '兄弟'], [getP(1), '父母'], [getP(9), '子女']],
+    // 感情：夫妻(10)、官祿(4)、遷移(6)、福德(2)
     love:   [[getP(10), '夫妻'], [getP(4), '官祿'], [getP(6), '遷移'], [getP(2), '福德']],
+    
+    // 工作：官祿(4)、夫妻(10)、命宮(0)、財帛(8)
+    // *注意：這裡包含命宮，會與基礎分疊加影響，符合需求
+    self:   [[getP(4), '官祿'], [getP(10), '夫妻'], [getP(0), '命宮'], [getP(8), '財帛']], // 這裡對應 UI 的 "工作運勢" (雖然 key 是 self，但邏輯是工作)
+    
+    // 理財：財帛(8)、福德(2)、官祿(4)、命宮(0)
+    wealth: [[getP(8), '財帛'], [getP(2), '福德'], [getP(4), '官祿'], [getP(0), '命宮']],
+    
+    // 交友：僕役(5)、兄弟(11)、父母(1)、子女(9)
+    social: [[getP(5), '僕役'], [getP(11), '兄弟'], [getP(1), '父母'], [getP(9), '子女']],
+    
+    // 外出：子女(9)、田宅(3)、僕役(5)、父母(1)
     travel: [[getP(9), '子女'], [getP(3), '田宅'], [getP(5), '僕役'], [getP(1), '父母']],
-    wealth: [[getP(2), '福德'], [getP(8), '財帛'], [getP(6), '遷移'], [getP(10), '夫妻']],
   };
 
-  // 6. 計算得分
+  // 6. 計算各維度得分 (以 Base Score 為底)
+  // 注意：UI 上的標籤對應如下：
+  // self -> 工作運勢 (因為您原本的 self 定義是命遷官財，這裡改為工作的三方)
+  // Wait, let's map strictly to your request:
+  // "工作": 官祿、夫妻、命宮、財帛 -> 對應 UI 的 'self' 或是 'work'? 
+  // 原本 FortuneWidget 顯示: 
+  // self -> 自身 (UI Label)
+  // wealth -> 理財
+  // social -> 交友
+  // travel -> 外出
+  // love -> 感情
+  
+  // 依照您的指示：
+  // "工作運勢" -> 官祿、夫妻、命宮、財帛
+  // "感情運勢" -> 夫妻、官祿、遷移、福德
+  // "理財運勢" -> 財帛、福德、官祿、命宮
+  // "交友運勢" -> 僕役、兄弟、父母、子女
+  // "外出運勢" -> 子女、田宅、僕役、父母
+  
+  // 我們將 "工作運勢" 映射到 score.self (因為通常自身運勢與事業相關)
+  
   const results = {
-      self: calcCategoryScore(scanner, targets.self as any),
-      social: calcCategoryScore(scanner, targets.social as any),
-      love: calcCategoryScore(scanner, targets.love as any),
-      travel: calcCategoryScore(scanner, targets.travel as any),
-      wealth: calcCategoryScore(scanner, targets.wealth as any),
+      self: calcCategoryScore(scanner, targets.self as any, baseScore),   // 工作
+      social: calcCategoryScore(scanner, targets.social as any, baseScore), // 交友
+      love: calcCategoryScore(scanner, targets.love as any, baseScore),     // 感情
+      travel: calcCategoryScore(scanner, targets.travel as any, baseScore), // 外出
+      wealth: calcCategoryScore(scanner, targets.wealth as any, baseScore), // 理財
   };
 
   const scores = {
@@ -121,7 +159,7 @@ export const calculateDailyFortune = (engine: ZiWeiEngine, date?: Date): DailyFo
     wealth: results.wealth.finalScore,
   };
 
-  // 總分平均 (保留一位小數)
+  // 總分平均
   const rawAvg = (scores.self + scores.social + scores.love + scores.travel + scores.wealth) / 5;
   const avg = Math.round(rawAvg * 10) / 10;
 
@@ -136,12 +174,14 @@ export const calculateDailyFortune = (engine: ZiWeiEngine, date?: Date): DailyFo
         wealth: getAdvice('wealth', scores.wealth)
     },
     devInfo: {
+        baseScore: baseScore,
         lunarDateStr: lunarStr,
         flowYearZhi: DI_ZHI[flowYearZhi],       
         flowMonthAnchor: DI_ZHI[flowMonthAnchor], 
         flowMonthZhi: DI_ZHI[flowMonthIdx],
         flowDayZhi: DI_ZHI[flowDayIdx],
         formulas: {
+            base: baseResult.logs,
             self: results.self.logs,
             social: results.social.logs,
             love: results.love.logs,
@@ -152,7 +192,65 @@ export const calculateDailyFortune = (engine: ZiWeiEngine, date?: Date): DailyFo
   };
 };
 
-const calcCategoryScore = (scanner: StarScanner, targets: [number, string][]) => {
+/**
+ * 計算基礎分 (Base Score)
+ * 規則：
+ * 1. 預設 50 分
+ * 2. 掃描本命盤的 命宮(mingPos) 與 遷移宮(mingPos+6)
+ * 3. 生年四化：祿+10, 權+5, 忌-10
+ * 4. 煞星(羊陀火鈴)：沿用原邏輯 (羊陀-3, 火-6, 鈴-2, 祿存+2)
+ */
+const calcBaseScore = (chart: ChartData, mingPos: number, birthGan: number) => {
+    let score = 50;
+    const logs: string[] = [`預設(50)`];
+    
+    // 鎖定 命宮 與 遷移宮
+    const targetIndices = [mingPos, (mingPos + 6) % 12];
+    
+    // 取得出生年干的四化星名 [祿, 權, 科, 忌]
+    const ganChar = TIAN_GAN[birthGan];
+    const siHuaStars = SI_HUA_MAP[ganChar]; // e.g. ['廉貞', '破軍', '武曲', '太陽']
+
+    targetIndices.forEach(idx => {
+        const palace = chart.palaces[idx];
+        const palaceName = idx === mingPos ? '本命' : '本遷';
+        
+        const starsInPalace = [
+            ...palace.majorStars, 
+            ...palace.minorStars, 
+            ...palace.miscStars
+        ].map(s => s.name);
+
+        // 1. 判斷生年四化
+        if (siHuaStars) {
+            starsInPalace.forEach(starName => {
+                if (starName === siHuaStars[0]) { score += 10; logs.push(`${palaceName}.${starName}生年祿(+10)`); }
+                if (starName === siHuaStars[1]) { score += 5;  logs.push(`${palaceName}.${starName}生年權(+5)`); }
+                if (starName === siHuaStars[3]) { score -= 10; logs.push(`${palaceName}.${starName}生年忌(-10)`); }
+                // 化科 +0 (不處理)
+            });
+        }
+
+        // 2. 判斷煞星與祿存 (沿用既有權重)
+        if (starsInPalace.includes('火星')) { score -= 6; logs.push(`${palaceName}.火星(-6)`); }
+        if (starsInPalace.includes('鈴星')) { score -= 2; logs.push(`${palaceName}.鈴星(-2)`); }
+
+        // 判斷 擎羊/陀羅/祿存 (依出生年干)
+        const luIndex = LU_YANG_TUO_MAP[ganChar];
+        if (luIndex !== undefined) {
+            // 祿存
+            if (luIndex === idx) { score += 2; logs.push(`${palaceName}.祿存(+2)`); }
+            // 擎羊 (祿前一宮)
+            if ((luIndex + 1) % 12 === idx) { score -= 3; logs.push(`${palaceName}.擎羊(-3)`); }
+            // 陀羅 (祿後一宮)
+            if ((luIndex + 11) % 12 === idx) { score -= 3; logs.push(`${palaceName}.陀羅(-3)`); }
+        }
+    });
+
+    return { score, logs };
+};
+
+const calcCategoryScore = (scanner: StarScanner, targets: [number, string][], baseScore: number) => {
     let totalDelta = 0;
     const logs: string[] = [];
 
@@ -164,21 +262,23 @@ const calcCategoryScore = (scanner: StarScanner, targets: [number, string][]) =>
         }
     });
 
-    let final = 60 + totalDelta;
+    // 基礎分 + 變動分
+    let final = baseScore + totalDelta;
+    
+    // 邊界檢查
     if (final > 100) final = 100;
     if (final < 0) final = 0;
 
     if (totalDelta !== 0) {
-        logs.unshift(`基準(60) + 變動(${totalDelta}) = ${final}`);
+        logs.unshift(`基礎(${baseScore}) + 變動(${totalDelta}) = ${final}`);
     } else {
-        logs.unshift(`平運 (60)`);
+        logs.unshift(`基礎(${baseScore}) + 平運(0) = ${final}`);
     }
     
-    // 單項分數保持整數 (四捨五入)，僅總分取小數
     return { finalScore: Math.round(final), logs };
 };
 
-// --- 核心：星曜掃描與計分器 ---
+// --- 核心：星曜掃描與計分器 (邏輯維持不變) ---
 class StarScanner {
   chart: ChartData;
   params: any;
@@ -282,31 +382,25 @@ const calcTimeParameters = (chart: ChartData, date: Date) => {
 
     const yearZhi = lunar.getYearZhiIndex(); 
 
-    // --- 修正斗君邏輯 (Flow Month Anchor) ---
+    // --- 斗君邏輯 ---
     // 1. 找出本命盤寅宮 (Index 2) 的宮位名稱 (即斗君)
-    // chart.palaces 是固定按地支排列 (0=子, 1=丑, 2=寅...)
     const douJunPalace = chart.palaces[2]; 
-    const douJunName = douJunPalace.name; // e.g. "福德"
+    const douJunName = douJunPalace.name; 
 
-    // 2. 找出該名稱在標準宮位順序中的 Index (0=命宮, 1=兄弟... 逆時針)
+    // 2. 找出該名稱在標準宮位順序中的 Index (0=命宮...11=父母)
     const nameIdx = PALACE_NAMES.indexOf(douJunName);
     
     // 3. 計算該宮位相當於命宮的位移
-    // 公式: offset = (12 - nameIdx) % 12
-    // 例如: 福德(10) -> (12-10)%12 = 2. 代表流月正月在流年命宮順時針+2的位置
     const offset = (12 - nameIdx) % 12;
 
     // 4. 計算流年 1 月 (正月) 的位置
-    // 流年命宮在 yearZhi, 加上斗君的偏移量
     const flowMonthAnchor = (yearZhi + offset) % 12;
-    // ------------------------------------
 
     const month = Math.abs(lunar.getMonth());
     const leapMonth = lunarYear.getLeapMonth();
     
     let monthSteps = month - 1; 
     if (leapMonth > 0) {
-        // 閏月處理：若當前月 > 閏月，或正是閏月(month為負)，則往下順推一格
         if (month > leapMonth) { monthSteps += 1; } 
         else if (lunar.getMonth() < 0) { monthSteps += 1; }
     }

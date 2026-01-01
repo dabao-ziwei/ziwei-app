@@ -78,7 +78,6 @@ export const FortuneWidget: React.FC<Props> = ({ userProfile, client, clientName
   }, [engine]);
 
   // --- 防呆 UI ---
-  // 如果計算失敗，不要 return null，而是顯示錯誤介面
   if (!todayFortune || !engine) {
       return (
         <div className="w-full bg-[#0B1120] rounded-2xl border border-red-900/50 shadow-2xl p-6 flex items-center justify-center text-red-400 gap-3">
@@ -97,8 +96,9 @@ export const FortuneWidget: React.FC<Props> = ({ userProfile, client, clientName
       return <CloudRain className="text-indigo-400" size={28} />;
   };
 
+  // [修改] 雷達圖標籤：將 "自身" 改為 "工作"，符合新定義的五大運勢
   const radarData = [
-    { label: '自身', value: todayFortune.scores.self, fullMark: 100 },
+    { label: '工作', value: todayFortune.scores.self, fullMark: 100 },
     { label: '理財', value: todayFortune.scores.wealth, fullMark: 100 },
     { label: '交友', value: todayFortune.scores.social, fullMark: 100 },
     { label: '外出', value: todayFortune.scores.travel, fullMark: 100 },
@@ -186,7 +186,7 @@ export const FortuneWidget: React.FC<Props> = ({ userProfile, client, clientName
 
               <div className="space-y-4 pb-4">
                   <StrategyCard 
-                    title="總體運勢" 
+                    title="工作運勢" // [修改] 將 "總體運勢" 改為 "工作運勢" 以符合邏輯
                     content={todayFortune.details.overall} 
                     icon={<Star size={16}/>} 
                     color="text-cyan-400"
