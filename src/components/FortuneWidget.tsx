@@ -10,13 +10,12 @@ interface Props {
   fortune: DailyFortune;
   userProfile: UserProfile | null;
   client: Client;
-  clientName?: string; // 兼容舊介面
+  clientName?: string;
 }
 
 export const FortuneWidget: React.FC<Props> = ({ fortune: todayFortune, userProfile, client, clientName }) => {
   const [activeTab, setActiveTab] = useState<'radar' | 'trend'>('radar');
 
-  // 判斷 VIP
   const isVip = useMemo(() => {
     if (!userProfile) return false;
     if (userProfile.role === 'admin') return true;
@@ -27,10 +26,10 @@ export const FortuneWidget: React.FC<Props> = ({ fortune: todayFortune, userProf
     return false;
   }, [userProfile]);
 
-  // 計算未來一週運勢
   const weeklyData = useMemo(() => {
       if (!client) return [];
       try {
+          // 重新建立 Engine 以確保計算基礎正確
           const engine = new ZiWeiEngine(client.birthYear, client.birthMonth, client.birthDay, client.birthHour, client.birthMinute, client.gender);
           const data = [];
           for(let i = 0; i < 7; i++) {
@@ -67,17 +66,13 @@ export const FortuneWidget: React.FC<Props> = ({ fortune: todayFortune, userProf
   return (
     <div className="w-full bg-[#0B1120] rounded-2xl border border-slate-800 shadow-2xl overflow-hidden relative group">
       
-      {/* 頂部裝飾 */}
       <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-cyan-500 to-transparent opacity-80 shadow-[0_0_15px_#22d3ee]" />
 
       <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] min-h-[480px]">
           
-          {/* --- 左側：視覺中心 (Radar / Trend) --- */}
           <div className="relative p-0 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-800 bg-gradient-to-b from-[#0f172a] to-[#020617]">
               
-              {/* Header: Tab Switcher & Info */}
               <div className="absolute top-0 left-0 w-full p-5 z-20 flex justify-between items-start">
-                  {/* Tab Switcher */}
                   <div className="flex bg-slate-900/80 p-1 rounded-lg border border-slate-700/50 backdrop-blur-sm shadow-lg pointer-events-auto">
                       <button 
                         onClick={() => setActiveTab('radar')}
@@ -89,11 +84,10 @@ export const FortuneWidget: React.FC<Props> = ({ fortune: todayFortune, userProf
                         onClick={() => setActiveTab('trend')}
                         className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'trend' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
                       >
-                          <Activity size={14} /> 未來趨勢
+                          <Activity size={14} /> 一週運勢
                       </button>
                   </div>
                   
-                  {/* Score Display */}
                   {activeTab === 'radar' && (
                       <div className="text-right pointer-events-auto animate-in fade-in slide-in-from-right-2">
                           <div className="text-[10px] text-slate-500 uppercase tracking-widest mb-1 flex justify-end items-center gap-1">
@@ -109,9 +103,7 @@ export const FortuneWidget: React.FC<Props> = ({ fortune: todayFortune, userProf
                   )}
               </div>
 
-              {/* Chart Container */}
               <div className="flex-1 w-full h-full flex items-center justify-center pt-16 pb-4 px-4 relative">
-                  {/* 背景裝飾網格 */}
                   <div className="absolute inset-0 bg-[linear-gradient(rgba(30,41,59,0.3)_1px,transparent_1px),linear-gradient(90deg,rgba(30,41,59,0.3)_1px,transparent_1px)] bg-[size:20px_20px] [mask-image:radial-gradient(ellipse_60%_60%_at_50%_50%,black,transparent)] pointer-events-none" />
                   
                   {activeTab === 'radar' ? (
@@ -122,7 +114,7 @@ export const FortuneWidget: React.FC<Props> = ({ fortune: todayFortune, userProf
                       <div className="w-full h-full animate-in fade-in slide-in-from-bottom-4 duration-500 flex flex-col justify-center">
                           <div className="flex items-center gap-2 mb-4 px-4 justify-center md:justify-start">
                               <Calendar size={14} className="text-purple-400"/>
-                              <span className="text-xs font-bold text-purple-200 tracking-wider">7-DAY PREDICTION</span>
+                              <span className="text-xs font-bold text-purple-200 tracking-wider">WEEKLY PREDICTION</span>
                           </div>
                           <div className="h-[250px] w-full px-2">
                               <TechLineChart data={weeklyData} />
@@ -132,7 +124,6 @@ export const FortuneWidget: React.FC<Props> = ({ fortune: todayFortune, userProf
               </div>
           </div>
 
-          {/* --- 右側：戰略分析 (固定顯示今日建議) --- */}
           <div className="bg-[#0B1120] p-5 flex flex-col h-full overflow-y-auto scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent border-l border-slate-800/50">
               <div className="flex items-center gap-2 mb-5 pb-3 border-b border-slate-800/50 sticky top-0 bg-[#0B1120] z-10">
                   <Cpu size={18} className="text-cyan-500 animate-pulse" />

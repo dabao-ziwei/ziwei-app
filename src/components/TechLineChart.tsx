@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface DataPoint {
-  label: string; // e.g., "1/2"
-  value: number; // 0-100
-  dateStr: string; // e.g., "2026-01-02"
+  label: string; 
+  value: number; 
+  dateStr: string; 
 }
 
 interface Props {
@@ -14,15 +14,42 @@ interface Props {
 export const TechLineChart: React.FC<Props> = ({ data }) => {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
+  // 防呆：如果沒有數據，不渲染任何東西，避免報錯
+  if (!data || data.length === 0) {
+      return (
+        <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs font-mono">
+            ANALYZING DATA...
+        </div>
+      );
+  }
+
   const width = 500;
   const height = 250;
   const padding = 20;
   
-  const getX = (index: number) => padding + (index / (data.length - 1)) * (width - 2 * padding);
-  const getY = (value: number) => height - padding - (value / 100) * (height - 2 * padding);
+  // 計算座標
+  const getX = (index: number) => {
+      // 避免除以 0
+      const denominator = data.length > 1 ? data.length - 1 : 1;
+      return padding + (index / denominator) * (width - 2 * padding);
+  };
+  
+  const getY = (value: number) => {
+      const safeValue = isNaN(value) ? 0 : value;
+      return height - padding - (safeValue / 100) * (height - 2 * padding);
+  };
 
-  const points = data.map((d, i) => `${getX(i)},${getY(d.value)}`).join(' ');
-  const areaPath = `${points} ${getX(data.length - 1)},${height} ${getX(0)},${height} Z`;
+  // 產生 SVG 路徑指令 (Path Commands)
+  // 格式: M x1,y1 L x2,y2 L x3,y3 ...
+  const pointsArray = data.map((d, i) => `${getX(i)},${getY(d.value)}`);
+  
+  // 線條路徑 (Line Path)
+  const linePathStr = `M ${pointsArray.join(' L ')}`;
+  
+  // 區域路徑 (Area Path) - 封閉底部
+  const lastX = getX(data.length - 1);
+  const firstX = getX(0);
+  const areaPathStr = `${linePathStr} L ${lastX},${height} L ${firstX},${height} Z`;
 
   return (
     <div className="w-full h-full flex flex-col items-center justify-center relative select-none">
@@ -46,6 +73,7 @@ export const TechLineChart: React.FC<Props> = ({ data }) => {
           </filter>
         </defs>
 
+        {/* 背景網格 */}
         {Array.from({ length: 5 }).map((_, i) => (
             <line 
                 key={i} 
@@ -55,8 +83,9 @@ export const TechLineChart: React.FC<Props> = ({ data }) => {
             />
         ))}
 
+        {/* 區域填充 (Area Fill) */}
         <motion.path
-          d={areaPath}
+          d={areaPathStr}
           fill="url(#areaGradient)"
           initial={{ opacity: 0, scaleY: 0 }}
           animate={{ opacity: 1, scaleY: 1 }}
@@ -64,8 +93,9 @@ export const TechLineChart: React.FC<Props> = ({ data }) => {
           style={{ transformOrigin: "bottom" }}
         />
 
-        <motion.polyline
-          points={points}
+        {/* 主折線 (Line) - 改用 path 元素以支援複雜指令 */}
+        <motion.path
+          d={linePathStr}
           fill="none"
           stroke="url(#lineGradient)"
           strokeWidth="3"
@@ -77,6 +107,7 @@ export const TechLineChart: React.FC<Props> = ({ data }) => {
           transition={{ duration: 1.5, ease: "easeInOut" }}
         />
 
+        {/* 互動區域與節點 */}
         {data.map((d, i) => {
             const x = getX(i);
             const y = getY(d.value);
@@ -103,7 +134,8 @@ export const TechLineChart: React.FC<Props> = ({ data }) => {
                     </AnimatePresence>
 
                     <motion.circle
-                        cx={x} cy={y} r={isHover ? 6 : 4}
+                        cx={x} cy={y} 
+                        r={isHover ? 6 : 4} // 這裡如果 x,y 是 NaN 會報錯，但上方已有防呆
                         fill={isHover ? "#fff" : "#0e7490"}
                         stroke="#22d3ee" strokeWidth="2"
                         animate={{ scale: isHover ? 1.2 : 1 }}
@@ -119,7 +151,7 @@ export const TechLineChart: React.FC<Props> = ({ data }) => {
       </svg>
 
       <AnimatePresence>
-        {hoverIndex !== null && (
+        {hoverIndex !== null && data[hoverIndex] && (
             <motion.div
                 initial={{ opacity: 0, y: 10, scale: 0.9 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
