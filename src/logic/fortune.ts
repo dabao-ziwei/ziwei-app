@@ -78,58 +78,44 @@ export const calculateDailyFortune = (engine: ZiWeiEngine): DailyFortune => {
   const chart = engine.getChartData();
   const today = new Date();
   
-  // 1. 計算時空參數
+  // 1. 計算時空參數 (包含農曆月干 yueGan, 農曆日干 riGan)
   const timeParams = calcTimeParameters(chart, today);
   const { flowDayIdx, flowMonthIdx, lunarStr, flowYearZhi, flowMonthAnchor } = timeParams;
 
-  // 2. 建立掃描器
-  const scanner = new StarScanner(chart, timeParams);
+  // 2. 取得「流運宮位」的天干 (用於主要加權)
+  const flowMonthGan = chart.palaces[flowMonthIdx].ganIndex;
+  const flowDayGan = chart.palaces[flowDayIdx].ganIndex;
 
-  // 3. 定義五大維度對應的「流日宮位」 (相對流日命宮的位置)
-  // 命(0), 父(1), 福(2), 田(3), 官(4), 僕(5), 遷(6), 疾(7), 財(8), 子(9), 夫(10), 兄(11) -- 這是順數索引? 
-  // 不，紫微斗數標準盤是：命(0) -> 兄(11) -> 夫(10)... (逆布)
-  // [修正] getP 函式必須符合您的命盤陣列邏輯。
-  // 在 db.ts 或 engine.ts 中，palaces[0] 是子位，palaces[1] 是丑位。
-  // flowDayIdx 是流日命宮的地支 Index (例如午位=6)。
-  // 紫微斗數宮職是逆布的：
-  // 命=flowDayIdx
-  // 兄=(flowDayIdx - 1 + 12) % 12
-  // 夫=(flowDayIdx - 2 + 12) % 12
-  // ...
-  // 但我們為了方便，直接定義相對偏移量 (Offset) 
-  // 假設 flowDayIdx 是 0 (子)。
+  // 3. 建立掃描器 (傳入所有需要的天干參數)
+  const scanner = new StarScanner(chart, { 
+      ...timeParams, 
+      flowMonthGan, 
+      flowDayGan 
+  });
+
+  // 4. 定義五大維度對應的「流日宮位」 (相對流日命宮的位置)
   // 命=0, 兄=11, 夫=10, 子=9, 財=8, 疾=7, 遷=6, 僕=5, 官=4, 田=3, 福=2, 父=1
-  
   const getP = (offset: number) => (flowDayIdx + offset + 12) % 12;
 
-  // 依據您的三方四正規則：
-  // 自身(命宮三方): 命(0), 遷(-6=6), 官(-8=4), 財(-4=8) -> 命,遷,官,財
-  // 交友(僕役三方): 僕(5), 兄(11), 父(1), 子(9) -> 僕,兄,父,子 (修正: 兄是僕的對宮? 不，僕的對宮是兄)
-  // 感情(夫妻三方): 夫(10), 官(4), 遷(6), 福(2) -> 夫,官,遷,福
-  // 外出(子女三方): 子(9), 田(3), 僕(5), 父(1) -> 子,田,僕,父 (修正: 子女三方是 子、田、僕、父)
-  // 理財(福德三方): 福(2), 財(8), 遷(6), 夫(10) -> 福,財,遷,夫
-
-  // 注意：這裡的 offset 是指從流日命宮(0)起算的 Index 偏移
-  // 命=0, 兄=11, 夫=10, 子=9, 財=8, 疾=7, 遷=6, 僕=5, 官=4, 田=3, 福=2, 父=1
-  
+  // 依據三方四正規則
   const targets = {
-    // 自身: 命、遷、官、財
+    // 自身(命宮三方): 命、遷、官、財
     self:   [[getP(0), '命宮'], [getP(6), '遷移'], [getP(4), '官祿'], [getP(8), '財帛']],
     
-    // 交友: 僕、兄、父、子 (僕役的三方四正)
+    // 交友(僕役三方): 僕、兄、父、子
     social: [[getP(5), '僕役'], [getP(11), '兄弟'], [getP(1), '父母'], [getP(9), '子女']],
     
-    // 感情: 夫、官、遷、福 (夫妻的三方四正)
+    // 感情(夫妻三方): 夫、官、遷、福
     love:   [[getP(10), '夫妻'], [getP(4), '官祿'], [getP(6), '遷移'], [getP(2), '福德']],
     
-    // 外出: 子、田、僕、父 (子女的三方四正)
+    // 外出(子女三方): 子、田、僕、父
     travel: [[getP(9), '子女'], [getP(3), '田宅'], [getP(5), '僕役'], [getP(1), '父母']],
     
-    // 理財: 福、財、遷、夫 (福德的三方四正)
+    // 理財(福德三方): 福、財、遷、夫
     wealth: [[getP(2), '福德'], [getP(8), '財帛'], [getP(6), '遷移'], [getP(10), '夫妻']],
   };
 
-  // 4. 計算得分與紀錄算式
+  // 5. 計算得分與紀錄算式
   const results = {
       self: calcCategoryScore(scanner, targets.self as any),
       social: calcCategoryScore(scanner, targets.social as any),
@@ -191,7 +177,7 @@ const calcCategoryScore = (scanner: StarScanner, targets: [number, string][]) =>
 
     let final = 60 + totalDelta;
     if (final > 100) final = 100;
-    if (final < 20) final = 20;
+    if (final < 0) final = 0;
 
     if (totalDelta !== 0) {
         logs.unshift(`基準(60) + 變動(${totalDelta}) = ${final}`);
@@ -224,13 +210,13 @@ class StarScanner {
     ].map(s => s.name);
 
     // --- 1. 四化掃描 (祿/忌/權) ---
-    // 規則:
-    // 祿: 本(+1), 大(+2), 年(+3), 月(+4), 日(+5)
-    // 忌: 本(-1), 大(-2), 年(-3), 月(-4), 日(-5)
-    // 權: 本(+1), 大(+1), 年(+2), 月(+3), 日(+4)
+    // 權重規則:
+    // 祿: 本(+1), 大(+2), 年(+3), 流月宮(+4), 流日宮(+5), 農曆月(+2), 農曆日(+2)
+    // 權: 本(+1), 大(+1), 年(+2), 流月宮(+3), 流日宮(+4), 農曆月(+1), 農曆日(+1)
+    // 忌: 本(-1), 大(-2), 年(-3), 流月宮(-4), 流日宮(-5), 農曆月(-3), 農曆日(-3)
     
     starsInPalace.forEach(starName => {
-        // A. 本命四化
+        // A. 本命四化 (讀取預算好的 sihua)
         const starObj = [...palace.majorStars, ...palace.minorStars].find(s => s.name === starName);
         if (starObj?.sihua) {
             starObj.sihua.forEach(sh => {
@@ -240,17 +226,21 @@ class StarScanner {
             });
         }
 
-        // B. 動態四化
+        // B. 動態四化 (大限、流年、流月宮、流日宮)
         this.checkDynamicSiHua(starName, this.params.daGan,   2, -2, 1, '大限', (w, n) => { score += w; logs.push(n); });
         this.checkDynamicSiHua(starName, this.params.nianGan, 3, -3, 2, '流年', (w, n) => { score += w; logs.push(n); });
-        this.checkDynamicSiHua(starName, this.params.yueGan,  4, -4, 3, '流月', (w, n) => { score += w; logs.push(n); });
-        this.checkDynamicSiHua(starName, this.params.riGan,   5, -5, 4, '流日', (w, n) => { score += w; logs.push(n); });
+        this.checkDynamicSiHua(starName, this.params.flowMonthGan, 4, -4, 3, '流月', (w, n) => { score += w; logs.push(n); });
+        this.checkDynamicSiHua(starName, this.params.flowDayGan,   5, -5, 4, '流日', (w, n) => { score += w; logs.push(n); });
+
+        // C. 農曆四化 (農曆月干、農曆日干) -> 權重: 祿+2, 權+1, 忌-3
+        this.checkDynamicSiHua(starName, this.params.yueGan, 2, -3, 1, '農曆月', (w, n) => { score += w; logs.push(n); });
+        this.checkDynamicSiHua(starName, this.params.riGan,  2, -3, 1, '農曆日', (w, n) => { score += w; logs.push(n); });
     });
 
     // --- 2. 靜態煞星 (火/鈴) ---
     // 規則: 火星-6, 鈴星-2
-    if (starsInPalace.includes('火星')) { score -= 6; logs.push('本命火星(-6)'); }
-    if (starsInPalace.includes('鈴星')) { score -= 2; logs.push('本命鈴星(-2)'); }
+    if (starsInPalace.includes('火星')) { score -= 6; logs.push('火星(-6)'); }
+    if (starsInPalace.includes('鈴星')) { score -= 2; logs.push('鈴星(-2)'); }
 
     // --- 3. 羊陀祿存 (本命、大限、流年) ---
     
@@ -272,7 +262,7 @@ class StarScanner {
     return { score, logs };
   }
 
-  // 檢查動態四化 (增加 權 的權重參數)
+  // 檢查動態四化
   private checkDynamicSiHua(
       starName: string, ganIdx: number, 
       luWeight: number, jiWeight: number, quanWeight: number,
@@ -315,8 +305,8 @@ const calcTimeParameters = (chart: ChartData, date: Date) => {
     const lunarStr = `${lunar.getYear()}年 ${Math.abs(lunar.getMonth())}月 ${lunar.getDay()}日 (${lunar.getYearInGanZhi()}年)`;
 
     const nianGan = lunar.getYearGanIndex();
-    const yueGan = lunar.getMonthGanIndex();
-    const riGan = lunar.getDayGanIndex();
+    const yueGan = lunar.getMonthGanIndex(); // 農曆月干
+    const riGan = lunar.getDayGanIndex();     // 農曆日干
 
     // 大限
     const age = lunar.getYear() - chart.lunarYear + 1;
