@@ -45,6 +45,7 @@ const TIAN_GAN = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬',
 const DI_ZHI = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
 
 // 四化表 (祿, 權, 科, 忌)
+// [修正] 庚干強制設定為: 太陽祿, 武曲權, 天同科, 天相忌
 const SI_HUA_MAP: Record<string, string[]> = {
   '甲': ['廉貞', '破軍', '武曲', '太陽'],
   '乙': ['天機', '天梁', '紫微', '太陰'],
@@ -52,7 +53,7 @@ const SI_HUA_MAP: Record<string, string[]> = {
   '丁': ['太陰', '天同', '天機', '巨門'],
   '戊': ['貪狼', '太陰', '右弼', '天機'],
   '己': ['武曲', '貪狼', '天梁', '文曲'],
-  '庚': ['太陽', '武曲', '太陰', '天同'],
+  '庚': ['太陽', '武曲', '天同', '天相'], // FIXED: 庚干 陽武同相
   '辛': ['巨門', '太陽', '文曲', '文昌'],
   '壬': ['天梁', '紫微', '左輔', '武曲'],
   '癸': ['破軍', '巨門', '太陰', '貪狼'],
@@ -87,13 +88,12 @@ export const calculateDailyFortune = (engine: ZiWeiEngine): DailyFortune => {
   const flowDayGan = chart.palaces[flowDayIdx].ganIndex;
 
   // 3. 取得「本命」天干 (用於計算本命四化)
-  // chart.lunarYear 是農曆生年 (如 1979)，換算天干 index: (1979 - 4) % 10 = 5 (己)
   const birthGan = (chart.lunarYear - 4) % 10;
 
   // 4. 建立掃描器 (傳入所有需要的天干參數)
   const scanner = new StarScanner(chart, { 
       ...timeParams, 
-      birthGan,     // 加入本命干
+      birthGan,     
       flowMonthGan, 
       flowDayGan 
   });
@@ -193,7 +193,7 @@ const calcCategoryScore = (scanner: StarScanner, targets: [number, string][]) =>
     return { finalScore: final, logs };
 };
 
-// --- 核心：星曜掃描與計分器 (Updated Weights) ---
+// --- 核心：星曜掃描與計分器 ---
 class StarScanner {
   chart: ChartData;
   params: any;
@@ -221,7 +221,7 @@ class StarScanner {
     // 忌: 本(-1), 大(-2), 年(-3), 流月宮(-4), 流日宮(-5), 農曆月(-3), 農曆日(-3)
     
     starsInPalace.forEach(starName => {
-        // A. 本命四化 (修正：直接用 birthGan 算，不依賴 starObj.sihua)
+        // A. 本命四化 (直接算)
         this.checkDynamicSiHua(starName, this.params.birthGan, 1, -1, 1, '本命', (w, n) => { score += w; logs.push(n); });
 
         // B. 動態四化 (大限、流年、流月宮、流日宮)
