@@ -89,6 +89,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
             const myChart = loadedClients.find(c => c.user_id === profile.id && c.type === '我');
             
             if (myChart) {
+                console.log("Found ME client:", myChart.name); // Debug Log
                 setMeClient(myChart);
                 try {
                     // 初始化引擎
@@ -107,6 +108,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                     console.error("AI Fortune Error:", err);
                 }
             } else {
+                console.warn("No 'ME' client found for user:", profile.email); // Debug Log
                 // 如果找不到我的命盤，清空運勢
                 setMeClient(null);
                 setDailyFortune(null);
@@ -326,16 +328,24 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         
-        {/* --- 運勢儀表板 (重點修正：傳入 client={meClient}) --- */}
-        {dailyFortune && meClient && (
+        {/* --- 關鍵修正點：只有當 dailyFortune 和 meClient 都有值時才渲染 --- */}
+        {dailyFortune && meClient ? (
             <div className="mb-4 animate-in slide-in-from-top-4 duration-500">
                 <FortuneWidget 
                     fortune={dailyFortune} 
                     userProfile={userProfile} 
-                    client={meClient} // [FIXED] 傳入完整的 client 物件
+                    client={meClient} 
                     clientName={meClient.name}
                 />
             </div>
+        ) : (
+            // 如果沒資料，顯示提示區塊 (Optional)
+            !loading && (
+                <div className="mb-4 p-4 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-center gap-2 text-blue-600 text-sm">
+                    <Sparkles size={16} />
+                    <span>請先建立一張類別為「我」的命盤，以啟用運勢儀表板。</span>
+                </div>
+            )
         )}
 
         {loading ? (
