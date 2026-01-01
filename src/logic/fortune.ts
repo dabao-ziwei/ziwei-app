@@ -1,222 +1,327 @@
 import { ZiWeiEngine } from './engine';
-// 修正重點：加上 type 關鍵字
-import type { ChartData, Palace, Star } from './types'; 
-// 引入 Solar 用於計算今日農曆
-import { Solar } from 'lunar-typescript';
+import type { ChartData, Palace } from './types';
+import { Solar, LunarYear } from 'lunar-typescript';
 
-// 定義運勢結果介面
+// 定義五大維度
 export interface DailyFortune {
-  score: number;       // 總分 (0-100)
-  weather: 'sunny' | 'cloudy' | 'rainy'; // 天氣
-  summary: string;     // 一句話點評
+  score: number;       // 總分 (加權平均, 保留一位小數)
+  weather: 'sunny' | 'cloudy' | 'rainy';
+  summary: string;
   
-  // 三大指數 (0-100)
-  moneyScore: number;
-  loveScore: number;
-  travelScore: number;
-
-  // 詳細建議 (未來可用於付費解鎖)
-  details: {
-    money: string;
-    love: string;
-    travel: string;
+  // 五角圖數據 (基準 60)
+  scores: {
+    self: number;     // 自身氣場
+    social: number;   // 交友運勢
+    love: number;     // 感情運勢
+    travel: number;   // 外出運勢
+    wealth: number;   // 理財運勢
   };
 
-  // 偵錯資訊
-  debug?: {
-    flowDayZhi: string;
+  details: {
+    overall: string;
+    loveCareer: string;
+    wealth: string;
+  };
+
+  // 開發驗證資訊
+  devInfo: {
+    lunarDateStr: string;   // 農曆日期
+    flowYearZhi: string;    // 流年地支 (流年命宮)
+    flowMonthAnchor: string;// 流年正月起點 (流年福德)
+    flowMonthZhi: string;   // 流月地支
+    flowDayZhi: string;     // 流日地支
+    formulas: {             // 各維度算式細節
+        self: string[];
+        social: string[];
+        love: string[];
+        travel: string[];
+        wealth: string[];
+    }
   }
 }
 
-// 評分規則設定 (MVP版)
-const RULES = {
-  LUCKY_STARS: ['化祿', '化權', '化科', '祿存', '天魁', '天鉞', '左輔', '右弼', '紫微', '天府', '太陽', '太陰', '武曲', '貪狼'],
-  UNLUCKY_STARS: ['化忌', '擎羊', '陀羅', '火星', '鈴星', '地空', '地劫', '七殺', '破軍'],
-  WEIGHTS: {
-    LU: 15,   
-    QUAN: 10, 
-    KE: 8,    
-    JI: -18,  
-    LUCKY_MAJOR: 5,   
-    UNLUCKY_MAJOR: -3,
-    LUCKY_MINOR: 3,   
-    UNLUCKY_MINOR: -4 
-  }
+// --- 靜態資料表 ---
+const TIAN_GAN = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'];
+const DI_ZHI = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
+
+// 四化表 (祿, 權, 科, 忌)
+const SI_HUA_MAP: Record<string, string[]> = {
+  '甲': ['廉貞', '破軍', '武曲', '太陽'],
+  '乙': ['天機', '天梁', '紫微', '太陰'],
+  '丙': ['天同', '天機', '文昌', '廉貞'],
+  '丁': ['太陰', '天同', '天機', '巨門'],
+  '戊': ['貪狼', '太陰', '右弼', '天機'],
+  '己': ['武曲', '貪狼', '天梁', '文曲'],
+  '庚': ['太陽', '武曲', '天同', '天相'], 
+  '辛': ['巨門', '太陽', '文曲', '文昌'],
+  '壬': ['天梁', '紫微', '左輔', '武曲'],
+  '癸': ['破軍', '巨門', '太陰', '貪狼'],
+};
+
+// 祿存、擎羊、陀羅表 (依天干)
+const LU_YANG_TUO_MAP: Record<string, number> = {
+  '甲': 2, '乙': 3, '丙': 5, '丁': 6, '戊': 5,
+  '己': 6, '庚': 8, '辛': 9, '壬': 11, '癸': 0,
 };
 
 /**
- * 計算今日運勢的主函數
+ * 計算運勢的主函數
+ * @param engine 紫微引擎
+ * @param date 指定日期 (選填，預設為今日)
  */
-export const calculateDailyFortune = (engine: ZiWeiEngine): DailyFortune => {
+export const calculateDailyFortune = (engine: ZiWeiEngine, date?: Date): DailyFortune => {
   const chart = engine.getChartData();
-  const today = new Date(); 
+  const targetDate = date || new Date();
   
-  // 1. 定位流日命宮 (使用本命寅位斗君法)
-  const flowDayPalaceIdx = getFlowDayPalaceIndex(chart, today);
-  const flowDayPalace = chart.palaces[flowDayPalaceIdx];
+  // 1. 計算時空參數
+  const timeParams = calcTimeParameters(chart, targetDate);
+  const { flowDayIdx, flowMonthIdx, lunarStr, flowYearZhi, flowMonthAnchor } = timeParams;
 
-  // 2. 獲取三方四正宮位
-  // 簡化 MVP：看「流日命宮」的三方四正 (地支三合)。
-  // 申子辰、寅午戌、亥卯未、巳酉丑
-  const idx = flowDayPalaceIdx;
-  const palaceSelf = chart.palaces[idx];
-  const palaceTravel = chart.palaces[(idx + 6) % 12]; // 對宮
-  const palaceMoney = chart.palaces[(idx + 8) % 12];  // 財帛 (標準地支三合：逆時針4=順時針8)
-  const palaceCareer = chart.palaces[(idx + 4) % 12]; // 官祿 (標準地支三合：順時針4)
-  const palaceLove = chart.palaces[(idx + 10) % 12];  // 夫妻位 (逆數第三: 命0->兄11->夫10)
+  // 2. 取得「流運宮位」的天干
+  const flowMonthGan = chart.palaces[flowMonthIdx].ganIndex;
+  const flowDayGan = chart.palaces[flowDayIdx].ganIndex;
 
-  // 3. 計算分數
-  const baseScore = 60;
-  
-  // 綜合運勢
-  const totalRawScore = baseScore + 
-    calcStarsScore(palaceSelf, 1.0) + 
-    calcStarsScore(palaceTravel, 0.8) + 
-    calcStarsScore(palaceMoney, 0.6) + 
-    calcStarsScore(palaceCareer, 0.6);
+  // 3. 取得「本命」天干
+  const birthGan = (chart.lunarYear - 4) % 10;
 
-  // 財運 (財帛宮 + 命宮)
-  const moneyRawScore = baseScore + calcStarsScore(palaceMoney, 1.2) + calcStarsScore(palaceSelf, 0.5);
+  // 4. 建立掃描器
+  const scanner = new StarScanner(chart, { 
+      ...timeParams, 
+      birthGan,     
+      flowMonthGan, 
+      flowDayGan 
+  });
 
-  // 感情 (夫妻宮 + 命宮)
-  const loveRawScore = baseScore + calcStarsScore(palaceLove, 1.2) + calcStarsScore(palaceSelf, 0.5);
+  // 5. 定義五大維度 (流日宮位 Offset)
+  const getP = (offset: number) => (flowDayIdx + offset + 12) % 12;
 
-  // 外出 (遷移宮 + 命宮)
-  const travelRawScore = baseScore + calcStarsScore(palaceTravel, 1.2) + calcStarsScore(palaceSelf, 0.5);
+  const targets = {
+    self:   [[getP(0), '命宮'], [getP(6), '遷移'], [getP(4), '官祿'], [getP(8), '財帛']],
+    social: [[getP(5), '僕役'], [getP(11), '兄弟'], [getP(1), '父母'], [getP(9), '子女']],
+    love:   [[getP(10), '夫妻'], [getP(4), '官祿'], [getP(6), '遷移'], [getP(2), '福德']],
+    travel: [[getP(9), '子女'], [getP(3), '田宅'], [getP(5), '僕役'], [getP(1), '父母']],
+    wealth: [[getP(2), '福德'], [getP(8), '財帛'], [getP(6), '遷移'], [getP(10), '夫妻']],
+  };
 
-  // 4. 正規化分數 (0-100)
-  const finalScore = normalize(totalRawScore);
-  
+  // 6. 計算得分
+  const results = {
+      self: calcCategoryScore(scanner, targets.self as any),
+      social: calcCategoryScore(scanner, targets.social as any),
+      love: calcCategoryScore(scanner, targets.love as any),
+      travel: calcCategoryScore(scanner, targets.travel as any),
+      wealth: calcCategoryScore(scanner, targets.wealth as any),
+  };
+
+  const scores = {
+    self: results.self.finalScore,
+    social: results.social.finalScore,
+    love: results.love.finalScore,
+    travel: results.travel.finalScore,
+    wealth: results.wealth.finalScore,
+  };
+
+  // 總分平均 (保留一位小數)
+  const rawAvg = (scores.self + scores.social + scores.love + scores.travel + scores.wealth) / 5;
+  const avg = Math.round(rawAvg * 10) / 10;
+
   return {
-    score: finalScore,
-    weather: getWeather(finalScore),
-    summary: getSummary(finalScore, palaceSelf),
-    moneyScore: normalize(moneyRawScore),
-    loveScore: normalize(loveRawScore),
-    travelScore: normalize(travelRawScore),
+    score: avg,
+    weather: getWeather(avg),
+    summary: getSummary(avg),
+    scores,
     details: {
-      money: getAdvice('money', normalize(moneyRawScore)),
-      love: getAdvice('love', normalize(loveRawScore)),
-      travel: getAdvice('travel', normalize(travelRawScore))
+        overall: getAdvice('self', scores.self),
+        loveCareer: getAdvice('love', scores.love),
+        wealth: getAdvice('wealth', scores.wealth)
     },
-    debug: {
-        flowDayZhi: ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"][idx]
+    devInfo: {
+        lunarDateStr: lunarStr,
+        flowYearZhi: DI_ZHI[flowYearZhi],      
+        flowMonthAnchor: DI_ZHI[flowMonthAnchor], 
+        flowMonthZhi: DI_ZHI[flowMonthIdx],
+        flowDayZhi: DI_ZHI[flowDayIdx],
+        formulas: {
+            self: results.self.logs,
+            social: results.social.logs,
+            love: results.love.logs,
+            travel: results.travel.logs,
+            wealth: results.wealth.logs,
+        }
     }
   };
 };
 
-// --- 輔助函式 ---
+const calcCategoryScore = (scanner: StarScanner, targets: [number, string][]) => {
+    let totalDelta = 0;
+    const logs: string[] = [];
 
-// 1. 本命寅位斗君法 - 尋找流日命宮 Index
-const getFlowDayPalaceIndex = (chart: ChartData, date: Date): number => {
-    // A. 找出本命斗君 (本命盤寅位是什麼宮?)
-    // palaces 陣列 index 2 就是寅位 (0子 1丑 2寅)
-    const yinPalaceName = chart.palaces[2].name; 
-    
-    const palaceOrder = ["命宮", "兄弟", "夫妻", "子女", "財帛", "疾厄", "遷移", "僕役", "官祿", "田宅", "福德", "父母"];
-    const douJunOrderIdx = palaceOrder.indexOf(yinPalaceName); 
-    
-    // B. 找出流年盤中，該宮職在哪個地支? (即為正月起點)
-    const yearStartZhi = (getLiuNianMingPosition(date.getFullYear()) - douJunOrderIdx + 12) % 12;
-    
-    // C. 推算流日
-    return calculateFlowDay(yearStartZhi, date);
-};
-
-const getLiuNianMingPosition = (year: number): number => {
-    // (year - 4) % 12 是年支 index (0=子, 1=丑... 5=巳)
-    return (year - 4) % 12;
-};
-
-const calculateFlowDay = (startMonthZhi: number, date: Date): number => {
-    const solar = Solar.fromYmd(date.getFullYear(), date.getMonth() + 1, date.getDate());
-    const lunar = solar.getLunar();
-    
-    const month = Math.abs(lunar.getMonth()); // 取得月份 (1-12)
-    const day = lunar.getDay(); // 取得日期 (1-30)
-    
-    // 處理閏月：如果 lunar.getMonth() < 0 代表是閏月
-    // Lunar 庫: getLeapMonth() 回傳該年閏幾月(0無)，getMonth() 負數代表該月是閏月
-    const leapMonth = lunar.getLeapMonth(); 
-    
-    let monthSteps = month - 1;
-    // 如果今年有閏月
-    if (leapMonth > 0) {
-        // 如果當前月份數字 大於 閏月數字 (例如閏6月，現在是7月)，那前面已經多走過一個閏月了
-        if (Math.abs(lunar.getMonth()) > leapMonth) {
-            monthSteps += 1; 
-        } 
-        // 如果當前就是閏月 (month是負數，且絕對值等於閏月)，也要多走一步 (因為前面已經走過正常的該月)
-        // 修正邏輯：閏月通常是接著走。例如 6月 -> 閏6月。
-        // 正常6月: step = 5。 閏6月: step = 6。 7月: step = 7。
-        else if (lunar.getMonth() < 0) {
-            monthSteps += 1;
-        }
-    }
-    
-    const flowMonthZhi = (startMonthZhi + monthSteps) % 12;
-    
-    // 流日：從流月位起初一 (順數)
-    const flowDayZhi = (flowMonthZhi + (day - 1)) % 12;
-    
-    return flowDayZhi;
-};
-
-
-// 2. 星曜計分
-const calcStarsScore = (palace: Palace, ratio: number): number => {
-    let score = 0;
-    const allStars = [...palace.majorStars, ...palace.minorStars, ...palace.miscStars, ...palace.limitStars];
-    
-    allStars.forEach(star => {
-        if (RULES.LUCKY_STARS.includes(star.name)) score += (RULES.WEIGHTS.LUCKY_MINOR * ratio);
-        if (['紫微','天府','太陽','太陰','武曲'].includes(star.name)) score += (RULES.WEIGHTS.LUCKY_MAJOR * ratio);
-        if (RULES.UNLUCKY_STARS.includes(star.name)) score += (RULES.WEIGHTS.UNLUCKY_MINOR * ratio);
-        
-        if (star.sihua) {
-            star.sihua.forEach(sh => {
-                if (sh.type === '祿') score += (RULES.WEIGHTS.LU * ratio);
-                if (sh.type === '權') score += (RULES.WEIGHTS.QUAN * ratio);
-                if (sh.type === '科') score += (RULES.WEIGHTS.KE * ratio);
-                if (sh.type === '忌') score += (RULES.WEIGHTS.JI * ratio);
-            });
+    targets.forEach(([idx, name]) => {
+        const res = scanner.scanPalace(idx);
+        if (res.score !== 0) {
+            totalDelta += res.score;
+            logs.push(`[${name}]: ${res.logs.join(' ')}`);
         }
     });
 
-    return score;
+    let final = 60 + totalDelta;
+    if (final > 100) final = 100;
+    if (final < 0) final = 0;
+
+    if (totalDelta !== 0) {
+        logs.unshift(`基準(60) + 變動(${totalDelta}) = ${final}`);
+    } else {
+        logs.unshift(`平運 (60)`);
+    }
+    
+    // 單項分數保持整數 (四捨五入)，僅總分取小數
+    return { finalScore: Math.round(final), logs };
 };
 
-// 3. 正規化
-const normalize = (raw: number): number => {
-    let n = raw;
-    if (n > 100) n = 100;
-    if (n < 0) n = 0;
-    return Math.round(n);
+// --- 核心：星曜掃描與計分器 ---
+class StarScanner {
+  chart: ChartData;
+  params: any;
+
+  constructor(chart: ChartData, params: any) {
+    this.chart = chart;
+    this.params = params;
+  }
+
+  scanPalace(palaceIdx: number): { score: number, logs: string[] } {
+    let score = 0;
+    const logs: string[] = [];
+    const palace = this.chart.palaces[palaceIdx];
+    
+    const starsInPalace = [
+        ...palace.majorStars, 
+        ...palace.minorStars, 
+        ...palace.miscStars
+    ].map(s => s.name);
+
+    starsInPalace.forEach(starName => {
+        // A. 本命四化
+        this.checkDynamicSiHua(starName, this.params.birthGan, 1, -1, 1, '本命', (w, n) => { score += w; logs.push(n); });
+        // B. 動態四化
+        this.checkDynamicSiHua(starName, this.params.daGan,   2, -2, 1, '大限', (w, n) => { score += w; logs.push(n); });
+        this.checkDynamicSiHua(starName, this.params.nianGan, 3, -3, 2, '流年', (w, n) => { score += w; logs.push(n); });
+        this.checkDynamicSiHua(starName, this.params.flowMonthGan, 4, -4, 3, '流月', (w, n) => { score += w; logs.push(n); });
+        this.checkDynamicSiHua(starName, this.params.flowDayGan,   5, -5, 4, '流日', (w, n) => { score += w; logs.push(n); });
+        // C. 農曆四化
+        this.checkDynamicSiHua(starName, this.params.yueGan, 2, -3, 1, '農曆月', (w, n) => { score += w; logs.push(n); });
+        this.checkDynamicSiHua(starName, this.params.riGan,  2, -3, 1, '農曆日', (w, n) => { score += w; logs.push(n); });
+    });
+
+    if (starsInPalace.includes('火星')) { score -= 6; logs.push('火星(-6)'); }
+    if (starsInPalace.includes('鈴星')) { score -= 2; logs.push('鈴星(-2)'); }
+
+    if (this.isStarHere('祿存', this.params.daGan, palaceIdx)) { score += 3; logs.push('大限祿存(+3)'); }
+    if (this.isStarHere('擎羊', this.params.daGan, palaceIdx)) { score -= 2; logs.push('大限擎羊(-2)'); }
+    if (this.isStarHere('陀羅', this.params.daGan, palaceIdx)) { score -= 2; logs.push('大限陀羅(-2)'); }
+
+    if (this.isStarHere('祿存', this.params.nianGan, palaceIdx)) { score += 4; logs.push('流年祿存(+4)'); }
+    if (this.isStarHere('擎羊', this.params.nianGan, palaceIdx)) { score -= 1; logs.push('流年擎羊(-1)'); }
+    if (this.isStarHere('陀羅', this.params.nianGan, palaceIdx)) { score -= 1; logs.push('流年陀羅(-1)'); }
+    
+    // 本命祿存羊陀
+    if (starsInPalace.includes('祿存')) { score += 2; logs.push('本命祿存(+2)'); }
+    if (starsInPalace.includes('擎羊')) { score -= 3; logs.push('本命擎羊(-3)'); }
+    if (starsInPalace.includes('陀羅')) { score -= 3; logs.push('本命陀羅(-3)'); }
+
+    return { score, logs };
+  }
+
+  private checkDynamicSiHua(
+      starName: string, ganIdx: number, 
+      luWeight: number, jiWeight: number, quanWeight: number,
+      layer: string, 
+      apply: (w: number, log: string) => void
+  ) {
+     if (ganIdx === undefined || ganIdx === null) return;
+     const ganChar = TIAN_GAN[ganIdx];
+     const map = SI_HUA_MAP[ganChar];
+     if (!map) return;
+     
+     if (map[0] === starName) apply(luWeight, `${starName}${layer}祿(+${luWeight})`);
+     if (map[1] === starName) apply(quanWeight, `${starName}${layer}權(+${quanWeight})`);
+     if (map[3] === starName) apply(jiWeight, `${starName}${layer}忌(${jiWeight})`);
+  }
+
+  private isStarHere(starType: '祿存'|'擎羊'|'陀羅', ganIdx: number, targetPalaceIdx: number): boolean {
+     if (ganIdx === undefined || ganIdx === null) return false;
+     const ganChar = TIAN_GAN[ganIdx];
+     const luIndex = LU_YANG_TUO_MAP[ganChar];
+     if (luIndex === undefined) return false;
+
+     let actualIndex = -1;
+     if (starType === '祿存') actualIndex = luIndex;
+     if (starType === '擎羊') actualIndex = (luIndex + 1) % 12;
+     if (starType === '陀羅') actualIndex = (luIndex + 11) % 12;
+
+     return actualIndex === targetPalaceIdx;
+  }
+}
+
+const calcTimeParameters = (chart: ChartData, date: Date) => {
+    const solar = Solar.fromYmd(date.getFullYear(), date.getMonth() + 1, date.getDate());
+    const lunar = solar.getLunar();
+    const lunarYear = LunarYear.fromYear(lunar.getYear()); // [修正點]：加入 LunarYear 物件實例化
+    
+    const lunarStr = `${lunar.getYear()}年 ${Math.abs(lunar.getMonth())}月 ${lunar.getDay()}日`;
+
+    const nianGan = lunar.getYearGanIndex();
+    const yueGan = lunar.getMonthGanIndex(); 
+    const riGan = lunar.getDayGanIndex();     
+
+    const age = lunar.getYear() - chart.lunarYear + 1;
+    const daXianPalace = chart.palaces.find(p => {
+        const [start, end] = p.ages;
+        return age >= start && age <= end;
+    });
+    const daGan = daXianPalace ? daXianPalace.ganIndex : 0;
+
+    const yearZhi = lunar.getYearZhiIndex(); 
+    const flowMonthAnchor = (yearZhi + 2) % 12;
+
+    const month = Math.abs(lunar.getMonth());
+    // [修正點]：改用 lunarYear.getLeapMonth()
+    const leapMonth = lunarYear.getLeapMonth();
+    
+    let monthSteps = month - 1; 
+    if (leapMonth > 0) {
+        if (month > leapMonth) { monthSteps += 1; } 
+        else if (lunar.getMonth() < 0) { monthSteps += 1; }
+    }
+    
+    const flowMonthIdx = (flowMonthAnchor + monthSteps) % 12;
+    const day = lunar.getDay();
+    const flowDayIdx = (flowMonthIdx + (day - 1)) % 12;
+
+    return { 
+        nianGan, yueGan, riGan, daGan, 
+        flowYearZhi: yearZhi,
+        flowMonthAnchor,
+        flowDayIdx, 
+        flowMonthIdx, 
+        lunarStr 
+    };
 };
 
-// 4. 文案產生器
 const getWeather = (score: number): 'sunny' | 'cloudy' | 'rainy' => {
-    if (score >= 75) return 'sunny';
-    if (score >= 50) return 'cloudy';
+    if (score >= 80) return 'sunny';
+    if (score >= 60) return 'cloudy';
     return 'rainy';
 };
 
-const getSummary = (score: number, palace: Palace): string => {
-    if (score >= 80) return "氣勢如虹，適合大膽進取！";
-    if (score >= 60) return "運勢平穩，按部就班即可。";
-    if (score >= 40) return "稍有波折，建議保守行事。";
-    return "諸事不宜，今日宜低調沉潛。";
+const getSummary = (score: number): string => {
+    if (score >= 85) return "運勢旺盛，大展宏圖";
+    if (score >= 70) return "穩健順利，漸入佳境";
+    if (score >= 50) return "平平淡淡，保守為宜";
+    return "波動較大，謹言慎行";
 };
 
 const getAdvice = (type: string, score: number): string => {
-    if (type === 'money') {
-        return score > 60 ? "財星高照，適合投資或談判。" : "財運波動，小心衝動消費或遺失錢財。";
-    }
-    if (type === 'love') {
-        return score > 60 ? "桃花運旺，適合約會或告白。" : "感情易生口角，少說兩句為妙。";
-    }
-    if (type === 'travel') {
-        return score > 60 ? "外出順利，可遇貴人。" : "交通需留心，行車走路請放慢速度。";
-    }
-    return "";
+    if (score > 80) return "吉星拱照，強力出擊！";
+    if (score > 60) return "運勢平穩，按部就班。";
+    if (score > 40) return "稍有阻礙，多加留意。";
+    return "煞星干擾，避開風險。";
 };

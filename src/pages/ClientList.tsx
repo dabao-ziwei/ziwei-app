@@ -1,18 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, UserCog, LogOut, User, Sparkles, Network } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, UserCog, LogOut, User, Sparkles, Network, ArrowLeft } from 'lucide-react';
 import { loadClients, deleteClient, getMyProfile, getUsedChartCount, type Client, type UserProfile } from '../db';
 import { supabase } from '../supabase';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ZHI } from '../logic/constants';
 import { UserManagementModal } from '../components/UserManagementModal'; 
 import { DivinationSetupModal } from '../components/DivinationSetupModal';
 import { RelationshipModal } from '../components/RelationshipModal';
 import { AddChartModal } from '../components/AddChartModal'; 
-
-// --- 新增引入: AI 運勢相關 ---
-import { ZiWeiEngine } from '../logic/engine';
-import { calculateDailyFortune, type DailyFortune } from '../logic/fortune';
-import { FortuneWidget } from '../components/FortuneWidget';
 
 const CATEGORIES = ["我", "家人", "朋友", "客戶", "名人", "其他"];
 const STORAGE_KEY_CATS = 'ziwei_expanded_cats';
@@ -53,13 +48,10 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false); 
   const [isDivinationModalOpen, setIsDivinationModalOpen] = useState(false);
   
-  // --- 新增 State: 運勢資料 ---
-  const [dailyFortune, setDailyFortune] = useState<DailyFortune | null>(null);
-  const [meClient, setMeClient] = useState<Client | null>(null);
-  
   const [relationClient, setRelationClient] = useState<Client | null>(null);
 
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_CATS, JSON.stringify(expandedCats));
@@ -82,34 +74,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         if (profile) {
             const count = await getUsedChartCount(profile.id);
             setUsedCount(count);
-
-            // --- 新增: 尋找「我」的命盤並計算運勢 ---
-            // 條件：是我的命盤 (user_id吻合) 且 類別為 '我'
-            const myChart = loadedClients.find(c => c.user_id === profile.id && c.type === '我');
-            
-            if (myChart) {
-                setMeClient(myChart);
-                try {
-                    // 初始化引擎
-                    const engine = new ZiWeiEngine(
-                        myChart.birthYear,
-                        myChart.birthMonth,
-                        myChart.birthDay,
-                        myChart.birthHour,
-                        myChart.birthMinute,
-                        myChart.gender
-                    );
-                    // 計算運勢
-                    const fortune = calculateDailyFortune(engine);
-                    setDailyFortune(fortune);
-                } catch (err) {
-                    console.error("AI Fortune Error:", err);
-                }
-            } else {
-                // 如果找不到我的命盤，清空運勢 (避免切換帳號時殘留)
-                setMeClient(null);
-                setDailyFortune(null);
-            }
         }
     } catch (e) {
         console.error("Debug: Load Error", e);
@@ -132,6 +96,15 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  // 接收從 Dashboard 傳來的快速占卜指令
+  useEffect(() => {
+      if (location.state && (location.state as any).openDivination) {
+          setIsDivinationModalOpen(true);
+          // 清除 state 避免重新整理又跳出來
+          window.history.replaceState({}, document.title);
+      }
+  }, [location]);
 
   const getTimeDisplay = (hour?: number, minute?: number) => {
     if (hour === undefined || minute === undefined) return '--:--';
@@ -213,44 +186,13 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
       <header className="flex justify-between px-6 py-4 bg-white border-b border-slate-100 shrink-0 items-center relative z-20">
         <div className="flex items-center gap-4">
           
-          <div className="relative">
-            <button 
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="w-10 h-10 bg-blue-600 hover:bg-blue-700 transition-colors rounded-xl flex items-center justify-center text-white shadow-blue-200 shadow-md"
-            >
-                <Menu size={20} />
-            </button>
-
-            {isMenuOpen && (
-                <div className="absolute top-12 left-0 w-52 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
-                    {userProfile?.can_use_divination && (
-                        <button 
-                            onClick={() => { setIsDivinationModalOpen(true); setIsMenuOpen(false); }} 
-                            className="w-full text-left px-4 py-3 hover:bg-purple-50 flex items-center gap-2 text-purple-700 font-bold border-b border-gray-50"
-                        >
-                            <Sparkles size={18} /> 紫微占卜
-                        </button>
-                    )}
-
-                    {userProfile?.role === 'admin' && (
-                        <button 
-                            onClick={() => { setIsUserMgmtOpen(true); setIsMenuOpen(false); }}
-                            className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-2 text-gray-700 font-medium"
-                        >
-                            <UserCog size={16} /> 使用者管理
-                        </button>
-                    )}
-                    
-                    <button 
-                        onClick={() => supabase.auth.signOut()}
-                        className="w-full text-left px-4 py-3 hover:bg-red-50 flex items-center gap-2 text-red-600 font-medium border-t border-gray-100"
-                    >
-                        <LogOut size={16} /> 登出系統
-                    </button>
-                </div>
-            )}
-            {isMenuOpen && <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)}></div>}
-          </div>
+          {/* 回到首頁按鈕 */}
+          <button 
+             onClick={() => navigate('/')}
+             className="w-10 h-10 bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors rounded-xl flex items-center justify-center mr-2"
+          >
+             <ArrowLeft size={20} />
+          </button>
 
           <div>
             <h1 className="text-xl font-bold text-slate-800 tracking-tight">命盤列表</h1>
@@ -263,7 +205,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
             {/* 權限控制：只看我的 */}
             {isSuperAdmin && (
                 <div 
-                    className="hidden sm:flex items-center gap-2 cursor-pointer select-none bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-100 hover:bg-gray-200 transition-colors"
+                    className="hidden sm:flex items-center gap-2 cursor-pointer select-none bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-200 transition-colors"
                     onClick={() => setShowOnlyMine(!showOnlyMine)}
                     title="切換顯示模式"
                 >
@@ -296,8 +238,9 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         </div>
       </header>
 
-      <div className="p-4 bg-white/50 backdrop-blur-sm border-b border-slate-100 shrink-0 sticky top-0 z-10">
-        <div className="relative max-w-2xl mx-auto">
+      {/* 搜尋與 Menu 按鈕 */}
+      <div className="p-4 bg-white/50 backdrop-blur-sm border-b border-slate-100 shrink-0 sticky top-0 z-10 flex gap-2">
+        <div className="relative flex-1">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
           <input 
             type="text" 
@@ -307,21 +250,45 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
             onChange={e=>setSearchTerm(e.target.value)} 
           />
         </div>
+         <div className="relative">
+            <button 
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                className="w-12 h-full bg-white border border-slate-200 hover:bg-slate-50 transition-colors rounded-xl flex items-center justify-center text-slate-600 shadow-sm"
+            >
+                <Menu size={20} />
+            </button>
+            {isMenuOpen && (
+                <div className="absolute top-14 right-0 w-52 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
+                    {userProfile?.can_use_divination && (
+                        <button 
+                            onClick={() => { setIsDivinationModalOpen(true); setIsMenuOpen(false); }} 
+                            className="w-full text-left px-4 py-3 hover:bg-purple-50 flex items-center gap-2 text-purple-700 font-bold border-b border-gray-50"
+                        >
+                            <Sparkles size={18} /> 紫微占卜
+                        </button>
+                    )}
+                    {userProfile?.role === 'admin' && (
+                        <button 
+                            onClick={() => { setIsUserMgmtOpen(true); setIsMenuOpen(false); }}
+                            className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-2 text-gray-700 font-medium"
+                        >
+                            <UserCog size={16} /> 使用者管理
+                        </button>
+                    )}
+                      <button 
+                        onClick={() => supabase.auth.signOut()}
+                        className="w-full text-left px-4 py-3 hover:bg-red-50 flex items-center gap-2 text-red-600 font-medium border-t border-gray-100"
+                    >
+                        <LogOut size={16} /> 登出系統
+                    </button>
+                </div>
+            )}
+            {isMenuOpen && <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)}></div>}
+          </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         
-        {/* --- 新增: AI 運勢溫度計 (如果已載入運勢與我的命盤) --- */}
-        {dailyFortune && meClient && (
-            <div className="mb-4 animate-in slide-in-from-top-4 duration-500">
-                <FortuneWidget 
-                    fortune={dailyFortune} 
-                    userProfile={userProfile} 
-                    clientName={meClient.name}
-                />
-            </div>
-        )}
-
         {loading ? (
           <div className="flex justify-center py-10 text-slate-400 animate-pulse">載入中...</div>
         ) : (
@@ -480,9 +447,9 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
           />
       )}
       
-      {/* 補上 AddChartModal */}
+      {/* AddChartModal */}
       <AddChartModal 
-        isOpen={false} // ClientList 本身不直接控制開啟狀態，這裡只是為了滿足 import，實際開啟邏輯在 onAdd
+        isOpen={false} 
         onClose={() => {}}
         onSave={async () => {}}
       />
