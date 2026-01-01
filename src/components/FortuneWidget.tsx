@@ -29,7 +29,6 @@ export const FortuneWidget: React.FC<Props> = ({ fortune: todayFortune, userProf
   const weeklyData = useMemo(() => {
       if (!client) return [];
       try {
-          // 重新建立 Engine 以確保計算基礎正確
           const engine = new ZiWeiEngine(client.birthYear, client.birthMonth, client.birthDay, client.birthHour, client.birthMinute, client.gender);
           const data = [];
           for(let i = 0; i < 7; i++) {
@@ -78,7 +77,7 @@ export const FortuneWidget: React.FC<Props> = ({ fortune: todayFortune, userProf
                         onClick={() => setActiveTab('radar')}
                         className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'radar' ? 'bg-cyan-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
                       >
-                          <Radar size={14} /> 今日戰略
+                          <Radar size={14} /> 今日運勢
                       </button>
                       <button 
                         onClick={() => setActiveTab('trend')}
@@ -127,7 +126,7 @@ export const FortuneWidget: React.FC<Props> = ({ fortune: todayFortune, userProf
           <div className="bg-[#0B1120] p-5 flex flex-col h-full overflow-y-auto scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent border-l border-slate-800/50">
               <div className="flex items-center gap-2 mb-5 pb-3 border-b border-slate-800/50 sticky top-0 bg-[#0B1120] z-10">
                   <Cpu size={18} className="text-cyan-500 animate-pulse" />
-                  <h3 className="text-sm font-bold text-slate-200 tracking-wide">今日戰略分析</h3>
+                  <h3 className="text-sm font-bold text-slate-200 tracking-wide">今日運勢分析</h3>
                   {!isVip && (
                       <span className="ml-auto text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700">
                           PREVIEW

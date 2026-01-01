@@ -14,7 +14,7 @@ interface Props {
 export const TechLineChart: React.FC<Props> = ({ data }) => {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
-  // 防呆：如果沒有數據，不渲染任何東西，避免 SVG 報錯
+  // 1. 基礎防呆
   if (!data || data.length === 0) {
       return (
         <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs font-mono animate-pulse">
@@ -27,34 +27,31 @@ export const TechLineChart: React.FC<Props> = ({ data }) => {
   const height = 250;
   const padding = 20;
   
-  // 計算座標 (含 NaN 防呆)
+  // 2. 座標計算
   const getX = (index: number) => {
       const count = data.length > 1 ? data.length - 1 : 1;
       return padding + (index / count) * (width - 2 * padding);
   };
   
   const getY = (value: number) => {
-      // 確保數值有效
+      // 確保數值有效，避免 NaN 炸掉 SVG
       const safeVal = isNaN(value) ? 0 : value;
       return height - padding - (safeVal / 100) * (height - 2 * padding);
   };
 
-  // 產生路徑點陣列 (確保都是有效字串)
+  // 3. 產生路徑點
   const points = data.map((d, i) => {
       const x = getX(i);
       const y = getY(d.value);
       return `${x},${y}`;
   });
 
-  // 構建 SVG Path 字串 (關鍵修正：確保 M 指令存在)
+  // 4. 構建 SVG Path (確保 M 指令)
   const linePathStr = `M ${points.join(' L ')}`;
-  
-  // 區域填充路徑 (封閉底部)
   const areaPathStr = `${linePathStr} L ${getX(data.length - 1)},${height} L ${getX(0)},${height} Z`;
 
   return (
     <div className="w-full h-full flex flex-col items-center justify-center relative select-none">
-      
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible z-10">
         <defs>
           <linearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="0">
@@ -120,7 +117,6 @@ export const TechLineChart: React.FC<Props> = ({ data }) => {
                    onMouseLeave={() => setHoverIndex(null)}
                    className="cursor-crosshair"
                 >
-                    {/* 透明感應區 */}
                     <rect x={x - 20} y={0} width={40} height={height} fill="transparent" />
 
                     <AnimatePresence>
@@ -136,14 +132,15 @@ export const TechLineChart: React.FC<Props> = ({ data }) => {
                     </AnimatePresence>
 
                     <motion.circle
-                        cx={x} cy={y} r={isHover ? 6 : 4}
+                        cx={x} cy={y} 
+                        r={isHover ? 6 : 4} 
                         fill={isHover ? "#fff" : "#0e7490"}
                         stroke="#22d3ee" strokeWidth="2"
                         animate={{ scale: isHover ? 1.2 : 1 }}
                         transition={{ type: "spring" }}
                     />
 
-                    <text x={x} y={height} fill={isHover ? "#22d3ee" : "#64748b"} fontSize="10" textAnchor="middle" fontWeight="bold">
+                    <text x={x} y={height + 15} fill={isHover ? "#22d3ee" : "#64748b"} fontSize="10" textAnchor="middle" fontWeight="bold">
                         {d.label}
                     </text>
                 </g>
