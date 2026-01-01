@@ -18,7 +18,7 @@ export const TechLineChart: React.FC<Props> = ({ data }) => {
   if (!data || data.length === 0) {
       return (
         <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs font-mono animate-pulse">
-            Waiting for signal...
+            ANALYZING DATA...
         </div>
       );
   }

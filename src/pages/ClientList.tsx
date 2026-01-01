@@ -9,6 +9,11 @@ import { DivinationSetupModal } from '../components/DivinationSetupModal';
 import { RelationshipModal } from '../components/RelationshipModal';
 import { AddChartModal } from '../components/AddChartModal'; 
 
+// --- 新增引入: AI 運勢相關 ---
+import { ZiWeiEngine } from '../logic/engine';
+import { calculateDailyFortune, type DailyFortune } from '../logic/fortune';
+import { FortuneWidget } from '../components/FortuneWidget';
+
 const CATEGORIES = ["我", "家人", "朋友", "客戶", "名人", "其他"];
 const STORAGE_KEY_CATS = 'ziwei_expanded_cats';
 const STORAGE_KEY_FILTER = 'ziwei_filter_only_mine';
@@ -48,6 +53,10 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false); 
   const [isDivinationModalOpen, setIsDivinationModalOpen] = useState(false);
   
+  // --- 新增 State: 運勢資料 ---
+  const [dailyFortune, setDailyFortune] = useState<DailyFortune | null>(null);
+  const [meClient, setMeClient] = useState<Client | null>(null);
+  
   const [relationClient, setRelationClient] = useState<Client | null>(null);
 
   const navigate = useNavigate();
@@ -65,7 +74,8 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     setLoading(true);
     try {
         const data = await loadClients(); 
-        setClients(Array.isArray(data) ? data : []);
+        const loadedClients = Array.isArray(data) ? data : [];
+        setClients(loadedClients);
 
         const profile = await getMyProfile();
         setUserProfile(profile);
@@ -73,6 +83,34 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         if (profile) {
             const count = await getUsedChartCount(profile.id);
             setUsedCount(count);
+
+            // --- 尋找「我」的命盤並計算運勢 ---
+            // 條件：是我的命盤 (user_id吻合) 且 類別為 '我'
+            const myChart = loadedClients.find(c => c.user_id === profile.id && c.type === '我');
+            
+            if (myChart) {
+                setMeClient(myChart);
+                try {
+                    // 初始化引擎
+                    const engine = new ZiWeiEngine(
+                        myChart.birthYear,
+                        myChart.birthMonth,
+                        myChart.birthDay,
+                        myChart.birthHour,
+                        myChart.birthMinute,
+                        myChart.gender
+                    );
+                    // 計算運勢 (預設今日)
+                    const fortune = calculateDailyFortune(engine);
+                    setDailyFortune(fortune);
+                } catch (err) {
+                    console.error("AI Fortune Error:", err);
+                }
+            } else {
+                // 如果找不到我的命盤，清空運勢
+                setMeClient(null);
+                setDailyFortune(null);
+            }
         }
     } catch (e) {
         console.error("Debug: Load Error", e);
@@ -237,7 +275,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         </div>
       </header>
 
-      {/* 搜尋與 Menu 按鈕 (Menu現在只為了方便快速操作，但主要入口在 Dashboard) */}
+      {/* 搜尋與 Menu 按鈕 */}
       <div className="p-4 bg-white/50 backdrop-blur-sm border-b border-slate-100 shrink-0 sticky top-0 z-10 flex gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
@@ -287,6 +325,19 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        
+        {/* --- 運勢儀表板 (重點修正：傳入 client={meClient}) --- */}
+        {dailyFortune && meClient && (
+            <div className="mb-4 animate-in slide-in-from-top-4 duration-500">
+                <FortuneWidget 
+                    fortune={dailyFortune} 
+                    userProfile={userProfile} 
+                    client={meClient} // [FIXED] 傳入完整的 client 物件
+                    clientName={meClient.name}
+                />
+            </div>
+        )}
+
         {loading ? (
           <div className="flex justify-center py-10 text-slate-400 animate-pulse">載入中...</div>
         ) : (
@@ -445,9 +496,9 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
           />
       )}
       
-      {/* 補上 AddChartModal */}
+      {/* AddChartModal */}
       <AddChartModal 
-        isOpen={false} // ClientList 本身不直接控制開啟狀態，這裡只是為了滿足 import，實際開啟邏輯在 onAdd
+        isOpen={false} 
         onClose={() => {}}
         onSave={async () => {}}
       />

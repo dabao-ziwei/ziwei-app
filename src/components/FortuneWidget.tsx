@@ -1,5 +1,5 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { Sun, Cloud, CloudRain, Lock, Sparkles, Cpu, Wallet, Heart, Users, Plane, Star, Zap, Activity, Radar, Calendar } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Sun, Cloud, CloudRain, Lock, Sparkles, Cpu, Wallet, Heart, Users, Plane, Star, Zap, Activity, Radar, Calendar, Bug } from 'lucide-react';
 import { calculateDailyFortune, type DailyFortune } from '../logic/fortune';
 import type { UserProfile, Client } from '../db';
 import { TechRadarChart } from './TechRadarChart';
@@ -15,7 +15,9 @@ interface Props {
 
 export const FortuneWidget: React.FC<Props> = ({ fortune: todayFortune, userProfile, client, clientName }) => {
   const [activeTab, setActiveTab] = useState<'radar' | 'trend'>('radar');
+  const [showDebug, setShowDebug] = useState(true); // 預設開啟 Debug
 
+  // 判斷 VIP
   const isVip = useMemo(() => {
     if (!userProfile) return false;
     if (userProfile.role === 'admin') return true;
@@ -26,13 +28,26 @@ export const FortuneWidget: React.FC<Props> = ({ fortune: todayFortune, userProf
     return false;
   }, [userProfile]);
 
+  // 計算未來一週運勢
   const weeklyData = useMemo(() => {
+      // DEBUG: 檢查 client 是否存在
+      console.log("[FortuneWidget Debug] Client prop:", client);
+
       if (!client) {
-          console.warn("FortuneWidget: Client is missing, skipping weekly calc.");
+          console.warn("[FortuneWidget Debug] Client is missing! Cannot calc.");
           return [];
       }
       try {
-          const engine = new ZiWeiEngine(client.birthYear, client.birthMonth, client.birthDay, client.birthHour, client.birthMinute, client.gender);
+          // 重新建立 Engine
+          const engine = new ZiWeiEngine(
+              client.birthYear, 
+              client.birthMonth, 
+              client.birthDay, 
+              client.birthHour, 
+              client.birthMinute, 
+              client.gender
+          );
+          
           const data = [];
           for(let i = 0; i < 7; i++) {
               const d = new Date();
@@ -44,10 +59,10 @@ export const FortuneWidget: React.FC<Props> = ({ fortune: todayFortune, userProf
                   dateStr: `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`
               });
           }
-          // console.log("Weekly Data Generated:", data); // 用於除錯
+          console.log("[FortuneWidget Debug] Calculated Data:", data);
           return data;
       } catch (e) {
-          console.error("Weekly calc error", e);
+          console.error("[FortuneWidget Debug] Error:", e);
           return [];
       }
   }, [client]);
@@ -69,6 +84,51 @@ export const FortuneWidget: React.FC<Props> = ({ fortune: todayFortune, userProf
   return (
     <div className="w-full bg-[#0B1120] rounded-2xl border border-slate-800 shadow-2xl overflow-hidden relative group">
       
+      {/* ================= DEBUG OVERLAY (除錯視窗) ================= */}
+      {showDebug && (
+        <div className="absolute inset-0 z-50 bg-black/90 text-green-400 p-4 font-mono text-xs overflow-auto opacity-95">
+            <div className="flex justify-between items-center border-b border-green-800 pb-2 mb-2">
+                <h3 className="font-bold text-lg flex items-center gap-2"><Bug/> 數據透視模式</h3>
+                <button onClick={() => setShowDebug(false)} className="bg-red-900 text-white px-2 py-1 rounded">關閉並查看圖表</button>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <h4 className="text-white bg-slate-800 p-1 mb-1">輸入參數 (Client Prop)</h4>
+                    <pre className="whitespace-pre-wrap break-all">
+                        {client ? JSON.stringify(client, null, 2) : "❌ CRITICAL: Client is NULL or UNDEFINED"}
+                    </pre>
+                </div>
+                <div>
+                    <h4 className="text-white bg-slate-800 p-1 mb-1">運算結果 (Weekly Data)</h4>
+                    {weeklyData.length > 0 ? (
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b border-green-800 text-slate-400">
+                                    <th>日期</th>
+                                    <th>分數</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {weeklyData.map((d, i) => (
+                                    <tr key={i} className="border-b border-green-900/30">
+                                        <td className="py-1">{d.dateStr}</td>
+                                        <td className={`py-1 font-bold ${d.value > 60 ? 'text-green-400' : 'text-yellow-400'}`}>{d.value}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    ) : (
+                        <div className="text-red-500 font-bold border border-red-500 p-2">
+                            ⚠️ 無運算結果 (Data is Empty)
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+      )}
+      {/* ========================================================== */}
+
       <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-cyan-500 to-transparent opacity-80 shadow-[0_0_15px_#22d3ee]" />
 
       <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] min-h-[480px]">
@@ -120,7 +180,12 @@ export const FortuneWidget: React.FC<Props> = ({ fortune: todayFortune, userProf
                               <span className="text-xs font-bold text-purple-200 tracking-wider">WEEKLY PREDICTION</span>
                           </div>
                           <div className="h-[250px] w-full px-2">
-                              <TechLineChart data={weeklyData} />
+                              {/* 這裡先不渲染 TechLineChart，避免報錯干擾 Debug */}
+                              {weeklyData.length > 0 ? (
+                                <TechLineChart data={weeklyData} />
+                              ) : (
+                                <div className="text-slate-500 text-center text-xs">NO DATA AVAILABLE</div>
+                              )}
                           </div>
                       </div>
                   )}
