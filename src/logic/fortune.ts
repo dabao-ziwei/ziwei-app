@@ -4,7 +4,7 @@ import { Solar, LunarYear } from 'lunar-typescript';
 
 // 定義五大維度
 export interface DailyFortune {
-  score: number;       // 總分 (加權平均)
+  score: number;       // 總分 (加權平均，保留一位小數)
   weather: 'sunny' | 'cloudy' | 'rainy';
   summary: string;
   
@@ -52,7 +52,7 @@ const SI_HUA_MAP: Record<string, string[]> = {
   '丁': ['太陰', '天同', '天機', '巨門'],
   '戊': ['貪狼', '太陰', '右弼', '天機'],
   '己': ['武曲', '貪狼', '天梁', '文曲'],
-  '庚': ['太陽', '武曲', '天同', '天相'], // 庚干: 陽武同相
+  '庚': ['太陽', '武曲', '天同', '天相'], 
   '辛': ['巨門', '太陽', '文曲', '文昌'],
   '壬': ['天梁', '紫微', '左輔', '武曲'],
   '癸': ['破軍', '巨門', '太陰', '貪狼'],
@@ -120,7 +120,9 @@ export const calculateDailyFortune = (engine: ZiWeiEngine, date?: Date): DailyFo
     wealth: results.wealth.finalScore,
   };
 
-  const avg = Math.round((scores.self + scores.social + scores.love + scores.travel + scores.wealth) / 5);
+  // 總分平均 (保留一位小數)
+  const rawAvg = (scores.self + scores.social + scores.love + scores.travel + scores.wealth) / 5;
+  const avg = Math.round(rawAvg * 10) / 10;
 
   return {
     score: avg,
@@ -171,7 +173,8 @@ const calcCategoryScore = (scanner: StarScanner, targets: [number, string][]) =>
         logs.unshift(`平運 (60)`);
     }
     
-    return { finalScore: final, logs };
+    // 單項分數保持整數 (四捨五入)，僅總分取小數
+    return { finalScore: Math.round(final), logs };
 };
 
 // --- 核心：星曜掃描與計分器 ---
@@ -261,7 +264,7 @@ class StarScanner {
 const calcTimeParameters = (chart: ChartData, date: Date) => {
     const solar = Solar.fromYmd(date.getFullYear(), date.getMonth() + 1, date.getDate());
     const lunar = solar.getLunar();
-    const lunarYear = LunarYear.fromYear(lunar.getYear()); // [修正點]：加入 LunarYear 物件實例化
+    const lunarYear = LunarYear.fromYear(lunar.getYear());
     
     const lunarStr = `${lunar.getYear()}年 ${Math.abs(lunar.getMonth())}月 ${lunar.getDay()}日`;
 
@@ -280,7 +283,6 @@ const calcTimeParameters = (chart: ChartData, date: Date) => {
     const flowMonthAnchor = (yearZhi + 2) % 12;
 
     const month = Math.abs(lunar.getMonth());
-    // [修正點]：改用 lunarYear.getLeapMonth()
     const leapMonth = lunarYear.getLeapMonth();
     
     let monthSteps = month - 1; 
