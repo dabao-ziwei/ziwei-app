@@ -78,7 +78,7 @@ export const calculateDailyFortune = (engine: ZiWeiEngine): DailyFortune => {
   const chart = engine.getChartData();
   const today = new Date();
   
-  // 1. 計算時空參數 (流年、流月、流日)
+  // 1. 計算時空參數 (修正版：採用流年福德起正月 + 閏月判定)
   const timeParams = calcTimeParameters(chart, today);
   const { flowDayIdx, flowMonthIdx, lunarStr, flowYearZhi, flowMonthAnchor } = timeParams;
 
@@ -89,11 +89,6 @@ export const calculateDailyFortune = (engine: ZiWeiEngine): DailyFortune => {
   const getP = (offset: number) => (flowDayIdx + offset) % 12;
 
   // 格式: [PalaceIndex, PalaceNameForLog]
-  // 自身: 命(0), 遷(6), 官(4), 財(8)
-  // 交友: 僕(5), 兄(11), 父(1), 子(9)
-  // 感情: 夫(10), 官(4), 遷(6), 福(2)
-  // 外出: 子(9), 田(3), 兄(11), 疾(7)
-  // 理財: 財(8), 福(2), 遷(6), 夫(10)
   const targets = {
     self:   [[getP(0), '命宮'], [getP(6), '遷移'], [getP(4), '官祿'], [getP(8), '財帛']],
     social: [[getP(5), '僕役'], [getP(11), '兄弟'], [getP(1), '父母'], [getP(9), '子女']],
@@ -193,6 +188,7 @@ class StarScanner {
     ].map(s => s.name);
 
     // --- 1. 四化掃描 (祿/忌) ---
+    // 針對每一顆星，檢查五層時空
     starsInPalace.forEach(starName => {
         // A. 本命四化 (Chart 資料裡已有)
         const starObj = [...palace.majorStars, ...palace.minorStars].find(s => s.name === starName);
@@ -203,10 +199,16 @@ class StarScanner {
             });
         }
 
-        // B. 動態四化 (大限、流年、流月、流日)
+        // B. 大限四化 (DaGan)
         this.checkDynamicSiHua(starName, this.params.daGan, 1, -1, '大限', (w, n) => { score += w; logs.push(n); });
+        
+        // C. 流年四化 (NianGan)
         this.checkDynamicSiHua(starName, this.params.nianGan, 1, -1, '流年', (w, n) => { score += w; logs.push(n); });
+        
+        // D. 流月四化 (YueGan)
         this.checkDynamicSiHua(starName, this.params.yueGan, 2, -2, '流月', (w, n) => { score += w; logs.push(n); });
+        
+        // E. 流日四化 (RiGan)
         this.checkDynamicSiHua(starName, this.params.riGan, 2, -2, '流日', (w, n) => { score += w; logs.push(n); });
     });
 
@@ -216,6 +218,7 @@ class StarScanner {
     if (starsInPalace.includes('鈴星')) { score -= 1; logs.push('本命鈴星(-1)'); }
 
     // --- 3. 羊陀祿存 (本命、大限、流年) ---
+    // 規則：祿(+1), 羊(-1), 陀(-1). 流年羊(-2).
     
     // A. 本命
     if (starsInPalace.includes('祿存')) { score += 1; logs.push('本命祿存(+1)'); }
