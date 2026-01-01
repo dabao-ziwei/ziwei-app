@@ -86,14 +86,19 @@ export const calculateDailyFortune = (engine: ZiWeiEngine): DailyFortune => {
   const flowMonthGan = chart.palaces[flowMonthIdx].ganIndex;
   const flowDayGan = chart.palaces[flowDayIdx].ganIndex;
 
-  // 3. 建立掃描器 (傳入所有需要的天干參數)
+  // 3. 取得「本命」天干 (用於計算本命四化)
+  // chart.lunarYear 是農曆生年 (如 1979)，換算天干 index: (1979 - 4) % 10 = 5 (己)
+  const birthGan = (chart.lunarYear - 4) % 10;
+
+  // 4. 建立掃描器 (傳入所有需要的天干參數)
   const scanner = new StarScanner(chart, { 
       ...timeParams, 
+      birthGan,     // 加入本命干
       flowMonthGan, 
       flowDayGan 
   });
 
-  // 4. 定義五大維度對應的「流日宮位」 (相對流日命宮的位置)
+  // 5. 定義五大維度對應的「流日宮位」 (相對流日命宮的位置)
   // 命=0, 兄=11, 夫=10, 子=9, 財=8, 疾=7, 遷=6, 僕=5, 官=4, 田=3, 福=2, 父=1
   const getP = (offset: number) => (flowDayIdx + offset + 12) % 12;
 
@@ -115,7 +120,7 @@ export const calculateDailyFortune = (engine: ZiWeiEngine): DailyFortune => {
     wealth: [[getP(2), '福德'], [getP(8), '財帛'], [getP(6), '遷移'], [getP(10), '夫妻']],
   };
 
-  // 5. 計算得分與紀錄算式
+  // 6. 計算得分與紀錄算式
   const results = {
       self: calcCategoryScore(scanner, targets.self as any),
       social: calcCategoryScore(scanner, targets.social as any),
@@ -216,15 +221,8 @@ class StarScanner {
     // 忌: 本(-1), 大(-2), 年(-3), 流月宮(-4), 流日宮(-5), 農曆月(-3), 農曆日(-3)
     
     starsInPalace.forEach(starName => {
-        // A. 本命四化 (讀取預算好的 sihua)
-        const starObj = [...palace.majorStars, ...palace.minorStars].find(s => s.name === starName);
-        if (starObj?.sihua) {
-            starObj.sihua.forEach(sh => {
-                if (sh.type === '祿') { score += 1; logs.push(`${starName}本命祿(+1)`); }
-                if (sh.type === '忌') { score -= 1; logs.push(`${starName}本命忌(-1)`); }
-                if (sh.type === '權') { score += 1; logs.push(`${starName}本命權(+1)`); }
-            });
-        }
+        // A. 本命四化 (修正：直接用 birthGan 算，不依賴 starObj.sihua)
+        this.checkDynamicSiHua(starName, this.params.birthGan, 1, -1, 1, '本命', (w, n) => { score += w; logs.push(n); });
 
         // B. 動態四化 (大限、流年、流月宮、流日宮)
         this.checkDynamicSiHua(starName, this.params.daGan,   2, -2, 1, '大限', (w, n) => { score += w; logs.push(n); });
@@ -262,13 +260,14 @@ class StarScanner {
     return { score, logs };
   }
 
-  // 檢查動態四化
+  // 檢查動態四化 (通用函式)
   private checkDynamicSiHua(
       starName: string, ganIdx: number, 
       luWeight: number, jiWeight: number, quanWeight: number,
       layer: string, 
       apply: (w: number, log: string) => void
   ) {
+     if (ganIdx === undefined || ganIdx === null) return;
      const ganChar = TIAN_GAN[ganIdx];
      const map = SI_HUA_MAP[ganChar];
      if (!map) return;
@@ -282,6 +281,7 @@ class StarScanner {
 
   // 檢查動態羊陀祿
   private isStarHere(starType: '祿存'|'擎羊'|'陀羅', ganIdx: number, targetPalaceIdx: number): boolean {
+     if (ganIdx === undefined || ganIdx === null) return false;
      const ganChar = TIAN_GAN[ganIdx];
      const luIndex = LU_YANG_TUO_MAP[ganChar];
      if (luIndex === undefined) return false;
