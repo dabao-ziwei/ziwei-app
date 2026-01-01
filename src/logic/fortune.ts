@@ -52,7 +52,7 @@ const SI_HUA_MAP: Record<string, string[]> = {
   '丁': ['太陰', '天同', '天機', '巨門'],
   '戊': ['貪狼', '太陰', '右弼', '天機'],
   '己': ['武曲', '貪狼', '天梁', '文曲'],
-  '庚': ['太陽', '武曲', '天同', '天相'], // FIXED: 庚干 陽武同相
+  '庚': ['太陽', '武曲', '天同', '天相'], // 庚干: 陽武同相
   '辛': ['巨門', '太陽', '文曲', '文昌'],
   '壬': ['天梁', '紫微', '左輔', '武曲'],
   '癸': ['破軍', '巨門', '太陰', '貪狼'],
@@ -261,6 +261,7 @@ class StarScanner {
 const calcTimeParameters = (chart: ChartData, date: Date) => {
     const solar = Solar.fromYmd(date.getFullYear(), date.getMonth() + 1, date.getDate());
     const lunar = solar.getLunar();
+    const lunarYear = LunarYear.fromYear(lunar.getYear()); // [修正點]：加入 LunarYear 物件實例化
     
     const lunarStr = `${lunar.getYear()}年 ${Math.abs(lunar.getMonth())}月 ${lunar.getDay()}日`;
 
@@ -279,7 +280,8 @@ const calcTimeParameters = (chart: ChartData, date: Date) => {
     const flowMonthAnchor = (yearZhi + 2) % 12;
 
     const month = Math.abs(lunar.getMonth());
-    const leapMonth = lunar.getLeapMonth();
+    // [修正點]：改用 lunarYear.getLeapMonth()
+    const leapMonth = lunarYear.getLeapMonth();
     
     let monthSteps = month - 1; 
     if (leapMonth > 0) {
