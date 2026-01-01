@@ -1,6 +1,7 @@
 import { ZiWeiEngine } from './engine';
 import type { ChartData, Palace } from './types';
 import { Solar, LunarYear } from 'lunar-typescript';
+import { PALACE_NAMES } from './constants'; // [新增] 引入宮位名稱常數以計算斗君
 
 // 定義五大維度
 export interface DailyFortune {
@@ -73,7 +74,7 @@ export const calculateDailyFortune = (engine: ZiWeiEngine, date?: Date): DailyFo
   const chart = engine.getChartData();
   const targetDate = date || new Date();
   
-  // 1. 計算時空參數
+  // 1. 計算時空參數 (包含修正後的斗君邏輯)
   const timeParams = calcTimeParameters(chart, targetDate);
   const { flowDayIdx, flowMonthIdx, lunarStr, flowYearZhi, flowMonthAnchor } = timeParams;
 
@@ -87,7 +88,7 @@ export const calculateDailyFortune = (engine: ZiWeiEngine, date?: Date): DailyFo
   // 4. 建立掃描器
   const scanner = new StarScanner(chart, { 
       ...timeParams, 
-      birthGan,     
+      birthGan,      
       flowMonthGan, 
       flowDayGan 
   });
@@ -136,7 +137,7 @@ export const calculateDailyFortune = (engine: ZiWeiEngine, date?: Date): DailyFo
     },
     devInfo: {
         lunarDateStr: lunarStr,
-        flowYearZhi: DI_ZHI[flowYearZhi],      
+        flowYearZhi: DI_ZHI[flowYearZhi],       
         flowMonthAnchor: DI_ZHI[flowMonthAnchor], 
         flowMonthZhi: DI_ZHI[flowMonthIdx],
         flowDayZhi: DI_ZHI[flowDayIdx],
@@ -236,41 +237,41 @@ class StarScanner {
       layer: string, 
       apply: (w: number, log: string) => void
   ) {
-     if (ganIdx === undefined || ganIdx === null) return;
-     const ganChar = TIAN_GAN[ganIdx];
-     const map = SI_HUA_MAP[ganChar];
-     if (!map) return;
-     
-     if (map[0] === starName) apply(luWeight, `${starName}${layer}祿(+${luWeight})`);
-     if (map[1] === starName) apply(quanWeight, `${starName}${layer}權(+${quanWeight})`);
-     if (map[3] === starName) apply(jiWeight, `${starName}${layer}忌(${jiWeight})`);
+      if (ganIdx === undefined || ganIdx === null) return;
+      const ganChar = TIAN_GAN[ganIdx];
+      const map = SI_HUA_MAP[ganChar];
+      if (!map) return;
+      
+      if (map[0] === starName) apply(luWeight, `${starName}${layer}祿(+${luWeight})`);
+      if (map[1] === starName) apply(quanWeight, `${starName}${layer}權(+${quanWeight})`);
+      if (map[3] === starName) apply(jiWeight, `${starName}${layer}忌(${jiWeight})`);
   }
 
   private isStarHere(starType: '祿存'|'擎羊'|'陀羅', ganIdx: number, targetPalaceIdx: number): boolean {
-     if (ganIdx === undefined || ganIdx === null) return false;
-     const ganChar = TIAN_GAN[ganIdx];
-     const luIndex = LU_YANG_TUO_MAP[ganChar];
-     if (luIndex === undefined) return false;
+      if (ganIdx === undefined || ganIdx === null) return false;
+      const ganChar = TIAN_GAN[ganIdx];
+      const luIndex = LU_YANG_TUO_MAP[ganChar];
+      if (luIndex === undefined) return false;
 
-     let actualIndex = -1;
-     if (starType === '祿存') actualIndex = luIndex;
-     if (starType === '擎羊') actualIndex = (luIndex + 1) % 12;
-     if (starType === '陀羅') actualIndex = (luIndex + 11) % 12;
+      let actualIndex = -1;
+      if (starType === '祿存') actualIndex = luIndex;
+      if (starType === '擎羊') actualIndex = (luIndex + 1) % 12;
+      if (starType === '陀羅') actualIndex = (luIndex + 11) % 12;
 
-     return actualIndex === targetPalaceIdx;
+      return actualIndex === targetPalaceIdx;
   }
 }
 
 const calcTimeParameters = (chart: ChartData, date: Date) => {
     const solar = Solar.fromYmd(date.getFullYear(), date.getMonth() + 1, date.getDate());
     const lunar = solar.getLunar();
-    const lunarYear = LunarYear.fromYear(lunar.getYear()); // [修正點]：加入 LunarYear 物件實例化
+    const lunarYear = LunarYear.fromYear(lunar.getYear());
     
     const lunarStr = `${lunar.getYear()}年 ${Math.abs(lunar.getMonth())}月 ${lunar.getDay()}日`;
 
     const nianGan = lunar.getYearGanIndex();
     const yueGan = lunar.getMonthGanIndex(); 
-    const riGan = lunar.getDayGanIndex();     
+    const riGan = lunar.getDayGanIndex();      
 
     const age = lunar.getYear() - chart.lunarYear + 1;
     const daXianPalace = chart.palaces.find(p => {
@@ -280,14 +281,32 @@ const calcTimeParameters = (chart: ChartData, date: Date) => {
     const daGan = daXianPalace ? daXianPalace.ganIndex : 0;
 
     const yearZhi = lunar.getYearZhiIndex(); 
-    const flowMonthAnchor = (yearZhi + 2) % 12;
+
+    // --- 修正斗君邏輯 (Flow Month Anchor) ---
+    // 1. 找出本命盤寅宮 (Index 2) 的宮位名稱 (即斗君)
+    // chart.palaces 是固定按地支排列 (0=子, 1=丑, 2=寅...)
+    const douJunPalace = chart.palaces[2]; 
+    const douJunName = douJunPalace.name; // e.g. "福德"
+
+    // 2. 找出該名稱在標準宮位順序中的 Index (0=命宮, 1=兄弟... 逆時針)
+    const nameIdx = PALACE_NAMES.indexOf(douJunName);
+    
+    // 3. 計算該宮位相當於命宮的位移
+    // 公式: offset = (12 - nameIdx) % 12
+    // 例如: 福德(10) -> (12-10)%12 = 2. 代表流月正月在流年命宮順時針+2的位置
+    const offset = (12 - nameIdx) % 12;
+
+    // 4. 計算流年 1 月 (正月) 的位置
+    // 流年命宮在 yearZhi, 加上斗君的偏移量
+    const flowMonthAnchor = (yearZhi + offset) % 12;
+    // ------------------------------------
 
     const month = Math.abs(lunar.getMonth());
-    // [修正點]：改用 lunarYear.getLeapMonth()
     const leapMonth = lunarYear.getLeapMonth();
     
     let monthSteps = month - 1; 
     if (leapMonth > 0) {
+        // 閏月處理：若當前月 > 閏月，或正是閏月(month為負)，則往下順推一格
         if (month > leapMonth) { monthSteps += 1; } 
         else if (lunar.getMonth() < 0) { monthSteps += 1; }
     }
@@ -307,21 +326,21 @@ const calcTimeParameters = (chart: ChartData, date: Date) => {
 };
 
 const getWeather = (score: number): 'sunny' | 'cloudy' | 'rainy' => {
-    if (score >= 80) return 'sunny';
-    if (score >= 60) return 'cloudy';
-    return 'rainy';
+  if (score >= 80) return 'sunny';
+  if (score >= 60) return 'cloudy';
+  return 'rainy';
 };
 
 const getSummary = (score: number): string => {
-    if (score >= 85) return "運勢旺盛，大展宏圖";
-    if (score >= 70) return "穩健順利，漸入佳境";
-    if (score >= 50) return "平平淡淡，保守為宜";
-    return "波動較大，謹言慎行";
+  if (score >= 85) return "運勢旺盛，大展宏圖";
+  if (score >= 70) return "穩健順利，漸入佳境";
+  if (score >= 50) return "平平淡淡，保守為宜";
+  return "波動較大，謹言慎行";
 };
 
 const getAdvice = (type: string, score: number): string => {
-    if (score > 80) return "吉星拱照，強力出擊！";
-    if (score > 60) return "運勢平穩，按部就班。";
-    if (score > 40) return "稍有阻礙，多加留意。";
-    return "煞星干擾，避開風險。";
+  if (score > 80) return "吉星拱照，強力出擊！";
+  if (score > 60) return "運勢平穩，按部就班。";
+  if (score > 40) return "稍有阻礙，多加留意。";
+  return "煞星干擾，避開風險。";
 };
