@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Sun, Cloud, CloudRain, Lock, Sparkles, Cpu, Wallet, Heart, Users, Plane, Star, Zap, Activity, Radar, Calendar } from 'lucide-react';
 import { calculateDailyFortune, type DailyFortune } from '../logic/fortune';
 import type { UserProfile, Client } from '../db';
@@ -27,7 +27,10 @@ export const FortuneWidget: React.FC<Props> = ({ fortune: todayFortune, userProf
   }, [userProfile]);
 
   const weeklyData = useMemo(() => {
-      if (!client) return [];
+      if (!client) {
+          console.warn("FortuneWidget: Client is missing, skipping weekly calc.");
+          return [];
+      }
       try {
           const engine = new ZiWeiEngine(client.birthYear, client.birthMonth, client.birthDay, client.birthHour, client.birthMinute, client.gender);
           const data = [];
@@ -41,6 +44,7 @@ export const FortuneWidget: React.FC<Props> = ({ fortune: todayFortune, userProf
                   dateStr: `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`
               });
           }
+          // console.log("Weekly Data Generated:", data); // 用於除錯
           return data;
       } catch (e) {
           console.error("Weekly calc error", e);
