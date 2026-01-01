@@ -9,11 +9,6 @@ import { DivinationSetupModal } from '../components/DivinationSetupModal';
 import { RelationshipModal } from '../components/RelationshipModal';
 import { AddChartModal } from '../components/AddChartModal'; 
 
-// --- 新增引入: AI 運勢相關 ---
-import { ZiWeiEngine } from '../logic/engine';
-import { calculateDailyFortune, type DailyFortune } from '../logic/fortune';
-import { FortuneWidget } from '../components/FortuneWidget';
-
 const CATEGORIES = ["我", "家人", "朋友", "客戶", "名人", "其他"];
 const STORAGE_KEY_CATS = 'ziwei_expanded_cats';
 const STORAGE_KEY_FILTER = 'ziwei_filter_only_mine';
@@ -53,10 +48,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false); 
   const [isDivinationModalOpen, setIsDivinationModalOpen] = useState(false);
   
-  // --- 新增 State: 運勢資料 ---
-  const [dailyFortune, setDailyFortune] = useState<DailyFortune | null>(null);
-  const [meClient, setMeClient] = useState<Client | null>(null);
-  
   const [relationClient, setRelationClient] = useState<Client | null>(null);
 
   const navigate = useNavigate();
@@ -83,36 +74,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         if (profile) {
             const count = await getUsedChartCount(profile.id);
             setUsedCount(count);
-
-            // --- 尋找「我」的命盤並計算運勢 ---
-            // 條件：是我的命盤 (user_id吻合) 且 類別為 '我'
-            const myChart = loadedClients.find(c => c.user_id === profile.id && c.type === '我');
-            
-            if (myChart) {
-                console.log("Found ME client:", myChart.name); // Debug Log
-                setMeClient(myChart);
-                try {
-                    // 初始化引擎
-                    const engine = new ZiWeiEngine(
-                        myChart.birthYear,
-                        myChart.birthMonth,
-                        myChart.birthDay,
-                        myChart.birthHour,
-                        myChart.birthMinute,
-                        myChart.gender
-                    );
-                    // 計算運勢 (預設今日)
-                    const fortune = calculateDailyFortune(engine);
-                    setDailyFortune(fortune);
-                } catch (err) {
-                    console.error("AI Fortune Error:", err);
-                }
-            } else {
-                console.warn("No 'ME' client found for user:", profile.email); // Debug Log
-                // 如果找不到我的命盤，清空運勢
-                setMeClient(null);
-                setDailyFortune(null);
-            }
         }
     } catch (e) {
         console.error("Debug: Load Error", e);
@@ -314,7 +275,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                             <UserCog size={16} /> 使用者管理
                         </button>
                     )}
-                     <button 
+                      <button 
                         onClick={() => supabase.auth.signOut()}
                         className="w-full text-left px-4 py-3 hover:bg-red-50 flex items-center gap-2 text-red-600 font-medium border-t border-gray-100"
                     >
@@ -328,26 +289,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         
-        {/* --- 關鍵修正點：只有當 dailyFortune 和 meClient 都有值時才渲染 --- */}
-        {dailyFortune && meClient ? (
-            <div className="mb-4 animate-in slide-in-from-top-4 duration-500">
-                <FortuneWidget 
-                    fortune={dailyFortune} 
-                    userProfile={userProfile} 
-                    client={meClient} 
-                    clientName={meClient.name}
-                />
-            </div>
-        ) : (
-            // 如果沒資料，顯示提示區塊 (Optional)
-            !loading && (
-                <div className="mb-4 p-4 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-center gap-2 text-blue-600 text-sm">
-                    <Sparkles size={16} />
-                    <span>請先建立一張類別為「我」的命盤，以啟用運勢儀表板。</span>
-                </div>
-            )
-        )}
-
         {loading ? (
           <div className="flex justify-center py-10 text-slate-400 animate-pulse">載入中...</div>
         ) : (

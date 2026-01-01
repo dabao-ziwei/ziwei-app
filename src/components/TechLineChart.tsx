@@ -14,7 +14,7 @@ interface Props {
 export const TechLineChart: React.FC<Props> = ({ data }) => {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
-  // 1. 強力防呆：如果資料有問題，直接不渲染 SVG
+  // 1. 強力防呆：如果資料有問題，直接不渲染 SVG，但給出可見的提示
   if (!data || data.length === 0) {
       return (
         <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs font-mono animate-pulse">
@@ -98,7 +98,7 @@ export const TechLineChart: React.FC<Props> = ({ data }) => {
           transition={{ duration: 1.5, ease: "easeInOut" }}
         />
 
-        {/* 互動節點 - 修正 r 屬性報錯 */}
+        {/* 互動節點 - 使用普通 Circle + CSS 避免 Framer 初始化錯誤 */}
         {data.map((d, i) => {
             const x = getX(i);
             const y = getY(d.value);
@@ -122,7 +122,7 @@ export const TechLineChart: React.FC<Props> = ({ data }) => {
                         />
                     )}
 
-                    {/* 圓點 - 移除 motion，改用 CSS transition 避免 framer 初始化錯誤 */}
+                    {/* 圓點 */}
                     <circle
                         cx={x} cy={y} 
                         r={isHover ? 6 : 4} 
