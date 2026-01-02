@@ -136,8 +136,8 @@ export const Dashboard: React.FC = () => {
                 {isMenuOpen && <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)}></div>}
             </div>
 
-            {/* [修改] 標題更名為 "運勢預報台" */}
-            <h1 className="text-lg font-bold text-slate-800">運勢預報台</h1>
+            {/* [修改] 標題更名為 "運勢溫度計" */}
+            <h1 className="text-lg font-bold text-slate-800">運勢溫度計</h1>
             
             <div className="w-10"></div> 
         </header>
