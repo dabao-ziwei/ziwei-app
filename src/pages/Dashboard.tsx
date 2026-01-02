@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, ArrowRight, Menu, LogOut, UserCog, Loader2, Save } from 'lucide-react';
+import { Sparkles, ArrowRight, Menu, LogOut, UserCog, Loader2, Save, PlusCircle, X, ChevronRight, Clock, Calendar, HelpCircle, User } from 'lucide-react';
 import { supabase } from '../supabase';
 import { loadClients, saveClient, getMyProfile, type Client, type UserProfile } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
@@ -8,6 +8,304 @@ import { calculateDailyFortune, type DailyFortune } from '../logic/fortune';
 import { FortuneWidget } from '../components/FortuneWidget';
 import { UserManagementModal } from '../components/UserManagementModal';
 import { ZHI } from '../logic/constants';
+
+const SUPER_ADMIN_EMAIL = 'stephenwu.0926@gmail.com';
+
+// --- 新手引導精靈元件 (Wizard) ---
+interface WizardProps {
+    userProfile: UserProfile | null;
+    onComplete: (data: any) => Promise<void>;
+    onCancelTest: () => void;
+    isTestMode: boolean;
+}
+
+const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCancelTest, isTestMode }) => {
+    const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+    const [formData, setFormData] = useState({
+        name: '',
+        gender: '' as '男' | '女' | '',
+        // [修改] 預設年份改為 2000
+        year: 2000,
+        month: 1,
+        day: 1,
+        hour: 0,
+        minute: 0
+    });
+    
+    // 時間輸入模式: 'precise'(精確) | 'zhi'(時辰) | 'unsure'(不確定)
+    const [timeMode, setTimeMode] = useState<'precise' | 'zhi' | 'unsure'>('precise');
+    const [loadingText, setLoadingText] = useState('正在連結星曜數據...');
+
+    // 動畫控制
+    useEffect(() => {
+        if (step === 4) {
+            const sequence = [
+                { t: 0, msg: '正在連結星曜數據...' },
+                { t: 800, msg: '正在推算命宮位置...' },
+                { t: 1600, msg: '正在分析本週運勢能量...' },
+            ];
+            
+            sequence.forEach(({ t, msg }) => {
+                setTimeout(() => setLoadingText(msg), t);
+            });
+
+            // 2.5秒後執行完成
+            setTimeout(() => {
+                onComplete(formData);
+            }, 2500);
+        }
+    }, [step]);
+
+    const handleNext = () => {
+        if (step === 1 && !formData.name) return alert('請輸入您的稱呼');
+        if (step === 2 && !formData.gender) return alert('請選擇性別');
+        setStep(prev => (prev + 1) as any);
+    };
+
+    const handleZhiSelect = (zhiIdx: number) => {
+        // 地支對應的小時 (取中間值，例如子時取 0, 丑時取 2)
+        // 子:0, 丑:2, 寅:4 ...
+        const hour = zhiIdx === 0 ? 0 : zhiIdx * 2; 
+        setFormData({ ...formData, hour, minute: 0 });
+    };
+
+    const handleUnsure = () => {
+        // 不確定時，預設取子時 (0點)
+        setFormData({ ...formData, hour: 0, minute: 0 });
+        setStep(4); // 直接進入運算
+    };
+
+    const handleFinalSubmit = () => {
+        // 防止年份為空或無效時送出
+        if (!formData.year || isNaN(Number(formData.year))) {
+            alert("請輸入有效的出生年份");
+            return;
+        }
+        setStep(4);
+    };
+
+    // --- Render Steps ---
+
+    // Step 1: 歡迎與稱呼
+    if (step === 1) {
+        return (
+            <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 relative">
+                {isTestMode && <button onClick={onCancelTest} className="absolute top-4 right-4 p-1 text-gray-400 hover:text-gray-600"><X size={20}/></button>}
+                <div className="p-8 pt-12 flex flex-col items-center text-center space-y-6">
+                    <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 mb-2">
+                        <Sparkles size={32} />
+                    </div>
+                    <div>
+                        <h1 className="text-2xl font-bold text-slate-800 mb-2">歡迎來到 AI紫微斗數<br/><span className="text-lg font-medium text-slate-500">智能命理分析系統</span></h1>
+                        <p className="text-slate-400 text-sm mt-4">請問我們該怎麼稱呼您？</p>
+                    </div>
+                    <div className="w-full">
+                        <input 
+                            type="text" 
+                            autoFocus
+                            className="w-full text-center text-2xl font-bold border-b-2 border-blue-100 py-2 focus:border-blue-500 outline-none bg-transparent placeholder:text-slate-200 text-slate-700 transition-colors"
+                            placeholder="輸入您的暱稱"
+                            value={formData.name}
+                            onChange={e => setFormData({...formData, name: e.target.value})}
+                            onKeyDown={e => e.key === 'Enter' && handleNext()}
+                        />
+                    </div>
+                    <button onClick={handleNext} disabled={!formData.name} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed mt-4">
+                        下一步 <ArrowRight size={18} />
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // Step 2: 性別選擇
+    if (step === 2) {
+        return (
+            <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-right-8 duration-300 relative">
+                <button onClick={() => setStep(1)} className="absolute top-4 left-4 p-1 text-gray-400 hover:text-gray-600 flex items-center gap-1 text-xs font-bold"><ChevronRight size={14} className="rotate-180"/> 上一步</button>
+                <div className="p-8 pt-12 flex flex-col items-center text-center space-y-6">
+                    <h2 className="text-xl font-bold text-slate-800">請問您的性別？</h2>
+                    
+                    <div className="grid grid-cols-2 gap-4 w-full">
+                        <button 
+                            onClick={() => { setFormData({...formData, gender: '男'}); setTimeout(() => setStep(3), 200); }}
+                            className={`p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-3 group ${formData.gender === '男' ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-slate-100 hover:border-blue-200 hover:bg-slate-50'}`}
+                        >
+                            <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xl font-bold group-hover:scale-110 transition-transform">♂</div>
+                            <span className="font-bold text-slate-700">男性</span>
+                        </button>
+                        <button 
+                            onClick={() => { setFormData({...formData, gender: '女'}); setTimeout(() => setStep(3), 200); }}
+                            className={`p-6 rounded-2xl border-2 transition-all flex flex-col items-center gap-3 group ${formData.gender === '女' ? 'border-pink-500 bg-pink-50 ring-2 ring-pink-200' : 'border-slate-100 hover:border-pink-200 hover:bg-slate-50'}`}
+                        >
+                            <div className="w-12 h-12 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center text-xl font-bold group-hover:scale-110 transition-transform">♀</div>
+                            <span className="font-bold text-slate-700">女性</span>
+                        </button>
+                    </div>
+
+                    <div className="bg-amber-50 border border-amber-100 p-3 rounded-lg text-xs text-amber-700 text-left leading-relaxed flex gap-2">
+                        <Sparkles size={14} className="shrink-0 mt-0.5" />
+                        {/* [修改] 文案更新 */}
+                        紫微斗數中，男女的排盤方式大不相同，這會影響系統分析的運勢走向。
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Step 3: 出生資料 (核心)
+    if (step === 3) {
+        return (
+            <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-right-8 duration-300 relative">
+                <button onClick={() => setStep(2)} className="absolute top-4 left-4 p-1 text-gray-400 hover:text-gray-600 flex items-center gap-1 text-xs font-bold"><ChevronRight size={14} className="rotate-180"/> 上一步</button>
+                
+                <div className="p-6 pt-12 flex flex-col space-y-5">
+                    <div className="text-center">
+                        <h2 className="text-xl font-bold text-slate-800">您的出生時間？</h2>
+                        <p className="text-slate-400 text-xs mt-1">這是排盤最關鍵的資料</p>
+                    </div>
+
+                    {/* 日期選擇 */}
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                        <div className="flex items-center gap-2 mb-2 text-xs font-bold text-slate-500">
+                            <Calendar size={14}/> 出生日期 (西元)
+                        </div>
+                        <div className="flex gap-2">
+                            {/* [修改] 年份輸入框：加入 onFocus 清空預設值邏輯，並允許暫時為空 */}
+                            <input 
+                                type="number" 
+                                className="flex-1 min-w-0 border rounded-lg px-2 py-2 text-center" 
+                                placeholder="年" 
+                                value={formData.year} 
+                                onFocus={(e) => {
+                                    if (formData.year === 2000) {
+                                        setFormData({ ...formData, year: '' as any });
+                                    }
+                                }}
+                                onChange={e => {
+                                    const val = e.target.value;
+                                    setFormData({...formData, year: val === '' ? ('' as any) : parseInt(val)})
+                                }} 
+                            />
+                            <select className="w-20 border rounded-lg px-1 py-2 bg-white text-center" value={formData.month} onChange={e => setFormData({...formData, month: parseInt(e.target.value)})}>
+                                {Array.from({length:12},(_,i)=>i+1).map(m=><option key={m} value={m}>{m}月</option>)}
+                            </select>
+                            <select className="w-20 border rounded-lg px-1 py-2 bg-white text-center" value={formData.day} onChange={e => setFormData({...formData, day: parseInt(e.target.value)})}>
+                                {Array.from({length:31},(_,i)=>i+1).map(d=><option key={d} value={d}>{d}日</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* 時間輸入模式切換 (膠囊) */}
+                    <div className="flex bg-slate-100 p-1 rounded-lg">
+                        <button onClick={() => setTimeMode('precise')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${timeMode === 'precise' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>精確時間</button>
+                        <button onClick={() => setTimeMode('zhi')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${timeMode === 'zhi' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>只知時辰</button>
+                        <button onClick={() => setTimeMode('unsure')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${timeMode === 'unsure' ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>我不確定</button>
+                    </div>
+
+                    {/* 根據模式顯示內容 */}
+                    <div className="min-h-[140px]">
+                        {timeMode === 'precise' && (
+                            <div className="space-y-3 animate-in fade-in zoom-in duration-200">
+                                <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                                    <Clock size={14}/> 輸入時間
+                                </div>
+                                <div className="flex gap-3 items-center justify-center py-4">
+                                    <div className="flex flex-col items-center">
+                                        <select className="w-24 text-lg font-bold border-2 border-blue-100 rounded-xl px-3 py-2 bg-white outline-none focus:border-blue-500" value={formData.hour} onChange={e => setFormData({...formData, hour: parseInt(e.target.value)})}>
+                                            {Array.from({length:24},(_,i)=>i).map(h=><option key={h} value={h}>{h} 點</option>)}
+                                        </select>
+                                    </div>
+                                    <span className="text-xl font-bold text-slate-300">:</span>
+                                    <div className="flex flex-col items-center">
+                                        <input type="number" className="w-24 text-lg font-bold border-2 border-blue-100 rounded-xl px-3 py-2 bg-white outline-none focus:border-blue-500 text-center" placeholder="分" value={formData.minute} onChange={e => setFormData({...formData, minute: parseInt(e.target.value)})} />
+                                    </div>
+                                </div>
+                                <div className="text-center text-xs text-slate-400">
+                                    對應時辰：<span className="font-bold text-blue-600">{ZHI[Math.floor((formData.hour + 1) / 2) % 12]}時</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {timeMode === 'zhi' && (
+                            <div className="animate-in fade-in zoom-in duration-200">
+                                <div className="grid grid-cols-6 gap-2">
+                                    {ZHI.map((z, idx) => {
+                                        // 簡單推算該時辰的一個代表時間 (用於UI顯示)
+                                        const displayHour = idx === 0 ? 0 : idx * 2;
+                                        // 判斷是否選中 (稍微寬鬆，只要在該時辰範圍內)
+                                        const currentZhiIdx = Math.floor((formData.hour + 1) / 2) % 12;
+                                        const isSelected = currentZhiIdx === idx;
+
+                                        return (
+                                            <button 
+                                                key={z} 
+                                                onClick={() => handleZhiSelect(idx)}
+                                                className={`py-2 rounded-lg border transition-all text-sm font-bold flex flex-col items-center justify-center ${isSelected ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'}`}
+                                            >
+                                                <span>{z}</span>
+                                                <span className={`text-[9px] scale-90 ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
+                                                    {idx===0 ? '23-01' : `${(idx*2-1).toString().padStart(2,'0')}-${(idx*2+1).toString().padStart(2,'0')}`}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                <p className="text-[10px] text-center text-slate-400 mt-2">*系統將自動帶入時辰的中間時間進行排盤</p>
+                            </div>
+                        )}
+
+                        {timeMode === 'unsure' && (
+                            <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 text-orange-800 text-sm leading-relaxed animate-in fade-in zoom-in duration-200">
+                                <div className="flex items-start gap-2 mb-2">
+                                    <HelpCircle size={18} className="shrink-0 mt-0.5 text-orange-500" />
+                                    <span className="font-bold">別擔心...</span>
+                                </div>
+                                <p className="mb-2">沒關係，我們先幫您預設一個時間，讓您先體驗運勢的流動。</p>
+                                <p className="opacity-80 text-xs">命盤就像人生的導航，輸入的座標越精準，導航就越準確。等您確認時間後，隨時可以回來校正。</p>
+                            </div>
+                        )}
+                    </div>
+
+                    <button 
+                        onClick={timeMode === 'unsure' ? handleUnsure : handleFinalSubmit}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2 mt-2"
+                    >
+                        <Sparkles size={18} />
+                        {timeMode === 'unsure' ? '先用預設時間體驗' : '開始分析運勢'}
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // Step 4: Loading (儀式感過場)
+    if (step === 4) {
+        return (
+            <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in fade-in duration-500 flex flex-col items-center justify-center py-20 px-8 text-center relative">
+                {/* 背景裝飾 */}
+                <div className="absolute inset-0 bg-gradient-to-b from-blue-50/50 to-transparent pointer-events-none" />
+                
+                <div className="relative mb-8">
+                    <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center animate-pulse">
+                        <Sparkles size={40} className="text-blue-500 animate-spin-slow" />
+                    </div>
+                    <div className="absolute top-0 left-0 w-20 h-20 border-4 border-blue-100 rounded-full border-t-blue-500 animate-spin" />
+                </div>
+
+                <h3 className="text-xl font-bold text-slate-800 mb-2 animate-in slide-in-from-bottom-2 fade-in duration-300 key={loadingText}">
+                    {loadingText}
+                </h3>
+                <p className="text-slate-400 text-sm">正在為您繪製專屬命盤...</p>
+            </div>
+        );
+    }
+
+    return null;
+};
+
+
+// --- 主頁面 Dashboard ---
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -19,16 +317,8 @@ export const Dashboard: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false);
 
-  const [onboardingForm, setOnboardingForm] = useState({
-    name: '',
-    gender: '男' as '男'|'女',
-    year: 1980,
-    month: 1,
-    day: 1,
-    hour: 0,
-    minute: 0
-  });
-  const [isSaving, setIsSaving] = useState(false);
+  // 強制顯示新手引導的開關 (測試用)
+  const [forceOnboarding, setForceOnboarding] = useState(false);
 
   const initDashboard = async () => {
     setLoading(true);
@@ -71,33 +361,28 @@ export const Dashboard: React.FC = () => {
     initDashboard();
   }, []);
 
-  const handleOnboardingSubmit = async () => {
-    if (!onboardingForm.name) {
-        alert("請輸入您的姓名");
-        return;
-    }
-    setIsSaving(true);
+  const handleWizardComplete = async (data: any) => {
     try {
         const newClient = {
             id: crypto.randomUUID(),
-            name: onboardingForm.name,
-            gender: onboardingForm.gender,
+            name: data.name,
+            gender: data.gender,
             type: '我',
-            birthYear: onboardingForm.year,
-            birthMonth: onboardingForm.month,
-            birthDay: onboardingForm.day,
-            birthHour: onboardingForm.hour,
-            birthMinute: onboardingForm.minute,
+            birthYear: Number(data.year), // 確保轉為數字
+            birthMonth: data.month,
+            birthDay: data.day,
+            birthHour: data.hour,
+            birthMinute: data.minute,
             bornCity: '',
             tags: [],
             user_id: userProfile?.id
         };
         await saveClient(newClient);
+        setForceOnboarding(false);
         await initDashboard();
     } catch (e) {
         alert("建立失敗，請重試");
-    } finally {
-        setIsSaving(false);
+        setForceOnboarding(false); // 失敗也先關閉，避免卡死
     }
   };
 
@@ -116,7 +401,7 @@ export const Dashboard: React.FC = () => {
                     <Menu size={20} />
                 </button>
                 {isMenuOpen && (
-                    <div className="absolute top-12 left-0 w-52 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
+                    <div className="absolute top-12 left-0 w-60 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
                         {userProfile?.role === 'admin' && (
                             <button 
                                 onClick={() => { setIsUserMgmtOpen(true); setIsMenuOpen(false); }}
@@ -125,6 +410,20 @@ export const Dashboard: React.FC = () => {
                                 <UserCog size={16} /> 使用者管理
                             </button>
                         )}
+
+                        {/* 針對特定帳號顯示測試入口 */}
+                        {userProfile?.email === SUPER_ADMIN_EMAIL && (
+                            <button 
+                                onClick={() => { 
+                                    setForceOnboarding(true); 
+                                    setIsMenuOpen(false); 
+                                }}
+                                className="w-full text-left px-4 py-3 hover:bg-amber-50 flex items-center gap-2 text-amber-700 font-medium border-t border-gray-100"
+                            >
+                                <PlusCircle size={16} /> [測試] 新手引導流程
+                            </button>
+                        )}
+
                         <button 
                             onClick={() => supabase.auth.signOut()}
                             className="w-full text-left px-4 py-3 hover:bg-red-50 flex items-center gap-2 text-red-600 font-medium border-t border-gray-100"
@@ -136,7 +435,6 @@ export const Dashboard: React.FC = () => {
                 {isMenuOpen && <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)}></div>}
             </div>
 
-            {/* [修改] 標題更名為 "運勢溫度計" */}
             <h1 className="text-lg font-bold text-slate-800">運勢溫度計</h1>
             
             <div className="w-10"></div> 
@@ -146,13 +444,14 @@ export const Dashboard: React.FC = () => {
         <main className="flex-1 w-full overflow-y-auto">
             <div className="max-w-4xl mx-auto p-6 flex flex-col items-center pb-20">
                 
-                {/* 情境 A: 有命盤 -> 顯示儀表板與功能按鈕 */}
-                {meClient ? (
+                {/* 邏輯：有命盤且無強制 -> 顯示儀表板
+                    否則 -> 顯示 Wizard
+                */}
+                {meClient && !forceOnboarding ? (
                     <>
                         {dailyFortune && (
                             <div className="w-full animate-in slide-in-from-top-4 duration-500">
                                 <FortuneWidget 
-                                    fortune={dailyFortune} 
                                     userProfile={userProfile} 
                                     client={meClient} 
                                     clientName={meClient.name}
@@ -160,14 +459,13 @@ export const Dashboard: React.FC = () => {
                             </div>
                         )}
 
-                        {/* 功能按鈕區：[修改] 移除紫占，僅保留進入列表，並置中顯示 */}
+                        {/* 功能按鈕區 */}
                         <div className="w-full mt-6 flex justify-center">
                             <button
                                 onClick={() => navigate('/list')}
                                 className="w-full max-w-md bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 font-bold py-4 rounded-2xl shadow-sm transition-all flex items-center justify-between px-6 group"
                             >
                                 <div className="flex flex-col items-start">
-                                    {/* [修改] 按鈕名稱改為 "進入命盤列表" */}
                                     <span className="text-lg text-slate-800 group-hover:text-blue-700 transition-colors">進入命盤列表</span>
                                     <span className="text-xs text-slate-400 font-normal">查看命盤、管理客戶</span>
                                 </div>
@@ -178,86 +476,14 @@ export const Dashboard: React.FC = () => {
                         </div>
                     </>
                 ) : (
-                    /* 情境 B: 沒命盤 -> 顯示新手引導 */
-                    <div className="w-full max-w-md bg-white rounded-3xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-500 mt-10">
-                        <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-8 text-white text-center">
-                            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
-                                <Sparkles size={32} className="text-yellow-300" />
-                            </div>
-                            <h1 className="text-2xl font-bold mb-2">歡迎來到大寶紫微</h1>
-                            <p className="text-blue-100 text-sm">請輸入您的生辰資料，<br/>讓我們為您解析今日運勢。</p>
-                        </div>
-                        
-                        <div className="p-8 space-y-5">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1">您的姓名 / 暱稱</label>
-                                <input 
-                                    type="text" 
-                                    className="w-full border-b-2 border-slate-200 focus:border-blue-500 outline-none py-2 text-lg font-bold text-slate-700 bg-transparent transition-colors"
-                                    placeholder="例如：大寶"
-                                    value={onboardingForm.name}
-                                    onChange={e => setOnboardingForm({...onboardingForm, name: e.target.value})}
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-2">性別</label>
-                                <div className="flex gap-4">
-                                    {['男', '女'].map(g => (
-                                        <button
-                                            key={g}
-                                            onClick={() => setOnboardingForm({...onboardingForm, gender: g as any})}
-                                            className={`flex-1 py-2 rounded-xl border-2 font-bold transition-all ${onboardingForm.gender === g ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-slate-100 text-slate-400 hover:border-slate-200'}`}
-                                        >
-                                            {g}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-3 gap-3">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 mb-1">出生年</label>
-                                    <input type="number" className="w-full border rounded-lg px-3 py-2" value={onboardingForm.year} onChange={e => setOnboardingForm({...onboardingForm, year: Number(e.target.value)})} />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 mb-1">月</label>
-                                    <select className="w-full border rounded-lg px-3 py-2 bg-white" value={onboardingForm.month} onChange={e => setOnboardingForm({...onboardingForm, month: Number(e.target.value)})}>
-                                        {Array.from({length:12}, (_, i) => i+1).map(m => <option key={m} value={m}>{m}月</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 mb-1">日</label>
-                                    <select className="w-full border rounded-lg px-3 py-2 bg-white" value={onboardingForm.day} onChange={e => setOnboardingForm({...onboardingForm, day: Number(e.target.value)})}>
-                                        {Array.from({length:31}, (_, i) => i+1).map(d => <option key={d} value={d}>{d}日</option>)}
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 mb-1">時辰 (小時)</label>
-                                    <select className="w-full border rounded-lg px-3 py-2 bg-white" value={onboardingForm.hour} onChange={e => setOnboardingForm({...onboardingForm, hour: Number(e.target.value)})}>
-                                        {Array.from({length:24}, (_, i) => i).map(h => (
-                                            <option key={h} value={h}>{h}點 ({ZHI[Math.floor((h+1)/2)%12]}時)</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 mb-1">分鐘</label>
-                                    <input type="number" className="w-full border rounded-lg px-3 py-2" value={onboardingForm.minute} onChange={e => setOnboardingForm({...onboardingForm, minute: Number(e.target.value)})} />
-                                </div>
-                            </div>
-
-                            <button 
-                                onClick={handleOnboardingSubmit}
-                                disabled={isSaving}
-                                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2 mt-4"
-                            >
-                                {isSaving ? <Loader2 className="animate-spin" /> : <Save size={20} />}
-                                開始分析運勢
-                            </button>
-                        </div>
+                    /* 顯示新手引導 Wizard */
+                    <div className="mt-6 w-full flex justify-center">
+                        <OnboardingWizard 
+                            userProfile={userProfile}
+                            onComplete={handleWizardComplete}
+                            onCancelTest={() => setForceOnboarding(false)}
+                            isTestMode={forceOnboarding}
+                        />
                     </div>
                 )}
             </div>
