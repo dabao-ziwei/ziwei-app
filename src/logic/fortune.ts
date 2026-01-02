@@ -26,14 +26,14 @@ export interface DailyFortune {
 
   // 開發驗證資訊
   devInfo: {
-    baseScore: number;      // [新增] 基礎分
+    baseScore: number;      // 基礎分
     lunarDateStr: string;   // 農曆日期
     flowYearZhi: string;    // 流年地支
     flowMonthAnchor: string;// 流月起點
     flowMonthZhi: string;   // 流月地支
     flowDayZhi: string;     // 流日地支
     formulas: {             // 各維度算式細節
-        base: string[];     // [新增] 基礎分算式
+        base: string[];     // 基礎分算式 (三層結構)
         self: string[];
         social: string[];
         love: string[];
@@ -62,6 +62,7 @@ const SI_HUA_MAP: Record<string, string[]> = {
 };
 
 // 祿存、擎羊、陀羅表 (依天干)
+// 規則: 祿前一為羊，祿後一為陀
 const LU_YANG_TUO_MAP: Record<string, number> = {
   '甲': 2, '乙': 3, '丙': 5, '丁': 6, '戊': 5,
   '己': 6, '庚': 8, '辛': 9, '壬': 11, '癸': 0,
@@ -83,15 +84,29 @@ export const calculateDailyFortune = (engine: ZiWeiEngine, date?: Date): DailyFo
   // 2. 取得重要天干參數
   const flowMonthGan = chart.palaces[flowMonthIdx].ganIndex;
   const flowDayGan = chart.palaces[flowDayIdx].ganIndex;
+  const nianGan = timeParams.nianGan;
+  const daGan = timeParams.daGan;
   const birthGan = (chart.lunarYear - 4) % 10;
 
-  // 3. 計算【基礎分 (Base Score)】
-  // 邏輯：本命命宮、遷移宮的狀態 (生年四化 + 煞星)
+  // 3. 取得各層級命宮位置 (用於計算基礎分)
   const benMingPos = engine.getMingPos();
-  const baseResult = calcBaseScore(chart, benMingPos, birthGan);
+  
+  // 大限命宮: 根據大限位置
+  const age = timeParams.virtualAge;
+  const daXianPalace = chart.palaces.find(p => age >= p.ages[0] && age <= p.ages[1]);
+  const daMingPos = daXianPalace ? daXianPalace.index : 0; 
+
+  // 流年命宮: 根據流年地支
+  const liuMingPos = chart.palaces.findIndex(p => p.zhiIndex === flowYearZhi);
+
+  // 4. 計算【基礎分 (Base Score)】: 三層結構 (本命+大限+流年)
+  const baseResult = calcBaseScore(chart, {
+      benMingPos, daMingPos, liuMingPos,
+      birthGan, daGan, nianGan
+  });
   const baseScore = baseResult.score;
 
-  // 4. 建立掃描器 (用於計算運勢變化分)
+  // 5. 建立掃描器 (用於計算運勢變化分 - Delta)
   const scanner = new StarScanner(chart, { 
       ...timeParams, 
       birthGan,      
@@ -99,18 +114,12 @@ export const calculateDailyFortune = (engine: ZiWeiEngine, date?: Date): DailyFo
       flowDayGan 
   });
 
-  // 5. 定義五大維度掃描範圍 (三方四正)
-  // getP(offset): 取得相對於流日命宮的宮位 Index
-  // 順序為：命(0), 父(1), 福(2), 田(3), 官(4), 友(5), 遷(6), 疾(7), 財(8), 子(9), 夫(10), 兄(11)
+  // 6. 定義五大維度掃描範圍 (三方四正)
   const getP = (offset: number) => (flowDayIdx + offset + 12) % 12;
 
   const targets = {
-    // 感情：夫妻(10)、官祿(4)、遷移(6)、福德(2)
-    love:   [[getP(10), '夫妻'], [getP(4), '官祿'], [getP(6), '遷移'], [getP(2), '福德']],
-    
     // 工作：官祿(4)、夫妻(10)、命宮(0)、財帛(8)
-    // *注意：這裡包含命宮，會與基礎分疊加影響，符合需求
-    self:   [[getP(4), '官祿'], [getP(10), '夫妻'], [getP(0), '命宮'], [getP(8), '財帛']], // 這裡對應 UI 的 "工作運勢" (雖然 key 是 self，但邏輯是工作)
+    self:   [[getP(4), '官祿'], [getP(10), '夫妻'], [getP(0), '命宮'], [getP(8), '財帛']],
     
     // 理財：財帛(8)、福德(2)、官祿(4)、命宮(0)
     wealth: [[getP(8), '財帛'], [getP(2), '福德'], [getP(4), '官祿'], [getP(0), '命宮']],
@@ -120,29 +129,12 @@ export const calculateDailyFortune = (engine: ZiWeiEngine, date?: Date): DailyFo
     
     // 外出：子女(9)、田宅(3)、僕役(5)、父母(1)
     travel: [[getP(9), '子女'], [getP(3), '田宅'], [getP(5), '僕役'], [getP(1), '父母']],
+
+    // 感情：夫妻(10)、官祿(4)、遷移(6)、福德(2)
+    love:   [[getP(10), '夫妻'], [getP(4), '官祿'], [getP(6), '遷移'], [getP(2), '福德']],
   };
 
-  // 6. 計算各維度得分 (以 Base Score 為底)
-  // 注意：UI 上的標籤對應如下：
-  // self -> 工作運勢 (因為您原本的 self 定義是命遷官財，這裡改為工作的三方)
-  // Wait, let's map strictly to your request:
-  // "工作": 官祿、夫妻、命宮、財帛 -> 對應 UI 的 'self' 或是 'work'? 
-  // 原本 FortuneWidget 顯示: 
-  // self -> 自身 (UI Label)
-  // wealth -> 理財
-  // social -> 交友
-  // travel -> 外出
-  // love -> 感情
-  
-  // 依照您的指示：
-  // "工作運勢" -> 官祿、夫妻、命宮、財帛
-  // "感情運勢" -> 夫妻、官祿、遷移、福德
-  // "理財運勢" -> 財帛、福德、官祿、命宮
-  // "交友運勢" -> 僕役、兄弟、父母、子女
-  // "外出運勢" -> 子女、田宅、僕役、父母
-  
-  // 我們將 "工作運勢" 映射到 score.self (因為通常自身運勢與事業相關)
-  
+  // 7. 計算各維度得分 (以 Base Score 為底)
   const results = {
       self: calcCategoryScore(scanner, targets.self as any, baseScore),   // 工作
       social: calcCategoryScore(scanner, targets.social as any, baseScore), // 交友
@@ -176,7 +168,7 @@ export const calculateDailyFortune = (engine: ZiWeiEngine, date?: Date): DailyFo
     devInfo: {
         baseScore: baseScore,
         lunarDateStr: lunarStr,
-        flowYearZhi: DI_ZHI[flowYearZhi],       
+        flowYearZhi: DI_ZHI[flowYearZhi],        
         flowMonthAnchor: DI_ZHI[flowMonthAnchor], 
         flowMonthZhi: DI_ZHI[flowMonthIdx],
         flowDayZhi: DI_ZHI[flowDayIdx],
@@ -192,63 +184,131 @@ export const calculateDailyFortune = (engine: ZiWeiEngine, date?: Date): DailyFo
   };
 };
 
-/**
- * 計算基礎分 (Base Score)
- * 規則：
- * 1. 預設 50 分
- * 2. 掃描本命盤的 命宮(mingPos) 與 遷移宮(mingPos+6)
- * 3. 生年四化：祿+10, 權+5, 忌-10
- * 4. 煞星(羊陀火鈴)：沿用原邏輯 (羊陀-3, 火-6, 鈴-2, 祿存+2)
- */
-const calcBaseScore = (chart: ChartData, mingPos: number, birthGan: number) => {
-    let score = 50;
-    const logs: string[] = [`預設(50)`];
-    
-    // 鎖定 命宮 與 遷移宮
-    const targetIndices = [mingPos, (mingPos + 6) % 12];
-    
-    // 取得出生年干的四化星名 [祿, 權, 科, 忌]
-    const ganChar = TIAN_GAN[birthGan];
-    const siHuaStars = SI_HUA_MAP[ganChar]; // e.g. ['廉貞', '破軍', '武曲', '太陽']
+// ============================================================================
+// 核心：基礎分計算邏輯 (三層時空疊加)
+// ============================================================================
+interface BaseScoreParams {
+    benMingPos: number;
+    daMingPos: number;
+    liuMingPos: number;
+    birthGan: number;
+    daGan: number;
+    nianGan: number;
+}
 
-    targetIndices.forEach(idx => {
-        const palace = chart.palaces[idx];
-        const palaceName = idx === mingPos ? '本命' : '本遷';
-        
-        const starsInPalace = [
-            ...palace.majorStars, 
-            ...palace.minorStars, 
-            ...palace.miscStars
-        ].map(s => s.name);
+const calcBaseScore = (chart: ChartData, params: BaseScoreParams) => {
+    let score = 50; // 初始分
+    const logs: string[] = [`初始(50)`];
 
-        // 1. 判斷生年四化
-        if (siHuaStars) {
-            starsInPalace.forEach(starName => {
-                if (starName === siHuaStars[0]) { score += 10; logs.push(`${palaceName}.${starName}生年祿(+10)`); }
-                if (starName === siHuaStars[1]) { score += 5;  logs.push(`${palaceName}.${starName}生年權(+5)`); }
-                if (starName === siHuaStars[3]) { score -= 10; logs.push(`${palaceName}.${starName}生年忌(-10)`); }
-                // 化科 +0 (不處理)
+    // Helper: 掃描單一層級
+    const scanLayer = (
+        layerName: string, 
+        mingIdx: number, 
+        mainGan: number, 
+        // 額外檢查的四化來源 (例如大限層也要看生年四化)
+        extraSiHuaGans: { gan: number, name: string }[] = [], 
+        // 額外檢查的祿羊陀來源 (例如流年層要看大限祿存)
+        extraLuGans: { gan: number, name: string, w: number }[] = [],
+        luWeight: number // 本層級祿存的權重
+    ) => {
+        let layerScore = 0;
+        const targetIndices = [mingIdx, (mingIdx + 6) % 12]; // 命宮 & 遷移宮
+
+        targetIndices.forEach(idx => {
+            if (idx < 0) return; 
+            const palace = chart.palaces[idx];
+            const pName = idx === mingIdx ? `${layerName}命` : `${layerName}遷`;
+            
+            // 取得宮內星星名稱 (包含主星、輔星、雜曜)
+            const starNames = [
+                ...palace.majorStars, 
+                ...palace.minorStars, 
+                ...palace.miscStars
+            ].map(s => s.name);
+
+            // 1. 檢查四化 (Main Gan + Extra Gans)
+            const gansToCheck = [{ gan: mainGan, name: layerName }, ...extraSiHuaGans];
+            
+            gansToCheck.forEach(g => {
+                const ganChar = TIAN_GAN[g.gan];
+                const siHua = SI_HUA_MAP[ganChar]; // [祿, 權, 科, 忌]
+                if (siHua) {
+                    starNames.forEach(star => {
+                        // 四化權重固定: 祿+10, 權+5, 忌-10
+                        if (star === siHua[0]) { layerScore += 10; logs.push(`${pName}.${star}${g.name}祿(+10)`); }
+                        if (star === siHua[1]) { layerScore += 5;  logs.push(`${pName}.${star}${g.name}權(+5)`); }
+                        if (star === siHua[3]) { layerScore -= 10; logs.push(`${pName}.${star}${g.name}忌(-10)`); }
+                    });
+                }
             });
-        }
 
-        // 2. 判斷煞星與祿存 (沿用既有權重)
-        if (starsInPalace.includes('火星')) { score -= 6; logs.push(`${palaceName}.火星(-6)`); }
-        if (starsInPalace.includes('鈴星')) { score -= 2; logs.push(`${palaceName}.鈴星(-2)`); }
+            // 2. 檢查靜態煞星 (火星/鈴星) - 永遠生效
+            if (starNames.some(s => s.includes('火星'))) { layerScore -= 6; logs.push(`${pName}.火星(-6)`); }
+            if (starNames.some(s => s.includes('鈴星'))) { layerScore -= 2; logs.push(`${pName}.鈴星(-2)`); }
 
-        // 判斷 擎羊/陀羅/祿存 (依出生年干)
-        const luIndex = LU_YANG_TUO_MAP[ganChar];
-        if (luIndex !== undefined) {
-            // 祿存
-            if (luIndex === idx) { score += 2; logs.push(`${palaceName}.祿存(+2)`); }
-            // 擎羊 (祿前一宮)
-            if ((luIndex + 1) % 12 === idx) { score -= 3; logs.push(`${palaceName}.擎羊(-3)`); }
-            // 陀羅 (祿後一宮)
-            if ((luIndex + 11) % 12 === idx) { score -= 3; logs.push(`${palaceName}.陀羅(-3)`); }
-        }
-    });
+            // 3. 檢查動態祿羊陀 (Main Gan + Extra Lu Gans)
+            const luChecks = [{ gan: mainGan, name: layerName, w: luWeight }, ...extraLuGans];
+            
+            luChecks.forEach(l => {
+                const ganChar = TIAN_GAN[l.gan];
+                const luIndex = LU_YANG_TUO_MAP[ganChar];
+                
+                if (luIndex !== undefined) {
+                    // 祿存
+                    if (luIndex === idx) { 
+                        layerScore += l.w; 
+                        logs.push(`${pName}.${l.name}祿存(+${l.w})`); 
+                    }
+                    // 擎羊 (祿前一宮)
+                    if ((luIndex + 1) % 12 === idx) { 
+                        layerScore -= 3; 
+                        logs.push(`${pName}.${l.name}擎羊(-3)`); 
+                    }
+                    // 陀羅 (祿後一宮)
+                    if ((luIndex + 11) % 12 === idx) { 
+                        layerScore -= 3; 
+                        logs.push(`${pName}.${l.name}陀羅(-3)`); 
+                    }
+                }
+            });
+        });
+
+        score += layerScore;
+        if (layerScore !== 0) logs.push(`> [${layerName}層] 小計: ${layerScore > 0 ? '+' : ''}${layerScore}`);
+    };
+
+    // --- 開始逐層掃描 ---
+
+    // 1. 本命層 (Ben Ming)
+    // 規則: 
+    // - 四化: 生年干
+    // - 祿羊陀: 生年干 (權重+2)
+    scanLayer('本命', params.benMingPos, params.birthGan, [], [], 2);
+
+    // 2. 大限層 (Da Xian)
+    // 規則:
+    // - 四化: 大限干 (不看生年) [修正]
+    // - 祿羊陀: 大限干 (權重+3)
+    scanLayer('大限', params.daMingPos, params.daGan, 
+        [], // [修正] 移除生年四化檢查
+        [], 
+        3
+    );
+
+    // 3. 流年層 (Liu Nian)
+    // 規則:
+    // - 四化: 流年干 (不看生年) [修正]
+    // - 祿羊陀: 流年干 (權重+4) + 大限干 (權重+3)
+    scanLayer('流年', params.liuMingPos, params.nianGan,
+        [], // [修正] 移除生年四化檢查
+        [{ gan: params.daGan, name: '大限', w: 3 }], 
+        4
+    );
 
     return { score, logs };
 };
+
+// --- 其他輔助運算 ---
 
 const calcCategoryScore = (scanner: StarScanner, targets: [number, string][], baseScore: number) => {
     let totalDelta = 0;
@@ -278,7 +338,6 @@ const calcCategoryScore = (scanner: StarScanner, targets: [number, string][], ba
     return { finalScore: Math.round(final), logs };
 };
 
-// --- 核心：星曜掃描與計分器 (邏輯維持不變) ---
 class StarScanner {
   chart: ChartData;
   params: any;
@@ -371,29 +430,22 @@ const calcTimeParameters = (chart: ChartData, date: Date) => {
 
     const nianGan = lunar.getYearGanIndex();
     const yueGan = lunar.getMonthGanIndex(); 
-    const riGan = lunar.getDayGanIndex();      
+    const riGan = lunar.getDayGanIndex();       
 
-    const age = lunar.getYear() - chart.lunarYear + 1;
+    const virtualAge = lunar.getYear() - chart.lunarYear + 1;
     const daXianPalace = chart.palaces.find(p => {
         const [start, end] = p.ages;
-        return age >= start && age <= end;
+        return virtualAge >= start && virtualAge <= end;
     });
     const daGan = daXianPalace ? daXianPalace.ganIndex : 0;
 
     const yearZhi = lunar.getYearZhiIndex(); 
 
     // --- 斗君邏輯 ---
-    // 1. 找出本命盤寅宮 (Index 2) 的宮位名稱 (即斗君)
     const douJunPalace = chart.palaces[2]; 
     const douJunName = douJunPalace.name; 
-
-    // 2. 找出該名稱在標準宮位順序中的 Index (0=命宮...11=父母)
     const nameIdx = PALACE_NAMES.indexOf(douJunName);
-    
-    // 3. 計算該宮位相當於命宮的位移
     const offset = (12 - nameIdx) % 12;
-
-    // 4. 計算流年 1 月 (正月) 的位置
     const flowMonthAnchor = (yearZhi + offset) % 12;
 
     const month = Math.abs(lunar.getMonth());
@@ -411,6 +463,7 @@ const calcTimeParameters = (chart: ChartData, date: Date) => {
 
     return { 
         nianGan, yueGan, riGan, daGan, 
+        virtualAge,
         flowYearZhi: yearZhi,
         flowMonthAnchor,
         flowDayIdx, 
