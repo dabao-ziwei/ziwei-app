@@ -1,56 +1,37 @@
 import React, { useMemo, useState } from 'react';
-import { Sun, Cloud, CloudRain, Lock, Sparkles, Cpu, Wallet, Heart, Users, Plane, Star, Zap, Activity, Radar, Calendar, Bug, AlertTriangle, Clock, Terminal } from 'lucide-react';
+import { Thermometer, Activity, Bug, AlertTriangle, Calendar, X, Terminal, Clock, Calculator, Hash } from 'lucide-react';
 import { calculateDailyFortune } from '../logic/fortune';
 import type { UserProfile, Client } from '../db';
-import { TechRadarChart } from './TechRadarChart';
-import { TechLineChart } from './TechLineChart';
+import { FortuneThermometer } from './FortuneThermometer';
+// [修改] 引入新的聚焦圖表組件
+import { FocusTrendChart } from './FocusTrendChart'; 
 import { ZiWeiEngine } from '../logic/engine';
 
 // 定義超級管理員 Email
 const SUPER_ADMIN_EMAIL = 'stephenwu.0926@gmail.com';
 
-// ----------------------------------------------------------------------
-// 輔助顯示組件 (移至上方以避免 ReferenceError)
-// ----------------------------------------------------------------------
-
-const DebugCategoryBlock = ({ title, logs, score }: { title: string, logs: string[], score: number }) => (
-    <div>
-        <div className="flex justify-between items-center text-slate-300 mb-1">
-            <span className="font-bold text-cyan-300">{title}</span>
-            <span className="bg-slate-800 px-1 rounded text-white">{score}</span>
+// ... (DebugLogBlock 保持不變，省略以節省篇幅，請保留原有的 DebugLogBlock 程式碼) ...
+const DebugLogBlock = ({ title, score, logs }: { title: string, score: number, logs: string[] }) => (
+    <div className="bg-slate-900/80 p-3 rounded border border-slate-700/50 flex flex-col gap-2 h-full">
+        <div className="flex justify-between items-center border-b border-slate-700 pb-2 mb-1">
+            <span className="text-cyan-400 font-bold text-[11px] uppercase tracking-wider">{title}</span>
+            <span className={`font-mono font-bold text-sm ${score >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {score}
+            </span>
         </div>
-        <div className="text-[10px] bg-slate-900/50 p-1.5 rounded border border-slate-800/50">
-            {logs.length > 0 ? logs.map((l, i) => (
-                <div key={i} className="truncate hover:text-clip hover:whitespace-normal">{l}</div>
-            )) : <span className="text-slate-600">無特殊星曜影響</span>}
-        </div>
-    </div>
-);
-
-const StrategyCard = ({ title, content, icon, color, bg, border, glow, isLocked }: any) => (
-    <div className={`relative p-4 rounded-xl border ${border} ${bg} ${glow} transition-all duration-300 hover:scale-[1.02] hover:bg-opacity-30 group`}>
-        <div className="flex items-center gap-2.5 mb-2.5">
-            <div className={`p-1.5 rounded-md bg-slate-900 border border-slate-700 ${color} shadow-sm group-hover:scale-110 transition-transform`}>
-                {icon}
-            </div>
-            <span className={`text-xs font-bold ${color} tracking-widest uppercase`}>{title}</span>
-        </div>
-        
-        <div className="relative">
-            <p className={`text-xs text-slate-300 leading-6 font-sans tracking-wide ${isLocked ? 'blur-[5px] select-none opacity-50 grayscale' : ''}`}>
-                {content || "分析數據運算中，暫無詳細資料..."}
-            </p>
-            {isLocked && (
-                <div className="absolute inset-0 flex items-center justify-center z-10">
-                    <div className="bg-slate-950/60 backdrop-blur-sm px-4 py-1.5 rounded-full border border-slate-700/50 flex items-center gap-2 shadow-xl">
-                        <Lock size={12} className="text-slate-400" />
-                        <span className="text-[10px] font-bold text-slate-300 tracking-wide">ENCRYPTED DATA</span>
-                    </div>
-                </div>
+        <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 pr-1 max-h-[120px]">
+            {logs && logs.length > 0 ? (
+                <ul className="space-y-1">
+                    {logs.map((log, i) => (
+                        <li key={i} className="text-[10px] text-slate-300 font-mono leading-relaxed border-l-2 border-slate-700 pl-2 hover:border-cyan-500 transition-colors">
+                            {log}
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <div className="text-[10px] text-slate-600 italic">無特殊星曜影響</div>
             )}
         </div>
-        <div className={`absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 ${border.replace('/20', '')} opacity-40 rounded-tr-sm`} />
-        <div className={`absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 ${border.replace('/20', '')} opacity-40 rounded-bl-sm`} />
     </div>
 );
 
@@ -64,26 +45,32 @@ interface Props {
   clientName?: string;
 }
 
-export const FortuneWidget: React.FC<Props> = ({ userProfile, client, clientName }) => {
-  const [activeTab, setActiveTab] = useState<'radar' | 'trend'>('radar');
-  const [showDebug, setShowDebug] = useState(false); // Default Debug OFF
+// 模擬資料
+const DEMO_HOT = [
+    { label: '工作', value: 95 },
+    { label: '理財', value: 88 },
+    { label: '交友', value: 105 },
+    { label: '外出', value: 92 },
+    { label: '感情', value: 100 },
+];
 
-  // 判斷是否為超級管理員 (用於顯示 Debug Console)
+const DEMO_COLD = [
+    { label: '工作', value: 20 },
+    { label: '理財', value: 15 },
+    { label: '交友', value: 30 },
+    { label: '外出', value: 5 },
+    { label: '感情', value: 10 },
+];
+
+export const FortuneWidget: React.FC<Props> = ({ userProfile, client, clientName }) => {
+  const [activeTab, setActiveTab] = useState<'thermometer' | 'trend'>('thermometer');
+  const [showDebug, setShowDebug] = useState(false); 
+  const [demoMode, setDemoMode] = useState<'real' | 'hot' | 'cold'>('real'); 
+
   const isSuperAdmin = useMemo(() => {
       return userProfile?.email === SUPER_ADMIN_EMAIL;
   }, [userProfile]);
 
-  const isVip = useMemo(() => {
-    if (!userProfile) return false;
-    if (userProfile.role === 'admin') return true;
-    if (userProfile.role === 'student') {
-        if (!userProfile.accessExpiry) return false; 
-        return new Date(userProfile.accessExpiry) > new Date();
-    }
-    return false;
-  }, [userProfile]);
-
-  // 1. 初始化 Engine
   const engine = useMemo(() => {
       if (!client) return null;
       try {
@@ -101,7 +88,6 @@ export const FortuneWidget: React.FC<Props> = ({ userProfile, client, clientName
       }
   }, [client]);
 
-  // 2. 計算今日運勢 (Today)
   const todayFortune = useMemo(() => {
       if (!engine) return null;
       try {
@@ -112,8 +98,7 @@ export const FortuneWidget: React.FC<Props> = ({ userProfile, client, clientName
       }
   }, [engine]);
 
-  // 3. 計算未來一週運勢 (Weekly)
-  const weeklyData = useMemo(() => {
+  const weeklyDetailedData = useMemo(() => {
       if (!engine) return [];
       try {
           const data = [];
@@ -123,7 +108,8 @@ export const FortuneWidget: React.FC<Props> = ({ userProfile, client, clientName
               const f = calculateDailyFortune(engine, d);
               data.push({
                   label: `${d.getMonth()+1}/${d.getDate()}`,
-                  value: f.score,
+                  scores: f.scores,
+                  baseScore: f.devInfo.baseScore,
                   dateStr: `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`
               });
           }
@@ -134,7 +120,6 @@ export const FortuneWidget: React.FC<Props> = ({ userProfile, client, clientName
       }
   }, [engine]);
 
-  // --- 防呆 UI ---
   if (!todayFortune || !engine) {
       return (
         <div className="w-full bg-[#0B1120] rounded-2xl border border-red-900/50 shadow-2xl p-6 flex items-center justify-center text-red-400 gap-3">
@@ -147,216 +132,164 @@ export const FortuneWidget: React.FC<Props> = ({ userProfile, client, clientName
       );
   }
 
-  // [修改] 雷達圖標籤：將 "自身" 改為 "工作"
-  const radarData = [
-    { label: '工作', value: todayFortune.scores.self, fullMark: 100 },
-    { label: '理財', value: todayFortune.scores.wealth, fullMark: 100 },
-    { label: '交友', value: todayFortune.scores.social, fullMark: 100 },
-    { label: '外出', value: todayFortune.scores.travel, fullMark: 100 },
-    { label: '感情', value: todayFortune.scores.love, fullMark: 100 },
+  let displayData = [
+    { label: '工作', value: todayFortune.scores.self },
+    { label: '理財', value: todayFortune.scores.wealth },
+    { label: '交友', value: todayFortune.scores.social },
+    { label: '外出', value: todayFortune.scores.travel },
+    { label: '感情', value: todayFortune.scores.love },
   ];
+  const baseScore = todayFortune.devInfo.baseScore;
+
+  if (demoMode === 'hot') {
+      displayData = DEMO_HOT;
+  } else if (demoMode === 'cold') {
+      displayData = DEMO_COLD;
+  }
 
   return (
     <div className="w-full flex flex-col gap-4">
-        {/* 主要儀表板區塊 */}
-        <div className="w-full bg-[#0B1120] rounded-2xl border border-slate-800 shadow-2xl overflow-hidden relative group">
+        {/* 主要儀表板容器 (限制最大高度，防止捲軸) */}
+        <div className="w-full bg-[#0B1120] rounded-2xl border border-slate-800 shadow-2xl overflow-hidden relative group min-h-[500px] flex flex-col">
         
-        {/* Debug 面板開關內容 (僅 SuperAdmin 可見) */}
-        {showDebug && isSuperAdmin && (
-            <div className="absolute inset-0 z-50 bg-black/90 text-green-400 p-4 font-mono text-xs overflow-auto">
-                <button onClick={() => setShowDebug(false)} className="mb-2 bg-red-900 text-white px-2 py-1 rounded">CLOSE DEBUG</button>
-                <pre>{JSON.stringify(weeklyData, null, 2)}</pre>
-            </div>
-        )}
+            {/* 裝飾 */}
+            <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-cyan-500 to-transparent opacity-80 shadow-[0_0_15px_#22d3ee] z-20" />
+            <div className="absolute inset-0 bg-[linear-gradient(rgba(30,41,59,0.3)_1px,transparent_1px),linear-gradient(90deg,rgba(30,41,59,0.3)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_80%_80%_at_50%_50%,black,transparent)] pointer-events-none z-0" />
+            <div className="absolute inset-0 bg-gradient-to-b from-[#0f172a] via-[#0B1120] to-[#020617] opacity-90 z-0" />
 
-        <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-cyan-500 to-transparent opacity-80 shadow-[0_0_15px_#22d3ee]" />
+            {/* --- 控制列 --- */}
+            <div className="relative w-full p-4 sm:p-6 z-30 flex justify-between items-start">
+                <div className="flex bg-slate-900/80 p-1 rounded-lg border border-slate-700/50 backdrop-blur-sm shadow-lg pointer-events-auto">
+                    <button 
+                        onClick={() => setActiveTab('thermometer')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-md text-xs font-bold transition-all ${activeTab === 'thermometer' ? 'bg-cyan-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                    >
+                        <Thermometer size={14} /> 運勢溫度計
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('trend')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-md text-xs font-bold transition-all ${activeTab === 'trend' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                    >
+                        <Activity size={14} /> 一週走勢
+                    </button>
+                </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] min-h-[480px]">
-            
-            {/* 左側圖表區 */}
-            <div className="relative p-0 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-800 bg-gradient-to-b from-[#0f172a] to-[#020617]">
-                
-                <div className="absolute top-0 left-0 w-full p-5 z-20 flex justify-between items-start">
-                    <div className="flex bg-slate-900/80 p-1 rounded-lg border border-slate-700/50 backdrop-blur-sm shadow-lg pointer-events-auto">
+                {/* Debug 開關 */}
+                {isSuperAdmin && (
+                    <div className="flex gap-2 ml-auto">
+                        <div className="flex bg-slate-800 rounded p-1 gap-1 border border-slate-700">
+                            <button onClick={() => setDemoMode('real')} className={`px-2 py-0.5 text-[10px] rounded ${demoMode === 'real' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}>Real</button>
+                            <button onClick={() => setDemoMode('hot')} className={`px-2 py-0.5 text-[10px] rounded ${demoMode === 'hot' ? 'bg-red-600 text-white' : 'text-slate-400'}`}>Hot</button>
+                            <button onClick={() => setDemoMode('cold')} className={`px-2 py-0.5 text-[10px] rounded ${demoMode === 'cold' ? 'bg-cyan-600 text-white' : 'text-slate-400'}`}>Cold</button>
+                        </div>
                         <button 
-                            onClick={() => setActiveTab('radar')}
-                            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'radar' ? 'bg-cyan-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                            onClick={() => setShowDebug(!showDebug)} 
+                            className={`p-1.5 rounded border transition-colors ${showDebug ? 'bg-green-900/30 text-green-400 border-green-700' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}`}
+                            title="開啟驗算控制台"
                         >
-                            <Radar size={14} /> 今日運勢
-                        </button>
-                        <button 
-                            onClick={() => setActiveTab('trend')}
-                            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'trend' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                        >
-                            <Activity size={14} /> 一週運勢
-                        </button>
-                    </div>
-                    
-                    {activeTab === 'radar' && (
-                        <div className="text-right pointer-events-auto animate-in fade-in slide-in-from-right-2">
-                            <div className="text-[10px] text-slate-500 uppercase tracking-widest mb-1 flex justify-end items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"/> 今日運勢
-                            </div>
-                            <div className="flex items-baseline justify-end gap-2">
-                                <span className="text-3xl font-black text-white tracking-tighter drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
-                                    {todayFortune.score}
-                                </span>
-                                <span className="text-xs font-bold text-slate-500">分</span>
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                <div className="flex-1 w-full h-full flex items-center justify-center pt-16 pb-4 px-4 relative">
-                    <div className="absolute inset-0 bg-[linear-gradient(rgba(30,41,59,0.3)_1px,transparent_1px),linear-gradient(90deg,rgba(30,41,59,0.3)_1px,transparent_1px)] bg-[size:20px_20px] [mask-image:radial-gradient(ellipse_60%_60%_at_50%_50%,black,transparent)] pointer-events-none" />
-                    
-                    {activeTab === 'radar' ? (
-                        <div className="w-full h-full flex items-center justify-center animate-in zoom-in duration-500">
-                            <TechRadarChart data={radarData} />
-                        </div>
-                    ) : (
-                        <div className="w-full h-full animate-in fade-in slide-in-from-bottom-4 duration-500 flex flex-col justify-center">
-                            <div className="flex items-center gap-2 mb-4 px-4 justify-center md:justify-start">
-                                <Calendar size={14} className="text-purple-400"/>
-                                <span className="text-xs font-bold text-purple-200 tracking-wider">一週運勢</span>
-                            </div>
-                            <div className="h-[250px] w-full px-2">
-                                <TechLineChart data={weeklyData} />
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* 右側資訊卡片區 */}
-            <div className="bg-[#0B1120] p-5 flex flex-col h-full overflow-y-auto scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent border-l border-slate-800/50">
-                <div className="flex items-center gap-2 mb-5 pb-3 border-b border-slate-800/50 sticky top-0 bg-[#0B1120] z-10">
-                    <Cpu size={18} className="text-cyan-500 animate-pulse" />
-                    <h3 className="text-sm font-bold text-slate-200 tracking-wide">今日運勢分析</h3>
-                    {!isVip && (
-                        <span className="ml-auto text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700">
-                            PREVIEW
-                        </span>
-                    )}
-                </div>
-
-                <div className="space-y-4 pb-4">
-                    <StrategyCard 
-                        title="工作運勢" 
-                        content={todayFortune.details.overall} 
-                        icon={<Star size={16}/>} 
-                        color="text-cyan-400"
-                        bg="bg-cyan-950/10"
-                        border="border-cyan-500/20"
-                        glow="shadow-[0_0_15px_rgba(34,211,238,0.05)]"
-                        isLocked={!isVip}
-                    />
-                    <StrategyCard 
-                        title="財運訊號" 
-                        content={todayFortune.details.wealth} 
-                        icon={<Wallet size={16}/>} 
-                        color="text-amber-400"
-                        bg="bg-amber-950/10"
-                        border="border-amber-500/20"
-                        glow="shadow-[0_0_15px_rgba(251,191,36,0.05)]"
-                        isLocked={!isVip}
-                    />
-                    <StrategyCard 
-                        title="感情訊號" 
-                        content={todayFortune.details.loveCareer} 
-                        icon={<Heart size={16}/>} 
-                        color="text-pink-400"
-                        bg="bg-pink-950/10"
-                        border="border-pink-500/20"
-                        glow="shadow-[0_0_15px_rgba(244,114,182,0.05)]"
-                        isLocked={!isVip}
-                    />
-                    <StrategyCard 
-                        title="外出運勢" 
-                        content={todayFortune.details.travel} 
-                        icon={<Plane size={16}/>} 
-                        color="text-emerald-400"
-                        bg="bg-emerald-950/10"
-                        border="border-emerald-500/20"
-                        glow="shadow-[0_0_15px_rgba(52,211,153,0.05)]"
-                        isLocked={!isVip}
-                    />
-                </div>
-
-                {!isVip && (
-                    <div className="mt-auto pt-4 border-t border-slate-800/50">
-                        <button className="w-full group relative overflow-hidden rounded-xl p-[1px]">
-                            <div className="absolute inset-0 bg-gradient-to-r from-cyan-500 via-purple-500 to-amber-500 animate-[spin_4s_linear_infinite] opacity-70" />
-                            <div className="relative bg-slate-900 rounded-xl p-3 flex items-center justify-center gap-2 transition-colors group-hover:bg-slate-800">
-                                <Zap size={16} className="text-yellow-400 fill-yellow-400" />
-                                <span className="text-xs font-bold text-white tracking-wide">解鎖完整分析報告</span>
-                            </div>
+                            <Bug size={14}/>
                         </button>
                     </div>
                 )}
             </div>
-        </div>
-        </div>
 
-        {/* --- 開發者除錯面板 (加上 isSuperAdmin 判斷) --- */}
-        {isSuperAdmin && (
-            <div className="w-full bg-slate-900 border border-slate-700 rounded-xl overflow-hidden p-4">
-                <div className="flex items-center gap-2 text-green-400 mb-4 font-bold border-b border-slate-700 pb-2">
-                    <Bug size={16} />
-                    <span className="text-xs font-mono">DEV_CONSOLE: 評分邏輯驗證 (Admin Only)</span>
-                </div>
-                
-                <div className="font-mono text-[11px] text-green-400 overflow-x-auto">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* 左欄：時空參數與基礎分 */}
-                        <div className="space-y-4">
-                            <div className="border border-green-800 p-2 rounded">
-                                <h4 className="text-white font-bold mb-2 border-b border-green-800 pb-1 flex items-center gap-2">
-                                    <Clock size={12}/> 時空參數
-                                </h4>
-                                <div className="grid grid-cols-2 gap-1 text-slate-400">
-                                    <div>農曆日期：<span className="text-yellow-300">{todayFortune.devInfo.lunarDateStr}</span></div>
-                                    <div>流年地支：<span className="text-yellow-300">{todayFortune.devInfo.flowYearZhi}</span></div>
-                                    <div>流月起點(斗君)：<span className="text-yellow-300">{todayFortune.devInfo.flowMonthAnchor}</span></div>
-                                    <div>流月地支：<span className="text-yellow-300">{todayFortune.devInfo.flowMonthZhi}</span></div>
-                                    <div>流日地支：<span className="text-yellow-300">{todayFortune.devInfo.flowDayZhi}</span></div>
-                                </div>
-                            </div>
-
-                            <div className="border border-green-800 p-2 rounded">
-                                <h4 className="text-white font-bold mb-2 border-b border-green-800 pb-1 flex items-center gap-2">
-                                    <Terminal size={12}/> 基礎分 (Base Score)
-                                </h4>
-                                <div className="mb-1 text-slate-300">
-                                    {/* 修正：將寫死的 60 改為讀取變數 */}
-                                    初始分: <span className="text-xl font-bold text-white">{todayFortune.devInfo.baseScore}</span>
-                                </div>
-                                <ul className="list-disc list-inside space-y-0.5 text-slate-400">
-                                    {todayFortune.devInfo.formulas.base && todayFortune.devInfo.formulas.base.length > 0 
-                                        ? todayFortune.devInfo.formulas.base.map((log, i) => <li key={i}>{log}</li>)
-                                        : <li>(無額外加減分)</li>
-                                    }
-                                </ul>
-                            </div>
-                        </div>
-
-                        {/* 右欄：五大運勢詳細算式 */}
-                        <div className="border border-green-800 p-2 rounded">
-                            <h4 className="text-white font-bold mb-2 border-b border-green-800 pb-1 flex items-center gap-2">
-                                <Activity size={12}/> 運勢變化算式 (Delta)
-                            </h4>
-                            <div className="space-y-3 h-[300px] overflow-y-auto scrollbar-thin scrollbar-thumb-green-900 pr-2">
-                                <DebugCategoryBlock title="工作運勢 (Self)" logs={todayFortune.devInfo.formulas.self} score={todayFortune.scores.self} />
-                                <DebugCategoryBlock title="感情運勢 (Love)" logs={todayFortune.devInfo.formulas.love} score={todayFortune.scores.love} />
-                                <DebugCategoryBlock title="理財運勢 (Wealth)" logs={todayFortune.devInfo.formulas.wealth} score={todayFortune.scores.wealth} />
-                                <DebugCategoryBlock title="交友運勢 (Social)" logs={todayFortune.devInfo.formulas.social} score={todayFortune.scores.social} />
-                                <DebugCategoryBlock title="外出運勢 (Travel)" logs={todayFortune.devInfo.formulas.travel} score={todayFortune.scores.travel} />
-                            </div>
+            {/* --- 主要內容區 --- */}
+            <div className="relative flex-1 w-full flex flex-col items-center justify-center p-4 sm:p-8 z-10">
+                {activeTab === 'thermometer' ? (
+                    <div className="w-full max-w-5xl h-[400px] animate-in zoom-in duration-500">
+                            <FortuneThermometer data={displayData} baseScore={baseScore} />
+                    </div>
+                ) : (
+                    // [修改] 使用新的 FocusTrendChart
+                    // 高度設為 100% 填滿剩餘空間，不再寫死 px，避免捲軸
+                    <div className="w-full h-full max-w-6xl animate-in fade-in slide-in-from-bottom-4 duration-500 flex flex-col">
+                        <div className="flex-1 w-full min-h-[350px]"> 
+                            <FocusTrendChart data={weeklyDetailedData} />
                         </div>
                     </div>
-                </div>
+                )}
             </div>
-        )}
+
+            {/* --- 驗算控制台 (Debug Console) --- */}
+            {showDebug && isSuperAdmin && (
+                <div className="absolute inset-x-0 bottom-0 z-50 bg-[#020617]/95 border-t border-green-500/30 backdrop-blur-md transition-all animate-in slide-in-from-bottom-10 h-[350px] flex flex-col shadow-[0_-5px_20px_rgba(0,0,0,0.5)]">
+                    
+                    {/* 控制台標題列 */}
+                    <div className="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-700">
+                        <div className="flex items-center gap-2 text-green-400">
+                            <Terminal size={14} />
+                            <span className="text-xs font-mono font-bold">DEV_CONSOLE: 運算邏輯驗證</span>
+                        </div>
+                        <button onClick={() => setShowDebug(false)} className="text-slate-400 hover:text-white">
+                            <X size={14} />
+                        </button>
+                    </div>
+
+                    {/* 控制台內容區 */}
+                    <div className="flex-1 overflow-auto p-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+                        
+                        {/* 1. 時空參數 & 基礎分 */}
+                        <div className="flex flex-col gap-4">
+                            <div className="bg-slate-900/80 p-3 rounded border border-slate-700/50">
+                                <h4 className="flex items-center gap-2 text-xs font-bold text-slate-300 mb-2 border-b border-slate-700 pb-1">
+                                    <Clock size={12} className="text-purple-400"/> 時空參數
+                                </h4>
+                                <div className="space-y-1 font-mono text-[10px] text-slate-400">
+                                    <div className="flex justify-between"><span>農曆:</span> <span className="text-yellow-300">{todayFortune.devInfo.lunarDateStr}</span></div>
+                                    <div className="flex justify-between"><span>流年:</span> <span className="text-cyan-300">{todayFortune.devInfo.flowYearZhi}</span></div>
+                                    <div className="flex justify-between"><span>流月:</span> <span className="text-cyan-300">{todayFortune.devInfo.flowMonthZhi}</span> (起: {todayFortune.devInfo.flowMonthAnchor})</div>
+                                    <div className="flex justify-between"><span>流日:</span> <span className="text-cyan-300">{todayFortune.devInfo.flowDayZhi}</span></div>
+                                </div>
+                            </div>
+                            
+                            <div className="bg-slate-900/80 p-3 rounded border border-slate-700/50 flex-1">
+                                <h4 className="flex items-center gap-2 text-xs font-bold text-slate-300 mb-2 border-b border-slate-700 pb-1">
+                                    <Hash size={12} className="text-blue-400"/> 基礎分 (Base)
+                                </h4>
+                                <div className="flex items-end gap-2 mb-2">
+                                    <span className="text-2xl font-black text-white">{todayFortune.devInfo.baseScore}</span>
+                                    <span className="text-[10px] text-slate-500 mb-1">初始權重</span>
+                                </div>
+                                <div className="max-h-[100px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700">
+                                     <ul className="space-y-1">
+                                        {todayFortune.devInfo.formulas.base?.map((log, i) => (
+                                            <li key={i} className="text-[10px] text-slate-400 border-l border-slate-700 pl-2">{log}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 2. 工作 & 財運 */}
+                        <div className="flex flex-col gap-4">
+                            <DebugLogBlock title="Self / Work (工作)" score={todayFortune.scores.self} logs={todayFortune.devInfo.formulas.self} />
+                            <DebugLogBlock title="Wealth (財運)" score={todayFortune.scores.wealth} logs={todayFortune.devInfo.formulas.wealth} />
+                        </div>
+
+                        {/* 3. 交友 & 外出 */}
+                        <div className="flex flex-col gap-4">
+                            <DebugLogBlock title="Social (交友)" score={todayFortune.scores.social} logs={todayFortune.devInfo.formulas.social} />
+                            <DebugLogBlock title="Travel (外出)" score={todayFortune.scores.travel} logs={todayFortune.devInfo.formulas.travel} />
+                        </div>
+
+                        {/* 4. 感情 & 總結 */}
+                        <div className="flex flex-col gap-4">
+                            <DebugLogBlock title="Love (感情)" score={todayFortune.scores.love} logs={todayFortune.devInfo.formulas.love} />
+                            
+                            {/* 總分區塊 */}
+                            <div className="bg-slate-900/80 p-3 rounded border border-slate-700/50 flex flex-col justify-center items-center h-full">
+                                <span className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">Total Score</span>
+                                <span className={`text-3xl font-black ${todayFortune.score >= 60 ? 'text-green-400' : 'text-red-400'}`}>
+                                    {todayFortune.score}
+                                </span>
+                                <span className="text-[10px] text-slate-600 mt-1">Weighted Average</span>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            )}
+        </div>
     </div>
   );
 };
