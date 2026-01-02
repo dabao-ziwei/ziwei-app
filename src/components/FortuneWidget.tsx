@@ -328,11 +328,15 @@ export const FortuneWidget: React.FC<Props> = ({ userProfile, client, clientName
                                     <Terminal size={12}/> 基礎分 (Base Score)
                                 </h4>
                                 <div className="mb-1 text-slate-300">
-                                    初始分: <span className="text-xl font-bold text-white">60</span>
+                                    {/* 修正：將寫死的 60 改為讀取變數 */}
+                                    初始分: <span className="text-xl font-bold text-white">{todayFortune.devInfo.baseScore}</span>
                                 </div>
-                                <div className="text-slate-400 text-[10px]">
-                                    (各項運勢以此為基準進行加減分)
-                                </div>
+                                <ul className="list-disc list-inside space-y-0.5 text-slate-400">
+                                    {todayFortune.devInfo.formulas.base && todayFortune.devInfo.formulas.base.length > 0 
+                                        ? todayFortune.devInfo.formulas.base.map((log, i) => <li key={i}>{log}</li>)
+                                        : <li>(無額外加減分)</li>
+                                    }
+                                </ul>
                             </div>
                         </div>
 
