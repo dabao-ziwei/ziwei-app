@@ -5,7 +5,6 @@ import { PalaceGrid } from './PalaceGrid';
 import { getClient, getRelationships, type Client, type Relationship } from '../../db';
 import { ZiWeiEngine } from '../../logic/engine';
 import { GAN, ZHI, PALACE_NAMES, SIHUA_TABLE } from '../../logic/constants';
-// [新增] 引入 Users icon
 import { Loader2, UserPlus, X, ChevronLeft, Camera, Users } from 'lucide-react';
 
 interface SingleChartProps {
@@ -108,16 +107,16 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
                 getRelationships(data.id).then(setRelationships);
             } else {
                 alert("找不到此命盤");
-                navigate('/');
+                navigate('/list'); // 若找不到，也返回列表
             }
         } catch (e) {
             console.error(e);
-            navigate('/');
+            navigate('/list');
         } finally {
             setLoading(false);
         }
       } else {
-          navigate('/');
+          navigate('/list');
       }
     };
     fetchData();
@@ -269,7 +268,17 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     resetAllStates();
   };
   const resetTime = () => { setCurrentHour(client!.birthHour); resetAllStates(); };
-  const handleBack = () => { onBack ? onBack() : navigate('/'); };
+  
+  // [修改] 處理返回邏輯：一律返回命盤列表 (/list)
+  const handleBack = () => { 
+      if (onBack) {
+          onBack(); 
+      } else {
+          // 因為紫占和一般命盤的入口都在命盤列表頁(或其選單)
+          // 所以返回時，統一回到列表頁，確保用戶體驗一致
+          navigate('/list');
+      }
+  };
   
   const isBenMingState = daXianSeq === -1 && liuNianYear === null;
   const isCleanState = isBenMingState && flyingPalace === null && selectedPalace === null && externalGan === null && mode !== 'divination';
@@ -341,6 +350,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     <div className="flex flex-col h-[100dvh] w-full bg-white relative overflow-hidden">
       {/* Header */}
       <div className="flex justify-between items-center px-4 py-2 bg-white border-b border-gray-200 shadow-sm shrink-0 z-50 h-[56px]">
+        {/* 返回按鈕：統一返回列表 */}
         <button onClick={handleBack} className="bg-white text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm">
             <ChevronLeft size={16} />
             列表

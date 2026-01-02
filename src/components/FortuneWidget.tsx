@@ -6,6 +6,58 @@ import { TechRadarChart } from './TechRadarChart';
 import { TechLineChart } from './TechLineChart';
 import { ZiWeiEngine } from '../logic/engine';
 
+// 定義超級管理員 Email
+const SUPER_ADMIN_EMAIL = 'stephenwu.0926@gmail.com';
+
+// ----------------------------------------------------------------------
+// 輔助顯示組件 (移至上方以避免 ReferenceError)
+// ----------------------------------------------------------------------
+
+const DebugCategoryBlock = ({ title, logs, score }: { title: string, logs: string[], score: number }) => (
+    <div>
+        <div className="flex justify-between items-center text-slate-300 mb-1">
+            <span className="font-bold text-cyan-300">{title}</span>
+            <span className="bg-slate-800 px-1 rounded text-white">{score}</span>
+        </div>
+        <div className="text-[10px] bg-slate-900/50 p-1.5 rounded border border-slate-800/50">
+            {logs.length > 0 ? logs.map((l, i) => (
+                <div key={i} className="truncate hover:text-clip hover:whitespace-normal">{l}</div>
+            )) : <span className="text-slate-600">無特殊星曜影響</span>}
+        </div>
+    </div>
+);
+
+const StrategyCard = ({ title, content, icon, color, bg, border, glow, isLocked }: any) => (
+    <div className={`relative p-4 rounded-xl border ${border} ${bg} ${glow} transition-all duration-300 hover:scale-[1.02] hover:bg-opacity-30 group`}>
+        <div className="flex items-center gap-2.5 mb-2.5">
+            <div className={`p-1.5 rounded-md bg-slate-900 border border-slate-700 ${color} shadow-sm group-hover:scale-110 transition-transform`}>
+                {icon}
+            </div>
+            <span className={`text-xs font-bold ${color} tracking-widest uppercase`}>{title}</span>
+        </div>
+        
+        <div className="relative">
+            <p className={`text-xs text-slate-300 leading-6 font-sans tracking-wide ${isLocked ? 'blur-[5px] select-none opacity-50 grayscale' : ''}`}>
+                {content || "分析數據運算中，暫無詳細資料..."}
+            </p>
+            {isLocked && (
+                <div className="absolute inset-0 flex items-center justify-center z-10">
+                    <div className="bg-slate-950/60 backdrop-blur-sm px-4 py-1.5 rounded-full border border-slate-700/50 flex items-center gap-2 shadow-xl">
+                        <Lock size={12} className="text-slate-400" />
+                        <span className="text-[10px] font-bold text-slate-300 tracking-wide">ENCRYPTED DATA</span>
+                    </div>
+                </div>
+            )}
+        </div>
+        <div className={`absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 ${border.replace('/20', '')} opacity-40 rounded-tr-sm`} />
+        <div className={`absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 ${border.replace('/20', '')} opacity-40 rounded-bl-sm`} />
+    </div>
+);
+
+// ----------------------------------------------------------------------
+// 主組件
+// ----------------------------------------------------------------------
+
 interface Props {
   userProfile: UserProfile | null;
   client: Client;
@@ -15,6 +67,11 @@ interface Props {
 export const FortuneWidget: React.FC<Props> = ({ userProfile, client, clientName }) => {
   const [activeTab, setActiveTab] = useState<'radar' | 'trend'>('radar');
   const [showDebug, setShowDebug] = useState(false); // Default Debug OFF
+
+  // 判斷是否為超級管理員 (用於顯示 Debug Console)
+  const isSuperAdmin = useMemo(() => {
+      return userProfile?.email === SUPER_ADMIN_EMAIL;
+  }, [userProfile]);
 
   const isVip = useMemo(() => {
     if (!userProfile) return false;
@@ -104,7 +161,8 @@ export const FortuneWidget: React.FC<Props> = ({ userProfile, client, clientName
         {/* 主要儀表板區塊 */}
         <div className="w-full bg-[#0B1120] rounded-2xl border border-slate-800 shadow-2xl overflow-hidden relative group">
         
-        {showDebug && (
+        {/* Debug 面板開關內容 (僅 SuperAdmin 可見) */}
+        {showDebug && isSuperAdmin && (
             <div className="absolute inset-0 z-50 bg-black/90 text-green-400 p-4 font-mono text-xs overflow-auto">
                 <button onClick={() => setShowDebug(false)} className="mb-2 bg-red-900 text-white px-2 py-1 rounded">CLOSE DEBUG</button>
                 <pre>{JSON.stringify(weeklyData, null, 2)}</pre>
@@ -240,104 +298,61 @@ export const FortuneWidget: React.FC<Props> = ({ userProfile, client, clientName
         </div>
         </div>
 
-        {/* --- [修改] 開發者除錯面板 (直接展開，移除折疊邏輯) --- */}
-        <div className="w-full bg-slate-900 border border-slate-700 rounded-xl overflow-hidden p-4">
-            <div className="flex items-center gap-2 text-green-400 mb-4 font-bold border-b border-slate-700 pb-2">
-                <Bug size={16} />
-                <span className="text-xs font-mono">DEV_CONSOLE: 評分邏輯驗證</span>
-            </div>
-            
-            <div className="font-mono text-[11px] text-green-400 overflow-x-auto">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* 左欄：時空參數與基礎分 */}
-                    <div className="space-y-4">
-                        <div className="border border-green-800 p-2 rounded">
-                            <h4 className="text-white font-bold mb-2 border-b border-green-800 pb-1 flex items-center gap-2">
-                                <Clock size={12}/> 時空參數
-                            </h4>
-                            <div className="grid grid-cols-2 gap-1 text-slate-400">
-                                <div>農曆日期：<span className="text-yellow-300">{todayFortune.devInfo.lunarDateStr}</span></div>
-                                <div>流年地支：<span className="text-yellow-300">{todayFortune.devInfo.flowYearZhi}</span></div>
-                                <div>流月起點(斗君)：<span className="text-yellow-300">{todayFortune.devInfo.flowMonthAnchor}</span></div>
-                                <div>流月地支：<span className="text-yellow-300">{todayFortune.devInfo.flowMonthZhi}</span></div>
-                                <div>流日地支：<span className="text-yellow-300">{todayFortune.devInfo.flowDayZhi}</span></div>
+        {/* --- 開發者除錯面板 (加上 isSuperAdmin 判斷) --- */}
+        {isSuperAdmin && (
+            <div className="w-full bg-slate-900 border border-slate-700 rounded-xl overflow-hidden p-4">
+                <div className="flex items-center gap-2 text-green-400 mb-4 font-bold border-b border-slate-700 pb-2">
+                    <Bug size={16} />
+                    <span className="text-xs font-mono">DEV_CONSOLE: 評分邏輯驗證 (Admin Only)</span>
+                </div>
+                
+                <div className="font-mono text-[11px] text-green-400 overflow-x-auto">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* 左欄：時空參數與基礎分 */}
+                        <div className="space-y-4">
+                            <div className="border border-green-800 p-2 rounded">
+                                <h4 className="text-white font-bold mb-2 border-b border-green-800 pb-1 flex items-center gap-2">
+                                    <Clock size={12}/> 時空參數
+                                </h4>
+                                <div className="grid grid-cols-2 gap-1 text-slate-400">
+                                    <div>農曆日期：<span className="text-yellow-300">{todayFortune.devInfo.lunarDateStr}</span></div>
+                                    <div>流年地支：<span className="text-yellow-300">{todayFortune.devInfo.flowYearZhi}</span></div>
+                                    <div>流月起點(斗君)：<span className="text-yellow-300">{todayFortune.devInfo.flowMonthAnchor}</span></div>
+                                    <div>流月地支：<span className="text-yellow-300">{todayFortune.devInfo.flowMonthZhi}</span></div>
+                                    <div>流日地支：<span className="text-yellow-300">{todayFortune.devInfo.flowDayZhi}</span></div>
+                                </div>
+                            </div>
+
+                            <div className="border border-green-800 p-2 rounded">
+                                <h4 className="text-white font-bold mb-2 border-b border-green-800 pb-1 flex items-center gap-2">
+                                    <Terminal size={12}/> 基礎分 (Base Score)
+                                </h4>
+                                <div className="mb-1 text-slate-300">
+                                    初始分: <span className="text-xl font-bold text-white">60</span>
+                                </div>
+                                <div className="text-slate-400 text-[10px]">
+                                    (各項運勢以此為基準進行加減分)
+                                </div>
                             </div>
                         </div>
 
+                        {/* 右欄：五大運勢詳細算式 */}
                         <div className="border border-green-800 p-2 rounded">
                             <h4 className="text-white font-bold mb-2 border-b border-green-800 pb-1 flex items-center gap-2">
-                                <Terminal size={12}/> 基礎分 (Base Score)
+                                <Activity size={12}/> 運勢變化算式 (Delta)
                             </h4>
-                            <div className="mb-1 text-slate-300">
-                                初始分: <span className="text-xl font-bold text-white">{todayFortune.devInfo.baseScore}</span>
+                            <div className="space-y-3 h-[300px] overflow-y-auto scrollbar-thin scrollbar-thumb-green-900 pr-2">
+                                <DebugCategoryBlock title="工作運勢 (Self)" logs={todayFortune.devInfo.formulas.self} score={todayFortune.scores.self} />
+                                <DebugCategoryBlock title="感情運勢 (Love)" logs={todayFortune.devInfo.formulas.love} score={todayFortune.scores.love} />
+                                <DebugCategoryBlock title="理財運勢 (Wealth)" logs={todayFortune.devInfo.formulas.wealth} score={todayFortune.scores.wealth} />
+                                <DebugCategoryBlock title="交友運勢 (Social)" logs={todayFortune.devInfo.formulas.social} score={todayFortune.scores.social} />
+                                <DebugCategoryBlock title="外出運勢 (Travel)" logs={todayFortune.devInfo.formulas.travel} score={todayFortune.scores.travel} />
                             </div>
-                            <ul className="list-disc list-inside space-y-0.5 text-slate-400">
-                                {todayFortune.devInfo.formulas.base.length > 0 
-                                    ? todayFortune.devInfo.formulas.base.map((log, i) => <li key={i}>{log}</li>)
-                                    : <li>(無額外加減分)</li>
-                                }
-                            </ul>
-                        </div>
-                    </div>
-
-                    {/* 右欄：五大運勢詳細算式 */}
-                    <div className="border border-green-800 p-2 rounded">
-                        <h4 className="text-white font-bold mb-2 border-b border-green-800 pb-1 flex items-center gap-2">
-                            <Activity size={12}/> 運勢變化算式 (Delta)
-                        </h4>
-                        <div className="space-y-3 h-[300px] overflow-y-auto scrollbar-thin scrollbar-thumb-green-900 pr-2">
-                            <DebugCategoryBlock title="工作運勢 (Self)" logs={todayFortune.devInfo.formulas.self} score={todayFortune.scores.self} />
-                            <DebugCategoryBlock title="感情運勢 (Love)" logs={todayFortune.devInfo.formulas.love} score={todayFortune.scores.love} />
-                            <DebugCategoryBlock title="理財運勢 (Wealth)" logs={todayFortune.devInfo.formulas.wealth} score={todayFortune.scores.wealth} />
-                            <DebugCategoryBlock title="交友運勢 (Social)" logs={todayFortune.devInfo.formulas.social} score={todayFortune.scores.social} />
-                            <DebugCategoryBlock title="外出運勢 (Travel)" logs={todayFortune.devInfo.formulas.travel} score={todayFortune.scores.travel} />
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
+        )}
     </div>
   );
 };
-
-// 輔助顯示組件
-const DebugCategoryBlock = ({ title, logs, score }: { title: string, logs: string[], score: number }) => (
-    <div>
-        <div className="flex justify-between items-center text-slate-300 mb-1">
-            <span className="font-bold text-cyan-300">{title}</span>
-            <span className="bg-slate-800 px-1 rounded text-white">{score}</span>
-        </div>
-        <div className="text-[10px] bg-slate-900/50 p-1.5 rounded border border-slate-800/50">
-            {logs.length > 0 ? logs.map((l, i) => (
-                <div key={i} className="truncate hover:text-clip hover:whitespace-normal">{l}</div>
-            )) : <span className="text-slate-600">無特殊星曜影響</span>}
-        </div>
-    </div>
-);
-
-const StrategyCard = ({ title, content, icon, color, bg, border, glow, isLocked }: any) => (
-    <div className={`relative p-4 rounded-xl border ${border} ${bg} ${glow} transition-all duration-300 hover:scale-[1.02] hover:bg-opacity-30 group`}>
-        <div className="flex items-center gap-2.5 mb-2.5">
-            <div className={`p-1.5 rounded-md bg-slate-900 border border-slate-700 ${color} shadow-sm group-hover:scale-110 transition-transform`}>
-                {icon}
-            </div>
-            <span className={`text-xs font-bold ${color} tracking-widest uppercase`}>{title}</span>
-        </div>
-        
-        <div className="relative">
-            <p className={`text-xs text-slate-300 leading-6 font-sans tracking-wide ${isLocked ? 'blur-[5px] select-none opacity-50 grayscale' : ''}`}>
-                {content || "分析數據運算中，暫無詳細資料..."}
-            </p>
-            {isLocked && (
-                <div className="absolute inset-0 flex items-center justify-center z-10">
-                    <div className="bg-slate-950/60 backdrop-blur-sm px-4 py-1.5 rounded-full border border-slate-700/50 flex items-center gap-2 shadow-xl">
-                        <Lock size={12} className="text-slate-400" />
-                        <span className="text-[10px] font-bold text-slate-300 tracking-wide">ENCRYPTED DATA</span>
-                    </div>
-                </div>
-            )}
-        </div>
-        <div className={`absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 ${border.replace('/20', '')} opacity-40 rounded-tr-sm`} />
-        <div className={`absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 ${border.replace('/20', '')} opacity-40 rounded-bl-sm`} />
-    </div>
-);
