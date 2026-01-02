@@ -164,13 +164,13 @@ export const FortuneWidget: React.FC<Props> = ({ userProfile, client, clientName
                         onClick={() => setActiveTab('thermometer')}
                         className={`flex items-center gap-2 px-4 py-2 rounded-md text-xs font-bold transition-all ${activeTab === 'thermometer' ? 'bg-cyan-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
                     >
-                        <Thermometer size={14} /> 運勢溫度計
+                        <Thermometer size={14} /> 今日運勢
                     </button>
                     <button 
                         onClick={() => setActiveTab('trend')}
                         className={`flex items-center gap-2 px-4 py-2 rounded-md text-xs font-bold transition-all ${activeTab === 'trend' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
                     >
-                        <Activity size={14} /> 一週走勢
+                        <Activity size={14} /> 一週運勢
                     </button>
                 </div>
 
