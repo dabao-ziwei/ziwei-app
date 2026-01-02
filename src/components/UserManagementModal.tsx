@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { X, Save, Edit2, Search, ChevronLeft, ChevronRight, Loader2, Shield, Trash2, UserPlus, Sparkles } from 'lucide-react';
-import { getAllProfilesWithStats, updateProfile, toggleUserBan, deleteUserProfile, inviteUserByEmail, type UserProfile } from '../db';
+import { X, Save, Edit2, Search, ChevronLeft, ChevronRight, Loader2, Shield, Trash2, UserPlus, Sparkles, CheckSquare, Square, CalendarClock } from 'lucide-react';
+import { getAllProfilesWithStats, updateProfile, toggleUserBan, deleteUserProfile, inviteUserByEmail, bulkUpdateAccessExpiry, type UserProfile } from '../db';
 
 interface Props {
   isOpen: boolean;
@@ -24,6 +24,11 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [inviteEmail, setInviteEmail] = useState('');
   const [isInviting, setIsInviting] = useState(false);
 
+  // [新增] 批量操作狀態
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDate, setBulkDate] = useState('');
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -42,8 +47,16 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
       loadData();
       setCurrentPage(1);
       setSearchTerm('');
+      setSelectedIds(new Set()); // 重置選取
+      setBulkDate('');
     }
   }, [isOpen]);
+
+  // 輔助檢查函數
+  const checkIsSuperAdmin = (email: string) => {
+      if (!email) return false;
+      return email.trim().toLowerCase() === SUPER_ADMIN_EMAIL.trim().toLowerCase();
+  };
 
   const filteredProfiles = useMemo(() => {
     return profiles.filter(p => 
@@ -56,6 +69,59 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
     (currentPage - 1) * ITEMS_PER_PAGE, 
     currentPage * ITEMS_PER_PAGE
   );
+
+  // [新增] 處理單選
+  const handleSelectOne = (id: string) => {
+      const newSet = new Set(selectedIds);
+      if (newSet.has(id)) {
+          newSet.delete(id);
+      } else {
+          newSet.add(id);
+      }
+      setSelectedIds(newSet);
+  };
+
+  // [新增] 處理全選 (只選當前頁面 visible 的項目，且排除 SuperAdmin)
+  const handleSelectAllPage = () => {
+      const newSet = new Set(selectedIds);
+      const validItems = paginatedData.filter(p => !checkIsSuperAdmin(p.email)); // 排除管理員
+      
+      const allSelected = validItems.every(p => newSet.has(p.id));
+
+      if (allSelected) {
+          // 如果當前頁全選了，就取消當前頁
+          validItems.forEach(p => newSet.delete(p.id));
+      } else {
+          // 否則全選當前頁
+          validItems.forEach(p => newSet.add(p.id));
+      }
+      setSelectedIds(newSet);
+  };
+
+  // [新增] 執行批量更新
+  const handleBulkUpdate = async () => {
+      if (selectedIds.size === 0) return;
+      if (!bulkDate) {
+          alert("請選擇要設定的到期日");
+          return;
+      }
+      if (!confirm(`確定要將選取的 ${selectedIds.size} 位使用者，\n權限到期日設定為 ${bulkDate} 嗎？`)) {
+          return;
+      }
+
+      setIsBulkUpdating(true);
+      const success = await bulkUpdateAccessExpiry(Array.from(selectedIds), bulkDate);
+      setIsBulkUpdating(false);
+
+      if (success) {
+          alert("批量更新成功！");
+          setSelectedIds(new Set()); // 清空選取
+          setBulkDate('');
+          loadData(); // 重新載入資料
+      } else {
+          alert("更新失敗，請稍後再試");
+      }
+  };
 
   const handleEdit = (user: UserProfile) => {
     setEditingId(user.id);
@@ -76,12 +142,6 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
     } catch (err) {
       alert('更新失敗');
     }
-  };
-
-  // 輔助檢查函數：忽略大小寫、忽略前後空白
-  const checkIsSuperAdmin = (email: string) => {
-      if (!email) return false;
-      return email.trim().toLowerCase() === SUPER_ADMIN_EMAIL.trim().toLowerCase();
   };
 
   const handleBanToggle = async (user: UserProfile) => {
@@ -120,6 +180,11 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
   };
 
   if (!isOpen) return null;
+
+  // 計算當前頁面是否全選
+  const isPageAllSelected = paginatedData.length > 0 && paginatedData
+      .filter(p => !checkIsSuperAdmin(p.email))
+      .every(p => selectedIds.has(p.id));
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -162,14 +227,20 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Content Table */}
-        <div className="flex-1 overflow-y-auto p-0">
+        <div className="flex-1 overflow-y-auto p-0 relative">
           {loading ? (
             <div className="flex justify-center py-20"><Loader2 className="animate-spin text-gray-400" /></div>
           ) : (
             <table className="w-full text-left border-collapse">
               <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                 <tr className="text-gray-500 text-sm">
-                  <th className="py-3 px-4 w-56">Email</th>
+                  {/* [新增] 全選 Checkbox */}
+                  <th className="py-3 px-4 w-12 text-center">
+                      <button onClick={handleSelectAllPage} className="text-gray-400 hover:text-blue-600">
+                          {isPageAllSelected ? <CheckSquare size={18} className="text-blue-600"/> : <Square size={18}/>}
+                      </button>
+                  </th>
+                  <th className="py-3 px-2 w-56">Email</th>
                   <th className="py-3 px-2 text-center w-16">狀態</th>
                   <th className="py-3 px-2 w-28">角色</th>
                   <th className="py-3 px-2 w-32">權限到期</th>
@@ -182,9 +253,9 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
               <tbody className="divide-y divide-gray-50">
                 {paginatedData.map(user => {
                   const isEditing = editingId === user.id;
-                  // [核心防呆] 嚴格判斷管理者
                   const isSuperAdmin = checkIsSuperAdmin(user.email);
                   const isActive = !user.isBanned;
+                  const isSelected = selectedIds.has(user.id);
 
                   return (
                     <tr 
@@ -192,11 +263,20 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                         className={`
                             hover:bg-gray-50 group transition-colors 
                             ${user.isBanned ? 'bg-red-50/30' : ''}
-                            ${isSuperAdmin ? 'bg-amber-50 border-l-4 border-amber-400' : ''} 
+                            ${isSuperAdmin ? 'bg-amber-50 border-l-4 border-amber-400' : ''}
+                            ${isSelected ? 'bg-blue-50/50' : ''}
                         `}
                     >
-                      {/* Email 欄位：核彈級顯示修正 (Emoji + 文字標籤) */}
-                      <td className="py-3 px-4 text-sm font-bold text-gray-700" title={user.email}>
+                      {/* [新增] 單選 Checkbox (排除 SuperAdmin) */}
+                      <td className="py-3 px-4 text-center">
+                          {!isSuperAdmin && (
+                              <button onClick={() => handleSelectOne(user.id)} className="text-gray-400 hover:text-blue-600">
+                                  {isSelected ? <CheckSquare size={18} className="text-blue-600"/> : <Square size={18}/>}
+                              </button>
+                          )}
+                      </td>
+
+                      <td className="py-3 px-2 text-sm font-bold text-gray-700" title={user.email}>
                         <div className="flex items-center gap-2">
                             {isSuperAdmin && <span className="text-xl">👑</span>} 
                             <span className="truncate max-w-[180px]">{user.email}</span>
@@ -204,7 +284,6 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                         </div>
                       </td>
                       
-                      {/* 狀態開關：管理者顯示鎖定符號 */}
                       <td className="py-3 px-2 text-center">
                         {!isSuperAdmin ? (
                             <div 
@@ -219,14 +298,13 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                         )}
                       </td>
 
-                      {/* 角色選擇：管理者鎖定下拉 */}
                       <td className="py-3 px-2">
                         {isEditing ? (
                           <select 
                             className={`border rounded px-2 py-1 text-sm w-full ${isSuperAdmin ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white'}`}
                             value={editForm.role}
                             onChange={e => setEditForm({...editForm, role: e.target.value as any})}
-                            disabled={isSuperAdmin} // UI 防呆
+                            disabled={isSuperAdmin}
                           >
                             <option value="general">一般</option>
                             <option value="student">學員</option>
@@ -239,7 +317,6 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                         )}
                       </td>
 
-                      {/* 到期日 */}
                       <td className="py-3 px-2">
                         {isEditing ? (
                             <div className="flex items-center gap-1">
@@ -257,7 +334,6 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                         )}
                       </td>
 
-                      {/* 命盤數量 */}
                       <td className="py-3 px-2 text-center">
                         {isEditing ? (
                            <div className="flex items-center justify-center gap-1">
@@ -279,7 +355,6 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                         {user.deletedCount}
                       </td>
 
-                      {/* 紫占權限 */}
                       <td className="py-3 px-2 text-center">
                           {isEditing ? (
                               <div 
@@ -296,7 +371,6 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                       <td className="py-3 px-4 text-right">
                         {isEditing ? (
                           <div className="flex justify-end gap-2 items-center">
-                            {/* 刪除按鈕：管理者直接不顯示 */}
                             {!isSuperAdmin && (
                                 <button 
                                     onClick={() => handleDeleteUser(user)}
@@ -331,7 +405,39 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
           )}
         </div>
 
-        {/* Footer & Invite Modal ... (保持不變) */}
+        {/* [新增] 批量操作工具列 (當有選取項目時顯示) */}
+        {selectedIds.size > 0 && (
+            <div className="absolute bottom-16 left-0 w-full bg-blue-600 text-white p-3 flex justify-between items-center z-20 shadow-lg animate-in slide-in-from-bottom-2">
+                <div className="flex items-center gap-4 px-4">
+                    <span className="font-bold text-sm">已選取 {selectedIds.size} 位使用者</span>
+                    <button onClick={() => setSelectedIds(new Set())} className="text-blue-200 text-xs hover:text-white underline">取消選取</button>
+                </div>
+                
+                <div className="flex items-center gap-2 px-4">
+                    <div className="flex items-center gap-2 bg-blue-700 rounded-lg p-1 pr-3">
+                        <div className="bg-blue-800 p-1.5 rounded">
+                            <CalendarClock size={16} />
+                        </div>
+                        <span className="text-xs font-medium">設定到期日:</span>
+                        <input 
+                            type="date" 
+                            className="bg-transparent border-b border-blue-400 text-sm focus:outline-none focus:border-white text-center w-32 cursor-pointer"
+                            value={bulkDate}
+                            onChange={e => setBulkDate(e.target.value)}
+                        />
+                    </div>
+                    <button 
+                        onClick={handleBulkUpdate}
+                        disabled={isBulkUpdating}
+                        className="bg-white text-blue-600 px-4 py-2 rounded-lg font-bold text-sm hover:bg-blue-50 transition-colors shadow-sm disabled:opacity-70 flex items-center gap-2"
+                    >
+                        {isBulkUpdating ? <Loader2 className="animate-spin" size={16}/> : '確認更新'}
+                    </button>
+                </div>
+            </div>
+        )}
+
+        {/* Footer */}
         <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center">
             <span className="text-sm text-gray-500">
                 顯示 {paginatedData.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredProfiles.length)} 筆，共 {filteredProfiles.length} 筆
@@ -357,6 +463,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
             </div>
         </div>
 
+        {/* Invite Modal (保持不變) */}
         {isInviteOpen && (
             <div className="absolute inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
                 <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 relative">

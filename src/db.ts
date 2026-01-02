@@ -345,3 +345,21 @@ export const inviteUserByEmail = async (email: string): Promise<{ success: boole
     if (error) return { success: false, msg: error.message };
     return { success: true, msg: "邀請信已發送 (重設密碼連結)" };
 };
+
+// [新增] 批量更新權限到期日
+export const bulkUpdateAccessExpiry = async (ids: string[], expiryDate: string): Promise<boolean> => {
+    // 格式化日期為 ISO 格式 (加上時間，避免時區問題導致少一天，這裡預設設為當天最後一秒)
+    // 或者直接存入 'YYYY-MM-DD' 讓 Supabase 處理
+    const timestamp = `${expiryDate} 23:59:59`; 
+    
+    const { error } = await supabase
+        .from('profiles')
+        .update({ access_expiry: timestamp })
+        .in('id', ids);
+
+    if (error) {
+        console.error('Bulk update failed:', error);
+        return false;
+    }
+    return true;
+};
