@@ -323,6 +323,9 @@ export const Dashboard: React.FC = () => {
   const initDashboard = async () => {
     setLoading(true);
     try {
+        // [修正 1] 先直接取得 Auth User，確保有 ID 可用，不用等 Profile 建立
+        const { data: { user } } = await supabase.auth.getUser();
+
         const profile = await getMyProfile();
         setUserProfile(profile);
         
@@ -331,7 +334,10 @@ export const Dashboard: React.FC = () => {
 
         // 尋找「我」的命盤 (寬鬆比對)
         const myCharts = loadedClients.filter(c => {
-            const isOwner = c.user_id === profile?.id;
+            // [修正 2] 優先使用 profile.id，若無則使用 auth user.id，確保剛註冊也能抓到
+            const currentUserId = profile?.id || user?.id;
+            const isOwner = c.user_id === currentUserId;
+            
             const cleanType = (c.type || '').trim();
             return isOwner && (cleanType === '我' || cleanType === 'Me');
         });
@@ -363,8 +369,12 @@ export const Dashboard: React.FC = () => {
 
   const handleWizardComplete = async (data: any) => {
     try {
+        // [修正核心問題]
+        // 移除 id: crypto.randomUUID()
+        // 改為 id: ''，這樣傳給 db.ts 的 saveClient 時
+        // 才會觸發 else 區塊 (addClient)，執行資料庫 INSERT 指令
         const newClient = {
-            id: crypto.randomUUID(),
+            id: '', 
             name: data.name,
             gender: data.gender,
             type: '我',
@@ -375,6 +385,7 @@ export const Dashboard: React.FC = () => {
             birthMinute: data.minute,
             bornCity: '',
             tags: [],
+            // 這裡也加入防呆，優先使用 Profile ID，若無則為 undefined (addClient 內部會自己抓 Auth User)
             user_id: userProfile?.id
         };
         await saveClient(newClient);
