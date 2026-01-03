@@ -1,4 +1,5 @@
 import { supabase } from './supabase'; 
+import type { UserFeatures } from './logic/permissions'; // [新增]
 
 // --- 設定 ---
 const SUPER_VIEW_EMAIL = 'stephenwu.0926@gmail.com';
@@ -7,12 +8,13 @@ const SUPER_VIEW_EMAIL = 'stephenwu.0926@gmail.com';
 export interface UserProfile {
   id: string;
   email: string;
-  role: string; // 'admin' | 'student' | 'general'
+  role: 'admin' | 'student' | 'general' | 'competitor'; // [修改]
   maxCharts: number;
   maxEditsPerChart: number;
   isBanned: boolean;
   can_use_divination: boolean;
-  accessExpiry?: string; // [新增] 權限到期日 (ISO string)
+  accessExpiry?: string; 
+  feature_flags?: UserFeatures; // [新增]
   activeCount?: number;
   deletedCount?: number;
 }
@@ -223,7 +225,8 @@ export const getMyProfile = async (): Promise<UserProfile | null> => {
     maxEditsPerChart: data.max_edits_per_chart,
     isBanned: data.is_banned || false,
     can_use_divination: data.can_use_divination ?? true,
-    accessExpiry: data.access_expiry // [新增]
+    accessExpiry: data.access_expiry,
+    feature_flags: data.feature_flags // [新增]
   };
 };
 
@@ -309,7 +312,8 @@ export const getAllProfilesWithStats = async (): Promise<UserProfile[]> => {
     id: p.id, email: p.email, role: p.role, maxCharts: p.max_charts,
     maxEditsPerChart: p.max_edits_per_chart, isBanned: p.is_banned,
     can_use_divination: p.can_use_divination ?? true,
-    accessExpiry: p.access_expiry, // [新增]
+    accessExpiry: p.access_expiry,
+    feature_flags: p.feature_flags, // [新增]
     activeCount: p.active_count, deletedCount: p.deleted_count
   }));
 };
@@ -325,7 +329,8 @@ export const updateProfile = async (id: string, updates: Partial<UserProfile>): 
     max_charts: updates.maxCharts,
     max_edits_per_chart: updates.maxEditsPerChart,
     can_use_divination: updates.can_use_divination,
-    access_expiry: updates.accessExpiry // [新增] 寫入到期日
+    access_expiry: updates.accessExpiry, 
+    feature_flags: updates.feature_flags // [新增]
   };
   const { error } = await supabase.from('profiles').update(dbUpdates).eq('id', id);
   return !error;
@@ -346,10 +351,7 @@ export const inviteUserByEmail = async (email: string): Promise<{ success: boole
     return { success: true, msg: "邀請信已發送 (重設密碼連結)" };
 };
 
-// [新增] 批量更新權限到期日
 export const bulkUpdateAccessExpiry = async (ids: string[], expiryDate: string): Promise<boolean> => {
-    // 格式化日期為 ISO 格式 (加上時間，避免時區問題導致少一天，這裡預設設為當天最後一秒)
-    // 或者直接存入 'YYYY-MM-DD' 讓 Supabase 處理
     const timestamp = `${expiryDate} 23:59:59`; 
     
     const { error } = await supabase
