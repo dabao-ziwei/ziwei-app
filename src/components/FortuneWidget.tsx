@@ -27,7 +27,7 @@ const CustomScrollbarStyles = () => (
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgba(148, 163, 184, 0.8); }
         .custom-scrollbar { scrollbar-width: thin; scrollbar-color: rgba(71, 85, 105, 0.5) transparent; }
         
-        /* 緩慢流動的內部光影 (Jelly Flow) - 來自 Good Code */
+        /* [已恢復] 緩慢流動的內部光影，營造液體感 */
         @keyframes jelly-flow {
             0% { background-position: 0% 0%; }
             50% { background-position: 100% 100%; }
@@ -38,7 +38,7 @@ const CustomScrollbarStyles = () => (
             animation: jelly-flow 8s ease infinite;
         }
         
-        /* 側面高光動畫 (Glossy Shine) - 來自 Good Code */
+        /* 側面高光動畫 (Glossy Shine) */
         @keyframes shine-slide {
             0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); opacity: 0; }
             50% { opacity: 0.5; }
@@ -163,14 +163,14 @@ const ShareCardRenderer: React.FC<ShareCardProps> = ({ data, baseScore, layout, 
         </div>
     );
 
-    // --- Layout A: Dashboard (Restored PERFECT Jelly + Larger Text) ---
+    // --- Layout A: Dashboard (Pure Transparent Jelly / Safe Zone 4:5) ---
     if (layout === 'dashboard') {
         return (
             <div className={`w-[400px] h-[711px] ${t.bg} relative overflow-hidden text-white font-sans flex flex-col items-center justify-center`}>
                 {/* 全域背景光 */}
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(56,189,248,0.15),transparent_70%)] z-0"></div>
                 
-                {/* 4:5 安全區域容器 */}
+                {/* [關鍵] 4:5 安全區域容器 (Safe Zone Container) */}
                 <div className="w-full h-[520px] z-10 flex flex-col px-8 relative">
                     
                     <Header />
@@ -182,26 +182,27 @@ const ShareCardRenderer: React.FC<ShareCardProps> = ({ data, baseScore, layout, 
                             const labels = ['工作', '理財', '交友', '外出', '感情'];
                             const hPercent = Math.min(Math.max(val, 5), 100); 
                             
-                            // [Good Code 配色] 暖亮活力工作色 + 鮮果凍色
+                            // [最終確認配色] 暖亮活力工作色 + 鮮果凍色
                             const colors = [
-                                { main: '#fb923c', light: '#ffedd5', shadow: '#c2410c' }, // Work
-                                { main: '#10b981', light: '#d1fae5', shadow: '#047857' }, // Wealth
-                                { main: '#fbbf24', light: '#fef3c7', shadow: '#b45309' }, // Social
-                                { main: '#f43f5e', light: '#ffe4e6', shadow: '#be123c' }, // Travel
-                                { main: '#a855f7', light: '#f3e8ff', shadow: '#7e22ce' }, // Love
+                                { main: '#fb923c', light: '#ffedd5', shadow: '#c2410c' }, // Coral Orange (工作 - 暖亮)
+                                { main: '#10b981', light: '#d1fae5', shadow: '#047857' }, // Emerald (理財)
+                                { main: '#fbbf24', light: '#fef3c7', shadow: '#b45309' }, // Amber (交友)
+                                { main: '#f43f5e', light: '#ffe4e6', shadow: '#be123c' }, // Rose (外出)
+                                { main: '#a855f7', light: '#f3e8ff', shadow: '#7e22ce' }, // Purple (感情)
                             ];
                             const c = colors[i];
                             
+                            // [修正] 永遠使用果凍色，不再被 Theme 覆蓋
                             let mainColor = c.main;
                             let lightColor = c.light;
                             let shadowColor = c.shadow;
 
-                            if (theme === 'overload') { mainColor = '#fbbf24'; lightColor = '#fffbeb'; shadowColor = '#d97706'; }
-                            if (theme === 'glitch') { mainColor = '#22d3ee'; lightColor = '#cffafe'; shadowColor = '#0891b2'; }
+                            // 這裡原本有 if (theme === 'glitch') ... 的覆寫邏輯，現在已刪除
+                            // 確保每個人看到的都是漂亮的果凍色
 
                             return (
                                 <div key={k} className="flex flex-col items-center h-full w-full relative group">
-                                    {/* [修改點] Label - 放大字體至 text-sm (14px)，透明度 80% */}
+                                    {/* Label - text-sm (14px), 80% opacity */}
                                     <div className={`text-sm font-bold tracking-wider ${t.textSub} mb-2 opacity-80 uppercase text-center group-hover:text-white transition-colors`}>{labels[i]}</div>
                                     
                                     {/* Score Bubble */}
@@ -209,10 +210,10 @@ const ShareCardRenderer: React.FC<ShareCardProps> = ({ data, baseScore, layout, 
                                          <span className={`font-mono font-black text-sm leading-none`} style={{ color: lightColor, textShadow: `0 0 10px ${mainColor}` }}>{val}</span>
                                     </div>
 
-                                    {/* [還原] Pillar Container (Glass Tube) - 來自 Good Code */}
+                                    {/* Pillar Container (Glass Tube) */}
                                     <div className="flex-1 w-full relative rounded-full border border-white/10 overflow-hidden bg-white/5 backdrop-blur-[2px] shadow-[inset_0_0_15px_rgba(0,0,0,0.3)]">
                                         
-                                        {/* 基準線 */}
+                                        {/* 基準線 (Laser Line) - 純白發光 */}
                                         <div 
                                             className="absolute left-0 w-full h-[1.5px] z-40"
                                             style={{ 
@@ -223,27 +224,24 @@ const ShareCardRenderer: React.FC<ShareCardProps> = ({ data, baseScore, layout, 
                                             }}
                                         ></div>
 
-                                        {/* [還原] The Jelly (Fill) - 使用 mixBlendMode 與多層 div 營造無橫線的果凍感 */}
+                                        {/* The Jelly (Fill) - 通透、光亮、有厚度 */}
                                         <div 
-                                            className="absolute bottom-0 left-0 w-full rounded-full transition-all duration-1000 ease-out z-20 jelly-texture overflow-hidden"
+                                            className="absolute bottom-0 left-0 w-full rounded-full transition-all duration-1000 ease-out z-20 jelly-texture"
                                             style={{ 
                                                 height: `${hPercent}%`,
-                                                // 透明感背景
+                                                // 使用帶透明度的漸層，模擬透光感
                                                 background: `linear-gradient(to top, ${shadowColor}DD, ${mainColor}AA, ${lightColor}DD)`,
-                                                // 光亮感內陰影 (沒有 inset top border)
+                                                // 內發光製造立體感 (左右暗邊 + 中心亮)
                                                 boxShadow: `
                                                     0 0 20px ${mainColor}66, 
                                                     inset 3px 0 5px rgba(255,255,255,0.3),
                                                     inset -3px 0 5px rgba(0,0,0,0.2)
                                                 `,
-                                                mixBlendMode: 'screen' // 關鍵：混合模式
+                                                mixBlendMode: 'screen' // 讓顏色更鮮豔透亮
                                             }}
                                         >
-                                            {/* [還原] 頂部水光 (Wet Top Surface) - 這才是正確的高光做法 */}
-                                            <div className="absolute top-0 left-0 w-full h-[12px] bg-gradient-to-b from-white/90 via-white/40 to-transparent rounded-t-full blur-[0.5px]"></div>
-
-                                            {/* [還原] 側面光滑高光 (Glossy Streak) */}
-                                            <div className="absolute top-0 left-[10%] w-[25%] h-full bg-gradient-to-b from-white/50 via-white/10 to-transparent blur-[1px] opacity-70"></div>
+                                            {/* 頂部柔和高光 (Soft Top Highlight) - 取代銳利橫線 */}
+                                            <div className="absolute top-0 left-0 w-full h-[10px] bg-gradient-to-b from-white/80 to-transparent rounded-t-full blur-[1px]"></div>
                                         </div>
                                     </div>
                                     
