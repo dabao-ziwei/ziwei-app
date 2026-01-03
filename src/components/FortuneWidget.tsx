@@ -27,7 +27,7 @@ const CustomScrollbarStyles = () => (
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgba(148, 163, 184, 0.8); }
         .custom-scrollbar { scrollbar-width: thin; scrollbar-color: rgba(71, 85, 105, 0.5) transparent; }
         
-        /* [已恢復] 緩慢流動的內部光影，營造液體感 */
+        /* 緩慢流動的內部光影 (Jelly Flow) */
         @keyframes jelly-flow {
             0% { background-position: 0% 0%; }
             50% { background-position: 100% 100%; }
@@ -192,13 +192,10 @@ const ShareCardRenderer: React.FC<ShareCardProps> = ({ data, baseScore, layout, 
                             ];
                             const c = colors[i];
                             
-                            // [修正] 永遠使用果凍色，不再被 Theme 覆蓋
+                            // 永遠使用果凍色，不再被 Theme 覆蓋
                             let mainColor = c.main;
                             let lightColor = c.light;
                             let shadowColor = c.shadow;
-
-                            // 這裡原本有 if (theme === 'glitch') ... 的覆寫邏輯，現在已刪除
-                            // 確保每個人看到的都是漂亮的果凍色
 
                             return (
                                 <div key={k} className="flex flex-col items-center h-full w-full relative group">
@@ -224,14 +221,14 @@ const ShareCardRenderer: React.FC<ShareCardProps> = ({ data, baseScore, layout, 
                                             }}
                                         ></div>
 
-                                        {/* The Jelly (Fill) - 通透、光亮、有厚度 */}
+                                        {/* [核心修正] The Jelly (Fill) - 徹底移除內部所有額外的 div，只靠 CSS 呈現質感 */}
                                         <div 
-                                            className="absolute bottom-0 left-0 w-full rounded-full transition-all duration-1000 ease-out z-20 jelly-texture"
+                                            className="absolute bottom-0 left-0 w-full rounded-full transition-all duration-1000 ease-out z-20 jelly-texture overflow-hidden"
                                             style={{ 
                                                 height: `${hPercent}%`,
                                                 // 使用帶透明度的漸層，模擬透光感
                                                 background: `linear-gradient(to top, ${shadowColor}DD, ${mainColor}AA, ${lightColor}DD)`,
-                                                // 內發光製造立體感 (左右暗邊 + 中心亮)
+                                                // 內發光製造立體感 (左右暗邊 + 中心亮)。不再嘗試用 inset shadow 做頂部高光，避免出現橫線風險。
                                                 boxShadow: `
                                                     0 0 20px ${mainColor}66, 
                                                     inset 3px 0 5px rgba(255,255,255,0.3),
@@ -240,8 +237,7 @@ const ShareCardRenderer: React.FC<ShareCardProps> = ({ data, baseScore, layout, 
                                                 mixBlendMode: 'screen' // 讓顏色更鮮豔透亮
                                             }}
                                         >
-                                            {/* 頂部柔和高光 (Soft Top Highlight) - 取代銳利橫線 */}
-                                            <div className="absolute top-0 left-0 w-full h-[10px] bg-gradient-to-b from-white/80 to-transparent rounded-t-full blur-[1px]"></div>
+                                            {/* [已刪除] 這裡原本有一個造成橫線的 div，現在已經被徹底移除了 */}
                                         </div>
                                     </div>
                                     
