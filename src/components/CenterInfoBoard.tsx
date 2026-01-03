@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { Users, Repeat, Clock, ArrowLeft, ChevronRight, Eye, RefreshCw, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom'; // [新增] 引入 useNavigate
+import { useNavigate } from 'react-router-dom';
 import type { Client, Relationship } from '../db';
 import type { ChartData } from '../logic/types';
+import type { PermissionState } from '../logic/permissions';
 
 const ArrowHead = ({ x, y, rotation }: { x: number, y: number, rotation: number }) => (
   <polygon
@@ -55,6 +56,12 @@ interface CenterInfoBoardProps {
   showSmallLimit: boolean;
   isDaXian: boolean;
   isLiuNian: boolean;
+
+  permissionFlags?: {
+      twin: PermissionState;
+      inverted: PermissionState;
+      xiao: PermissionState;
+  };
 }
 
 export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
@@ -65,7 +72,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     onHistoryBack,
     onNavigate,
     onCompatibility,
-    // benMingMajorStarsStr, 
     onChangeHour,
     onResetTime,
     currentHourZhi,
@@ -80,9 +86,10 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     showInverted,
     showSmallLimit,
     isDaXian,
-    isLiuNian
+    isLiuNian,
+    permissionFlags 
 }) => {
-    const navigate = useNavigate(); // [新增] 使用 hook
+    const navigate = useNavigate();
     const hasRelations = relationships.length > 0;
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
@@ -157,7 +164,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
         return { nodes: calculatedNodes, lines: calculatedLines };
     }, [client, relationships, hasRelations]);
 
-    // 紫占模式顯示 (簡化)
     if (isDivinationMode) {
         return (
             <div className="col-span-2 row-span-2 flex flex-col items-center justify-center p-4 bg-white z-10 relative h-full w-full">
@@ -181,7 +187,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
         <div className="col-span-2 row-span-2 flex z-10 relative overflow-hidden p-0.5 h-full w-full">
             <div className={`flex w-full h-full bg-white`}>
                 
-                {/* --- [左側：個人資料欄] --- */}
                 <div className={`h-full flex flex-col p-1 border-r border-gray-100 bg-white z-20 relative transition-all duration-300 ${hasRelations ? 'basis-[35%] shrink-0' : 'w-full'}`}>
                     {historyStack.length > 0 && (
                          <div className="absolute top-0 left-0 w-full px-2 py-1 z-50 bg-white/90 backdrop-blur-sm border-b border-gray-100 flex items-center gap-1 overflow-hidden">
@@ -227,11 +232,33 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                         <div className="flex bg-slate-100/80 rounded-md p-0.5 gap-0.5 border border-slate-200">
                             {!isDaXian && !isLiuNian && (
                                 <>
-                                    <button onClick={onToggleTwin} className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${showTwin ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}><Users size={10} /> 雙胞胎</button>
-                                    <div className="w-px bg-gray-300 my-0.5"></div>
+                                    {/* 雙胞胎按鈕 */}
+                                    {permissionFlags?.twin !== 'hidden' && (
+                                        <button 
+                                            onClick={onToggleTwin} 
+                                            disabled={permissionFlags?.twin === 'disabled'}
+                                            className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${showTwin ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'} ${permissionFlags?.twin === 'disabled' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                            title={permissionFlags?.twin === 'disabled' ? '權限已到期' : ''}
+                                        >
+                                            <Users size={10} /> 雙胞胎
+                                        </button>
+                                    )}
+                                    {permissionFlags?.twin !== 'hidden' && permissionFlags?.inverted !== 'hidden' && <div className="w-px bg-gray-300 my-0.5"></div>}
                                 </>
                             )}
-                            <button onClick={onToggleInverted} className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${showInverted ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}><Repeat size={10} /> 顛倒盤</button>
+                            
+                            {/* 顛倒盤按鈕 */}
+                            {permissionFlags?.inverted !== 'hidden' && (
+                                <button 
+                                    onClick={onToggleInverted} 
+                                    disabled={permissionFlags?.inverted === 'disabled'}
+                                    className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors flex items-center gap-1 ${showInverted ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'} ${permissionFlags?.inverted === 'disabled' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    title={permissionFlags?.inverted === 'disabled' ? '權限已到期' : ''}
+                                >
+                                    <Repeat size={10} /> 顛倒盤
+                                </button>
+                            )}
+
                             {isLiuNian && (
                                 <>
                                     <div className="w-px bg-gray-300 my-0.5"></div>
@@ -280,17 +307,23 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                                         <div className="flex justify-between items-center px-2 py-1 border-b border-gray-50 mb-1"><span className="text-[10px] text-gray-400 font-medium">功能選單</span><button onClick={(e) => { e.stopPropagation(); setSelectedNodeId(null); }} className="text-gray-400 hover:text-gray-600"><X size={12} /></button></div>
                                                         <button onClick={(e) => { e.stopPropagation(); onNavigate(node.data); }} className="flex items-center gap-2 px-2 py-2 text-xs text-gray-700 hover:bg-blue-50 rounded-lg text-left transition-colors"><Eye size={14} className="text-blue-500"/> 看他命盤</button>
                                                         
-                                                        {/* [關鍵修改] 導航至合盤路由，傳遞 state */}
-                                                        <button onClick={(e) => { 
-                                                            e.stopPropagation(); 
-                                                            navigate('/dual-chart', {
-                                                                state: {
-                                                                    clientA: client,
-                                                                    clientB: node.data
-                                                                }
-                                                            });
-                                                        }} className="flex items-center gap-2 px-2 py-2 text-xs text-purple-700 hover:bg-purple-50 rounded-lg text-left font-bold transition-colors"><RefreshCw size={14} /> 和他合盤</button>
-                                                    
+                                                        {/* [權限控制] 雙人合盤 */}
+                                                        {permissionFlags?.dual_chart !== 'hidden' && (
+                                                            <button 
+                                                                onClick={(e) => { 
+                                                                    e.stopPropagation(); 
+                                                                    if (permissionFlags?.dual_chart !== 'disabled') {
+                                                                        navigate('/dual-chart', { state: { clientA: client, clientB: node.data } });
+                                                                    }
+                                                                }} 
+                                                                disabled={permissionFlags?.dual_chart === 'disabled'}
+                                                                className={`flex items-center gap-2 px-2 py-2 text-xs rounded-lg text-left font-bold transition-colors
+                                                                    ${permissionFlags?.dual_chart === 'disabled' ? 'text-gray-400 bg-gray-50 cursor-not-allowed' : 'text-purple-700 hover:bg-purple-50'}
+                                                                `}
+                                                            >
+                                                                <RefreshCw size={14} /> 和他合盤
+                                                            </button>
+                                                        )}
                                                     </motion.div>
                                                 )}
                                             </AnimatePresence>

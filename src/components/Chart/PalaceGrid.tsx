@@ -4,15 +4,14 @@ import { PalaceCard } from '../PalaceCard';
 import { GAN, PALACE_NAMES } from '../../logic/constants';
 import type { Client, Relationship } from '../../db';
 import type { ChartData } from '../../logic/types';
+import type { PermissionState } from '../../logic/permissions';
 
 interface PalaceGridProps {
-  // Data
   client: Client;
   chartData: ChartData;
   relationships: Relationship[];
   historyStack: Client[];
   
-  // UI States
   mode: 'standard' | 'divination';
   selectedPalace: number | null;
   flyingPalace: number | null;
@@ -22,16 +21,13 @@ interface PalaceGridProps {
   isReverse: boolean;
   isTwinMode: boolean;
   
-  // Divination
   divNum?: string[];
   isDivinationReady?: boolean;
   divSiHuaMap?: Record<string, '祿' | '權' | '科' | '忌'>;
   
-  // External
   externalGan: number | null;
   externalSiHuaMap?: Record<string, '祿' | '權' | '科' | '忌'>;
 
-  // Calculated Values
   benMingMajorStarsStr: string;
   currentHourZhi: string;
   isTimeModified: boolean;
@@ -39,15 +35,12 @@ interface PalaceGridProps {
   daXianList: any[];
   xiaoXianMingIdx: number;
   
-  // Flying Stars (修正這裡：正式加入定義)
   flyingStarsLookup?: Record<string, '祿' | '權' | '科' | '忌'>;
 
-  // Helper Functions
   getRelativeNames: (idx: number) => { daName?: string; liuName?: string; xiaoName?: string; divinationName?: string };
   getIsBenMingMing: (idx: number) => boolean;
   getAnchorCoord: (idx: number) => { x: number; y: number };
 
-  // Handlers
   onHistoryBack: () => void;
   onNavigate: (target: Client) => void;
   onCompatibility: (target: Client) => void;
@@ -58,6 +51,12 @@ interface PalaceGridProps {
   onToggleSmallLimit: () => void;
   onPalaceClick: (idx: number) => void;
   onTriggerClick: (idx: number) => void;
+
+  permissionFlags?: {
+      twin: PermissionState;
+      inverted: PermissionState;
+      xiao: PermissionState;
+  };
 }
 
 export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
@@ -66,10 +65,11 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
   divNum, isDivinationReady, divSiHuaMap,
   externalGan, externalSiHuaMap,
   benMingMajorStarsStr, currentHourZhi, isTimeModified, connections, daXianList, xiaoXianMingIdx,
-  flyingStarsLookup, // 修正這裡：直接解構出來
+  flyingStarsLookup,
   getRelativeNames, getIsBenMingMing, getAnchorCoord,
   onHistoryBack, onNavigate, onCompatibility, onChangeHour, onResetTime,
-  onToggleTwin, onToggleInverted, onToggleSmallLimit, onPalaceClick, onTriggerClick
+  onToggleTwin, onToggleInverted, onToggleSmallLimit, onPalaceClick, onTriggerClick,
+  permissionFlags
 }, ref) => {
 
   const gridLayout = [5, 6, 7, 8, 4, null, null, 9, 3, null, null, 10, 2, 1, 0, 11];
@@ -82,7 +82,6 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
       </svg>
 
       {gridLayout.map((palaceIdx, gridPos) => {
-          // 中間區塊渲染
           if (gridPos === 5) {
               return (
                   <div key="center-board" className="col-span-2 row-span-2 z-0 relative h-full w-full">
@@ -112,6 +111,8 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
                           showSmallLimit={showXiaoXian}
                           isDaXian={daXianSeq >= 0}
                           isLiuNian={liuNianYear !== null}
+                          
+                          permissionFlags={permissionFlags}
                       />
                   </div>
               );
@@ -121,9 +122,7 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
           if (palaceIdx === null) return null;
 
           const relNames = getRelativeNames(palaceIdx);
-          
           const isBenMingMing = getIsBenMingMing(palaceIdx);
-          
           const isDaXianMing = daXianSeq >= 0 && daXianList[daXianSeq].palaceIdx === palaceIdx;
           const isLiuNianMing = liuNianYear !== null && chartData.palaces[palaceIdx].zhiIndex === (liuNianYear - 4) % 12;
           const isXiaoXianMingPalace = liuNianYear !== null && palaceIdx === xiaoXianMingIdx;
@@ -147,10 +146,7 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
                       isLiuNianMing={isLiuNianMing && isLiuNianActive}
                       isXiaoXianMingPalace={isXiaoXianMingPalace && (isLiuNianActive || isXiaoXianActive)}
                       onTriggerClick={() => onTriggerClick(palaceIdx)}
-                      
-                      // 修正這裡：直接使用解構出來的變數
                       flyingStars={flyingStarsLookup}
-                      
                       isTwinMode={isTwinMode}
                       isReverse={isReverse}
                       divinationName={relNames.divinationName}

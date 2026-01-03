@@ -2,10 +2,11 @@ import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { toPng } from 'html-to-image';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { PalaceGrid } from './PalaceGrid';
-import { getClient, getRelationships, type Client, type Relationship } from '../../db';
+import { getClient, getRelationships, getMyProfile, type Client, type Relationship, type UserProfile } from '../../db';
 import { ZiWeiEngine } from '../../logic/engine';
 import { GAN, ZHI, PALACE_NAMES, SIHUA_TABLE } from '../../logic/constants';
 import { Loader2, UserPlus, X, ChevronLeft, Camera, Users } from 'lucide-react';
+import { getFeaturePermission, type PermissionState } from '../../logic/permissions';
 
 interface SingleChartProps {
   client?: Client;
@@ -62,8 +63,8 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   });
 
   const [loading, setLoading] = useState(!client);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   
-  // UI States
   const [selectedPalace, setSelectedPalace] = useState<number | null>(null);
   const [flyingPalace, setFlyingPalace] = useState<number | null>(null);
   const [daXianSeq, setDaXianSeq] = useState<number>(-1);
@@ -72,11 +73,9 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const [isReverse, setIsReverse] = useState<boolean>(false);
   const [isTwinMode, setIsTwinMode] = useState<boolean>(false);
 
-  // Divination States
   const divNum = location.state?.divNum || (client as any)?.divNum;
   const isDivinationReady = !!divNum;
   
-  // External Year States
   const [isExternalInputOpen, setIsExternalInputOpen] = useState(false);
   const [externalYearStr, setExternalYearStr] = useState('');
   const [externalYearType, setExternalYearType] = useState<'west' | 'roc'>('roc'); 
@@ -85,6 +84,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const chartRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    getMyProfile().then(setUserProfile);
     const fetchData = async () => {
       if (client) {
           setLoading(false);
@@ -107,10 +107,9 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
                 getRelationships(data.id).then(setRelationships);
             } else {
                 alert("找不到此命盤");
-                navigate('/list'); // 若找不到，也返回列表
+                navigate('/list'); 
             }
         } catch (e) {
-            console.error(e);
             navigate('/list');
         } finally {
             setLoading(false);
@@ -122,20 +121,19 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     fetchData();
   }, [id, client, navigate, mode]);
 
+  // 計算權限
+  const canTwin = useMemo(() => getFeaturePermission(userProfile, 'twin'), [userProfile]);
+  const canInvert = useMemo(() => getFeaturePermission(userProfile, 'inverted'), [userProfile]);
+  const canScreenshot = useMemo(() => getFeaturePermission(userProfile, 'screenshot'), [userProfile]);
+  const canDual = useMemo(() => getFeaturePermission(userProfile, 'dual_chart'), [userProfile]);
+  const canFlying = useMemo(() => getFeaturePermission(userProfile, 'flying_star'), [userProfile]);
+  const canXiao = useMemo(() => getFeaturePermission(userProfile, 'xiao_limit'), [userProfile]);
+
   const baseEngine = useMemo(() => {
     if (!client || currentHour === -1) return null;
     try {
-        return new ZiWeiEngine(
-          client.birthYear,
-          client.birthMonth,
-          client.birthDay,
-          currentHour,
-          client.birthMinute,
-          client.gender
-        );
-    } catch (e) {
-        return null;
-    }
+        return new ZiWeiEngine(client.birthYear, client.birthMonth, client.birthDay, currentHour, client.birthMinute, client.gender);
+    } catch (e) { return null; }
   }, [client, currentHour]);
 
   const baseChartData = useMemo(() => baseEngine?.getChartData(), [baseEngine]);
@@ -144,21 +142,10 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     if (!client || currentHour === -1) return null;
     let displayEngine: ZiWeiEngine;
     try {
-        displayEngine = new ZiWeiEngine(
-          client.birthYear,
-          client.birthMonth,
-          client.birthDay,
-          currentHour,
-          client.birthMinute,
-          client.gender
-        );
-    } catch (e) {
-        return null;
-    }
+        displayEngine = new ZiWeiEngine(client.birthYear, client.birthMonth, client.birthDay, currentHour, client.birthMinute, client.gender);
+    } catch (e) { return null; }
 
-    if (mode === 'divination') {
-        return displayEngine.getChartData();
-    }
+    if (mode === 'divination') return displayEngine.getChartData();
 
     let daGan = -1, liuGan = -1, liuZhi = -1, xiaoGan = -1;
     const tempBaseData = displayEngine.getChartData();
@@ -187,19 +174,15 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   }, [client, currentHour, daXianSeq, liuNianYear, showXiaoXian, mode, isDivinationReady, divNum]);
 
   const { divMingIndex, divSiHuaMap } = useMemo(() => {
-      if (mode !== 'divination' || !divNum || divNum.length !== 4) {
-          return { divMingIndex: -1, divSiHuaMap: undefined };
-      }
+      if (mode !== 'divination' || !divNum || divNum.length !== 4) return { divMingIndex: -1, divSiHuaMap: undefined };
       const numAB = parseInt(divNum[0] + divNum[1]);
       const finalAB = getRecursiveSum(numAB);
       const targetZhiIndex = finalAB - 1;
       const foundMingIdx = chartData?.palaces.findIndex(p => p.zhiIndex === targetZhiIndex) ?? -1;
-
       const numCD = parseInt(divNum[2] + divNum[3]);
       const finalCD = getRecursiveSum(numCD);
       const ganIdx = getDivinationStem(finalCD);
       const siHuaMap = getSiHuaMap(ganIdx);
-
       return { divMingIndex: foundMingIdx, divSiHuaMap: siHuaMap };
   }, [divNum, mode, chartData]);
 
@@ -269,15 +252,8 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   };
   const resetTime = () => { setCurrentHour(client!.birthHour); resetAllStates(); };
   
-  // [修改] 處理返回邏輯：一律返回命盤列表 (/list)
   const handleBack = () => { 
-      if (onBack) {
-          onBack(); 
-      } else {
-          // 因為紫占和一般命盤的入口都在命盤列表頁(或其選單)
-          // 所以返回時，統一回到列表頁，確保用戶體驗一致
-          navigate('/list');
-      }
+      if (onBack) { onBack(); } else { navigate('/list'); }
   };
   
   const isBenMingState = daXianSeq === -1 && liuNianYear === null;
@@ -286,19 +262,13 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const handleDownload = async () => { 
       if (!chartRef.current) return; 
       try { 
-          const dataUrl = await toPng(chartRef.current, { 
-              cacheBust: true, 
-              backgroundColor: '#ffffff', 
-              filter: (node) => !(node.classList?.contains('no-screenshot')) 
-          }); 
+          const dataUrl = await toPng(chartRef.current, { cacheBust: true, backgroundColor: '#ffffff', filter: (node) => !(node.classList?.contains('no-screenshot')) }); 
           const link = document.createElement('a'); 
           const suffix = mode === 'divination' ? '_紫占' : (isTwinMode ? '_雙胞胎' : (isReverse ? '_顛倒盤' : '_本命盤')); 
           link.download = `${client!.name}${suffix}.png`; 
           link.href = dataUrl; 
           link.click(); 
-      } catch (err) { 
-          console.error('Download failed:', err); 
-      } 
+      } catch (err) { console.error('Download failed:', err); } 
   };
 
   const isTimeModified = currentHour !== client?.birthHour;
@@ -314,9 +284,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const benMingPos = baseEngine ? baseEngine.getMingPos() : 0;
   
   const getIsBenMingMing = (palaceIdx: number) => {
-      if (mode === 'divination') {
-          return palaceIdx === divMingIndex;
-      }
+      if (mode === 'divination') return palaceIdx === divMingIndex;
       return palaceIdx === benMingPos;
   }
 
@@ -348,48 +316,52 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
   return (
     <div className="flex flex-col h-[100dvh] w-full bg-white relative overflow-hidden">
-      {/* Header */}
       <div className="flex justify-between items-center px-4 py-2 bg-white border-b border-gray-200 shadow-sm shrink-0 z-50 h-[56px]">
-        {/* 返回按鈕：統一返回列表 */}
         <button onClick={handleBack} className="bg-white text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm">
-            <ChevronLeft size={16} />
-            列表
+            <ChevronLeft size={16} /> 列表
         </button>
 
         {mode === 'standard' && (
             <div className="flex gap-2">
-                
-                {/* [新增] 雙人合盤入口按鈕 */}
-                <button 
-                    onClick={() => navigate('/compatibility', { state: { clientA: client } })}
-                    className="bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-700 flex items-center gap-1.5 transition-all text-sm font-bold shadow-md shadow-purple-200"
-                >
-                    <Users size={16} />
-                    <span className="hidden sm:inline">雙人合盤</span>
-                    <span className="sm:hidden">合盤</span>
-                </button>
-
-                {/* 顯示外部干 (看他人生年) */}
-                {externalGan !== null ? (
-                    <div className="flex items-center gap-1 bg-purple-100 border border-purple-200 px-3 py-1.5 rounded-lg animate-in fade-in">
-                        <span className="text-sm font-bold text-purple-700">{GAN[externalGan]}干飛化</span>
-                        <button onClick={() => { setExternalGan(null); setExternalYearStr(''); }} className="text-purple-400 hover:text-purple-600 ml-1"><X size={16} /></button>
-                    </div>
-                ) : (
+                {/* 雙人合盤 */}
+                {canDual !== 'hidden' && (
                     <button 
-                        onClick={() => setIsExternalInputOpen(true)} 
-                        className="bg-white text-purple-700 px-3 py-1.5 rounded-lg border border-purple-200 hover:bg-purple-50 flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm"
+                        onClick={() => navigate('/compatibility', { state: { clientA: client } })}
+                        disabled={canDual === 'disabled'}
+                        className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-sm font-bold shadow-md shadow-purple-200 ${canDual === 'disabled' ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-purple-600 text-white hover:bg-purple-700'}`}
+                        title={canDual === 'disabled' ? '權限已到期' : '雙人合盤'}
                     >
-                        <UserPlus size={16} />
-                        <span className="hidden sm:inline">看他人生年飛化</span>
-                        <span className="sm:hidden">他年</span>
+                        <Users size={16} />
+                        <span className="hidden sm:inline">雙人合盤</span><span className="sm:hidden">合盤</span>
                     </button>
                 )}
 
-                {isCleanState && (
+                {/* 他人生年飛化 */}
+                {canFlying !== 'hidden' && (
+                    externalGan !== null ? (
+                        <div className="flex items-center gap-1 bg-purple-100 border border-purple-200 px-3 py-1.5 rounded-lg animate-in fade-in">
+                            <span className="text-sm font-bold text-purple-700">{GAN[externalGan]}干飛化</span>
+                            <button onClick={() => { setExternalGan(null); setExternalYearStr(''); }} className="text-purple-400 hover:text-purple-600 ml-1"><X size={16} /></button>
+                        </div>
+                    ) : (
+                        <button 
+                            onClick={() => setIsExternalInputOpen(true)} 
+                            disabled={canFlying === 'disabled'}
+                            className={`px-3 py-1.5 rounded-lg border flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm ${canFlying === 'disabled' ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' : 'bg-white text-purple-700 border-purple-200 hover:bg-purple-50'}`}
+                            title={canFlying === 'disabled' ? '權限已到期' : '看他人生年飛化'}
+                        >
+                            <UserPlus size={16} />
+                            <span className="hidden sm:inline">看他人生年飛化</span><span className="sm:hidden">他年</span>
+                        </button>
+                    )
+                )}
+
+                {/* 截圖 */}
+                {canScreenshot !== 'hidden' && isCleanState && (
                     <button 
                         onClick={handleDownload}
-                        className="bg-white text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm"
+                        disabled={canScreenshot === 'disabled'}
+                        className={`bg-white text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm ${canScreenshot === 'disabled' ? 'opacity-50 cursor-not-allowed' : ''}`}
                         title="截圖"
                     >
                         <Camera size={16} />
@@ -401,7 +373,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       </div>
 
       <div className="flex-1 min-h-0 w-full relative">
-        {/* Modals */}
         {isExternalInputOpen && (
             <div className="absolute inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
                 <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 relative animate-in fade-in zoom-in">
@@ -452,14 +423,16 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
             onCompatibility={handleCompatibility}
             onChangeHour={changeHour}
             onResetTime={resetTime}
-            onToggleTwin={() => setIsTwinMode(!isTwinMode)}
-            onToggleInverted={() => setIsReverse(!isReverse)}
+            // 權限控制傳遞
+            onToggleTwin={() => canTwin !== 'hidden' && canTwin !== 'disabled' && setIsTwinMode(!isTwinMode)}
+            onToggleInverted={() => canInvert !== 'hidden' && canInvert !== 'disabled' && setIsReverse(!isReverse)}
             onToggleSmallLimit={toggleXiaoXian}
             onPalaceClick={handlePalaceClick}
             onTriggerClick={handleTriggerClick}
             flyingStarsLookup={flyingStarsLookup}
+            // [關鍵] 將權限傳遞給 PalaceGrid，讓它能再傳給 CenterInfoBoard
+            permissionFlags={{ twin: canTwin, inverted: canInvert, xiao: canXiao }}
         />
-
       </div>
 
       {mode !== 'divination' && (
