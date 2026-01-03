@@ -27,7 +27,7 @@ const CustomScrollbarStyles = () => (
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgba(148, 163, 184, 0.8); }
         .custom-scrollbar { scrollbar-width: thin; scrollbar-color: rgba(71, 85, 105, 0.5) transparent; }
         
-        /* 緩慢流動的內部光影 (Jelly Flow) */
+        /* [已恢復] 緩慢流動的內部光影，營造液體感 */
         @keyframes jelly-flow {
             0% { background-position: 0% 0%; }
             50% { background-position: 100% 100%; }
@@ -163,7 +163,7 @@ const ShareCardRenderer: React.FC<ShareCardProps> = ({ data, baseScore, layout, 
         </div>
     );
 
-    // --- Layout A: Dashboard (Pure Transparent Jelly / Safe Zone 4:5) ---
+    // --- Layout A: Dashboard (Tasty Macaron Jelly / Safe Zone 4:5) ---
     if (layout === 'dashboard') {
         return (
             <div className={`w-[400px] h-[711px] ${t.bg} relative overflow-hidden text-white font-sans flex flex-col items-center justify-center`}>
@@ -182,17 +182,17 @@ const ShareCardRenderer: React.FC<ShareCardProps> = ({ data, baseScore, layout, 
                             const labels = ['工作', '理財', '交友', '外出', '感情'];
                             const hPercent = Math.min(Math.max(val, 5), 100); 
                             
-                            // [最終確認配色] 暖亮活力工作色 + 鮮果凍色
+                            // [配色修正] 針對 Dark Mode 優化的「發光馬卡龍」配色
+                            // 提高飽和度與亮度，避免混濁
                             const colors = [
-                                { main: '#fb923c', light: '#ffedd5', shadow: '#c2410c' }, // Coral Orange (工作 - 暖亮)
-                                { main: '#10b981', light: '#d1fae5', shadow: '#047857' }, // Emerald (理財)
-                                { main: '#fbbf24', light: '#fef3c7', shadow: '#b45309' }, // Amber (交友)
-                                { main: '#f43f5e', light: '#ffe4e6', shadow: '#be123c' }, // Rose (外出)
-                                { main: '#a855f7', light: '#f3e8ff', shadow: '#7e22ce' }, // Purple (感情)
+                                { main: '#FF9E9E', light: '#FFE4E1', shadow: '#E55B5B' }, // Peach/Coral (Work)
+                                { main: '#6EE7B7', light: '#D1FAE5', shadow: '#059669' }, // Mint (Wealth)
+                                { main: '#FCD34D', light: '#FEF3C7', shadow: '#D97706' }, // Cream/Yellow (Social)
+                                { main: '#F472B6', light: '#FBCFE8', shadow: '#DB2777' }, // Strawberry (Travel)
+                                { main: '#C084FC', light: '#E9D5FF', shadow: '#9333EA' }, // Lavender (Love)
                             ];
                             const c = colors[i];
                             
-                            // 永遠使用果凍色，不再被 Theme 覆蓋
                             let mainColor = c.main;
                             let lightColor = c.light;
                             let shadowColor = c.shadow;
@@ -208,7 +208,7 @@ const ShareCardRenderer: React.FC<ShareCardProps> = ({ data, baseScore, layout, 
                                     </div>
 
                                     {/* Pillar Container (Glass Tube) */}
-                                    <div className="flex-1 w-full relative rounded-full border border-white/10 overflow-hidden bg-white/5 backdrop-blur-[2px] shadow-[inset_0_0_15px_rgba(0,0,0,0.3)]">
+                                    <div className="flex-1 w-full relative rounded-full border border-white/10 overflow-hidden bg-white/5 backdrop-blur-[2px] shadow-[inset_0_0_15px_rgba(0,0,0,0.5)]">
                                         
                                         {/* 基準線 (Laser Line) - 純白發光 */}
                                         <div 
@@ -221,28 +221,43 @@ const ShareCardRenderer: React.FC<ShareCardProps> = ({ data, baseScore, layout, 
                                             }}
                                         ></div>
 
-                                        {/* [核心修正] The Jelly (Fill) - 徹底移除內部所有額外的 div，只靠 CSS 呈現質感 */}
+                                        {/* [核心修正] The Jelly (Fill) - 水潤、透亮、無橫線 */}
                                         <div 
                                             className="absolute bottom-0 left-0 w-full rounded-full transition-all duration-1000 ease-out z-20 jelly-texture overflow-hidden"
                                             style={{ 
                                                 height: `${hPercent}%`,
-                                                // 使用帶透明度的漸層，模擬透光感
-                                                background: `linear-gradient(to top, ${shadowColor}DD, ${mainColor}AA, ${lightColor}DD)`,
-                                                // 內發光製造立體感 (左右暗邊 + 中心亮)。不再嘗試用 inset shadow 做頂部高光，避免出現橫線風險。
+                                                // 1. 漸層策略：
+                                                //    - 底部 (0%): 深色陰影 (Shadow)
+                                                //    - 中間 (50%): 馬卡龍主色 (Main)
+                                                //    - 上部 (85%): 淺色高光 (Light)
+                                                //    - 頂端 (100%): 純白 (White) -> 製造「濕潤」頂部效果，且保證無橫線
+                                                background: `linear-gradient(to top, 
+                                                    ${shadowColor} 0%, 
+                                                    ${mainColor} 50%, 
+                                                    ${lightColor} 85%, 
+                                                    #FFFFFF 100%)`,
+                                                
+                                                // 2. 質感光影：
+                                                //    - 外部發光 (Outer Glow)
+                                                //    - 內部發光 (Inner Glow)
+                                                //    - 頂部邊緣反光 (Top Rim)
+                                                //    - 側面陰影 (Side Shadow)
                                                 boxShadow: `
-                                                    0 0 20px ${mainColor}66, 
-                                                    inset 3px 0 5px rgba(255,255,255,0.3),
-                                                    inset -3px 0 5px rgba(0,0,0,0.2)
+                                                    0 0 25px ${mainColor}, 
+                                                    inset 0 0 15px ${mainColor},
+                                                    inset 0 2px 5px rgba(255,255,255,0.8),
+                                                    inset -5px 0 15px rgba(0,0,0,0.3)
                                                 `,
-                                                mixBlendMode: 'screen' // 讓顏色更鮮豔透亮
+                                                // 移除 mixBlendMode: 'screen'，因為它在深色背景會讓粉彩色變髒變淡
+                                                // 改用正常的混合模式，靠高亮度的顏色本身來發光
                                             }}
                                         >
-                                            {/* [已刪除] 這裡原本有一個造成橫線的 div，現在已經被徹底移除了 */}
+                                            {/* 這裡沒有任何額外的 div */}
                                         </div>
                                     </div>
                                     
                                     {/* 底部柔和光暈 */}
-                                    <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-[120%] h-3 blur-lg z-0 opacity-40" style={{ background: mainColor }}></div>
+                                    <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-[120%] h-3 blur-lg z-0 opacity-60" style={{ background: mainColor }}></div>
                                 </div>
                             )
                         })}
