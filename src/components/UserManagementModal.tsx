@@ -27,10 +27,9 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [bulkDate, setBulkDate] = useState('');
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
 
-  // [新增] 監聽 Esc 按鍵
+  // 監聽 Esc 按鍵
   useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
-      // 只有在 Modal 開啟時，且沒有在編輯其他子視窗(如邀請視窗)時才觸發
       if (event.key === 'Escape' && isOpen && !isInviteOpen) {
         onClose();
       }
@@ -211,7 +210,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 <input 
                     type="text" 
                     placeholder="搜尋 Email..." 
-                    className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
                     value={searchTerm}
                     onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                 />
@@ -285,7 +284,22 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                       </td>
                       <td className="py-3 px-2">
                         {isEditing ? (
-                          <select className="border rounded px-2 py-1 text-sm w-full bg-white" value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value as any})} disabled={isSuperAdmin}>
+                          <select 
+                            className="border rounded px-2 py-1 text-sm w-full bg-white outline-none focus:ring-1 focus:ring-blue-500" 
+                            value={editForm.role} 
+                            onChange={e => {
+                                const newRole = e.target.value;
+                                // [修正] 使用 setEditForm 的 callback 寫法，確保狀態是最新的，並強制連動
+                                setEditForm(prev => ({
+                                    ...prev, 
+                                    role: newRole as any,
+                                    // 只要切換到學員(student)或管理員(admin)，就強制開啟紫占
+                                    // 切換回一般(general)，則強制關閉
+                                    can_use_divination: (newRole === 'student' || newRole === 'admin')
+                                }));
+                            }} 
+                            disabled={isSuperAdmin}
+                          >
                             <option value="general">一般</option>
                             <option value="student">學員</option>
                             <option value="admin">管理員</option>
@@ -298,7 +312,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                       </td>
                       <td className="py-3 px-2">
                         {isEditing ? (
-                          <input type="date" className="border rounded px-2 py-1 text-xs w-full" value={editForm.accessExpiry || ''} onChange={e => setEditForm({...editForm, accessExpiry: e.target.value})}/>
+                          <input type="date" className="border rounded px-2 py-1 text-xs w-full" value={editForm.accessExpiry || ''} onChange={e => setEditForm(prev => ({...prev, accessExpiry: e.target.value}))}/>
                         ) : (
                           <span className={`text-xs font-mono ${user.accessExpiry ? (new Date(user.accessExpiry) < new Date() ? 'text-red-500 font-bold' : 'text-gray-600') : 'text-gray-400'}`}>
                             {user.accessExpiry ? user.accessExpiry.split('T')[0] : '-'}
@@ -307,7 +321,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                       </td>
                       <td className="py-3 px-2 text-center">
                         {isEditing ? (
-                           <input type="number" className="w-14 border rounded px-1 text-center text-xs" value={editForm.maxCharts} onChange={e => setEditForm({...editForm, maxCharts: parseInt(e.target.value)})}/>
+                           <input type="number" className="w-14 border rounded px-1 text-center text-xs" value={editForm.maxCharts} onChange={e => setEditForm(prev => ({...prev, maxCharts: parseInt(e.target.value)}))}/>
                         ) : (
                            <span className="text-sm"><span className="font-bold text-blue-600">{user.activeCount}</span><span className="text-gray-400 mx-1">/</span><span className="font-mono text-gray-600">{user.maxCharts}</span></span>
                         )}
@@ -375,7 +389,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                     <p className="text-sm text-gray-500 mb-4">輸入使用者的 Email，系統將發送一封邀請信，使用者點擊後即可自行設定密碼並登入。</p>
                     <div className="space-y-4">
                         <input type="email" placeholder="user@example.com" className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}/>
-                        <button onClick={handleInvite} disabled={!inviteEmail || isInviting} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg transition-all flex justify-center items-center gap-2">
+                        <button onClick={handleInvite} disabled={!inviteEmail || isInviting} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg transition-all flex items-center gap-2">
                             {isInviting && <Loader2 className="animate-spin" size={18} />} 發送邀請
                         </button>
                     </div>
