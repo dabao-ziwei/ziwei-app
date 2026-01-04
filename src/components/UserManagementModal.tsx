@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { X, Search, ChevronLeft, ChevronRight, Loader2, Shield, Trash2, UserPlus, CalendarClock, Settings, Sliders, Save, RotateCcw, Sparkles, CheckSquare, Square } from 'lucide-react';
+import { X, Search, ChevronLeft, ChevronRight, Loader2, Shield, Trash2, UserPlus, CalendarClock, Settings, Sliders, Save, RotateCcw, Sparkles, ArrowUp, ArrowDown, Filter, ChevronDown } from 'lucide-react';
 import { getAllProfilesWithStats, updateProfile, toggleUserBan, deleteUserProfile, inviteUserByEmail, bulkUpdateAccessExpiry, type UserProfile, type UserFeatures } from '../db';
 import { FEATURE_NAMES } from '../logic/permissions';
 
@@ -11,11 +11,18 @@ interface Props {
 const ITEMS_PER_PAGE = 10;
 const SUPER_ADMIN_EMAIL = 'stephenwu.0926@gmail.com';
 
+type SortConfig = {
+    key: keyof UserProfile | 'activeCount';
+    direction: 'asc' | 'desc';
+};
+
 export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
   // --- List State ---
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterRole, setFilterRole] = useState<string>('all');
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'joinDate', direction: 'desc' });
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   
@@ -36,6 +43,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
       loadData();
       setCurrentPage(1);
       setSearchTerm('');
+      setFilterRole('all');
       setSelectedIds(new Set());
       setEditingUser(null);
     }
@@ -67,12 +75,32 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
   const checkIsSuperAdmin = (email: string) => email?.trim().toLowerCase() === SUPER_ADMIN_EMAIL;
 
-  const filteredProfiles = useMemo(() => {
-    return profiles.filter(p => p.email.toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [profiles, searchTerm]);
+  // 綜合過濾與排序邏輯
+  const processedProfiles = useMemo(() => {
+    // 1. 搜尋過濾
+    let result = profiles.filter(p => p.email.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    // 2. 角色過濾
+    if (filterRole !== 'all') {
+        result = result.filter(p => p.role === filterRole);
+    }
 
-  const totalPages = Math.ceil(filteredProfiles.length / ITEMS_PER_PAGE);
-  const paginatedData = filteredProfiles.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+    // 3. 排序
+    return result.sort((a, b) => {
+        const aVal = a[sortConfig.key];
+        const bVal = b[sortConfig.key];
+
+        if (aVal === undefined || aVal === null) return 1;
+        if (bVal === undefined || bVal === null) return -1;
+
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+    });
+  }, [profiles, searchTerm, filterRole, sortConfig]);
+
+  const totalPages = Math.ceil(processedProfiles.length / ITEMS_PER_PAGE);
+  const paginatedData = processedProfiles.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   const handleSelectOne = (id: string) => {
       const newSet = new Set(selectedIds);
@@ -87,6 +115,13 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
       if (allSelected) validItems.forEach(p => newSet.delete(p.id));
       else validItems.forEach(p => newSet.add(p.id));
       setSelectedIds(newSet);
+  };
+
+  const handleSort = (key: keyof UserProfile | 'activeCount') => {
+      setSortConfig(prev => ({
+          key,
+          direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
+      }));
   };
 
   const handleBanToggle = async (user: UserProfile) => {
@@ -141,10 +176,25 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
   const handleDeleteUser = async () => {
       if (!editingUser || checkIsSuperAdmin(editingUser.email)) return;
-      if (confirm(`【危險】確定要永久刪除使用者 ${editingUser.email} 嗎？此操作無法復原。`)) {
-          await deleteUserProfile(editingUser.id);
-          setEditingUser(null);
-          loadData();
+      
+      const chartCount = editingUser.activeCount || 0;
+      const confirmMsg = 
+          `【危險操作】\n\n` +
+          `您確定要刪除使用者 ${editingUser.email} 嗎？\n` +
+          `該使用者目前擁有 ${chartCount} 張命盤。\n\n` +
+          `注意：確認刪除後，這 ${chartCount} 張命盤將【全數移轉】至您的帳號下，\n` +
+          `並會自動標記來源為此使用者。\n\n` +
+          `此操作無法復原，是否繼續？`;
+
+      if (confirm(confirmMsg)) {
+          const success = await deleteUserProfile(editingUser.id);
+          if (success) {
+              alert('使用者已刪除，資料已移轉完畢。');
+              setEditingUser(null);
+              loadData();
+          } else {
+              alert('刪除失敗，請檢查網路或資料庫狀態。');
+          }
       }
   };
 
@@ -169,6 +219,21 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
       else { alert('失敗: ' + res.msg); }
   };
 
+  // Helper Component for Table Header Sorting
+  const SortableHeader = ({ label, sortKey, className = "" }: { label: string, sortKey: keyof UserProfile | 'activeCount', className?: string }) => (
+      <th 
+          className={`py-3 px-2 cursor-pointer hover:bg-gray-100 transition-colors select-none ${className}`}
+          onClick={() => handleSort(sortKey)}
+      >
+          <div className={`flex items-center gap-1 ${className.includes('text-center') ? 'justify-center' : ''}`}>
+              {label}
+              {sortConfig.key === sortKey && (
+                  sortConfig.direction === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />
+              )}
+          </div>
+      </th>
+  );
+
   if (!isOpen) return null;
 
   return (
@@ -181,7 +246,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 <div className="flex items-center gap-2">
                     <Shield className="text-blue-600" />
                     <h2 className="text-lg font-bold text-gray-900">使用者管理</h2>
-                    <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-bold">{profiles.length}</span>
+                    <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-bold">{processedProfiles.length}</span>
                 </div>
                 <button onClick={onClose} className="p-1 hover:bg-gray-200 rounded-full"><X size={20} className="text-gray-500" /></button>
             </div>
@@ -190,6 +255,24 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                     <input type="text" placeholder="搜尋 Email..." className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
                 </div>
+                
+                {/* 角色過濾下拉選單 */}
+                <div className="relative">
+                    <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                    <select 
+                        className="pl-9 pr-8 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white text-sm text-gray-700 appearance-none cursor-pointer hover:bg-gray-50"
+                        value={filterRole}
+                        onChange={e => { setFilterRole(e.target.value); setCurrentPage(1); }}
+                    >
+                        <option value="all">所有角色</option>
+                        <option value="general">一般</option>
+                        <option value="student">學員</option>
+                        <option value="competitor">同業</option>
+                        <option value="admin">管理員</option>
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
+                </div>
+
                 <button onClick={() => setIsInviteOpen(true)} className="ml-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 font-bold text-sm shadow-md transition-all"><UserPlus size={18} /> 新增</button>
             </div>
             <div className="flex-1 overflow-y-auto p-0 relative">
@@ -198,23 +281,38 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                         <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm text-gray-500 text-sm">
                             <tr>
                                 <th className="py-3 px-4 w-10"><input type="checkbox" onChange={handleSelectAllPage} checked={paginatedData.length > 0 && paginatedData.every(p => selectedIds.has(p.id))} disabled={paginatedData.length===0}/></th>
-                                <th className="py-3 px-2">Email</th>
-                                <th className="py-3 px-2 w-24">角色</th>
-                                <th className="py-3 px-2 w-28">到期日</th>
-                                <th className="py-3 px-2 w-20 text-center">狀態</th>
+                                <SortableHeader label="Email" sortKey="email" />
+                                <SortableHeader label="已排/上限" sortKey="activeCount" className="text-center w-32" />
+                                <SortableHeader label="角色" sortKey="role" className="text-center w-24" />
+                                <SortableHeader label="到期日" sortKey="accessExpiry" className="text-center w-28" />
+                                <SortableHeader label="加入系統日" sortKey="joinDate" className="text-center w-28" />
+                                <SortableHeader label="狀態" sortKey="isBanned" className="text-center w-20" />
                                 <th className="py-3 px-4 w-20 text-right">設定</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
                             {paginatedData.map(user => {
                                 const isSuper = checkIsSuperAdmin(user.email);
+                                const usage = user.activeCount || 0;
+                                const isFull = usage >= user.maxCharts;
                                 return (
                                     <tr key={user.id} className={`hover:bg-gray-50 group transition-colors ${selectedIds.has(user.id) ? 'bg-blue-50/50' : ''} ${editingUser?.id === user.id ? 'bg-blue-100/30' : ''}`}>
                                         <td className="py-3 px-4"><input type="checkbox" checked={selectedIds.has(user.id)} onChange={() => handleSelectOne(user.id)} disabled={isSuper}/></td>
                                         <td className="py-3 px-2 text-sm font-bold text-gray-700"><div className="flex items-center gap-2">{isSuper && '👑'} <span className="truncate max-w-[200px]">{user.email}</span></div></td>
-                                        <td className="py-3 px-2"><span className={`text-xs px-2 py-1 rounded-full ${user.role === 'admin' ? 'bg-purple-100 text-purple-700' : user.role === 'student' ? 'bg-green-100 text-green-700' : user.role === 'competitor' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>{user.role === 'admin' ? '管理員' : user.role === 'student' ? '學員' : user.role === 'competitor' ? '同業' : '一般'}</span></td>
-                                        <td className="py-3 px-2 text-xs font-mono text-gray-600">{user.accessExpiry ? user.accessExpiry.split('T')[0] : '-'}</td>
-                                        <td className="py-3 px-2 text-center">{!isSuper ? <button onClick={() => handleBanToggle(user)} className={`w-8 h-4 rounded-full p-0.5 transition-colors ${!user.isBanned ? 'bg-green-500' : 'bg-gray-300'}`}><div className={`w-3 h-3 bg-white rounded-full shadow transform transition-transform ${!user.isBanned ? 'translate-x-4' : 'translate-x-0'}`} /></button> : <span className="text-amber-500 text-xs">🔒</span>}</td>
+                                        
+                                        <td className="py-3 px-2 text-center">
+                                            <span className={`text-xs font-mono font-bold px-2 py-1 rounded-full ${isFull ? 'bg-red-100 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
+                                                {usage} / {user.maxCharts}
+                                            </span>
+                                        </td>
+
+                                        <td className="py-3 px-2 text-center"><span className={`text-xs px-2 py-1 rounded-full ${user.role === 'admin' ? 'bg-purple-100 text-purple-700' : user.role === 'student' ? 'bg-green-100 text-green-700' : user.role === 'competitor' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>{user.role === 'admin' ? '管理員' : user.role === 'student' ? '學員' : user.role === 'competitor' ? '同業' : '一般'}</span></td>
+                                        <td className="py-3 px-2 text-xs font-mono text-gray-600 text-center">{user.accessExpiry ? user.accessExpiry.split('T')[0] : '-'}</td>
+                                        
+                                        {/* 加入系統日顯示 */}
+                                        <td className="py-3 px-2 text-xs font-mono text-gray-500 text-center">{user.joinDate ? user.joinDate.split('T')[0] : '-'}</td>
+
+                                        <td className="py-3 px-2 text-center">{!isSuper ? <button onClick={() => handleBanToggle(user)} className={`w-8 h-4 rounded-full p-0.5 transition-colors inline-block align-middle ${!user.isBanned ? 'bg-green-500' : 'bg-gray-300'}`}><div className={`w-3 h-3 bg-white rounded-full shadow transform transition-transform ${!user.isBanned ? 'translate-x-4' : 'translate-x-0'}`} /></button> : <span className="text-amber-500 text-xs">🔒</span>}</td>
                                         <td className="py-3 px-4 text-right"><button onClick={() => openEditDrawer(user)} className="p-2 bg-gray-100 hover:bg-blue-100 text-gray-600 hover:text-blue-600 rounded-lg transition-colors"><Settings size={16} /></button></td>
                                     </tr>
                                 )
@@ -236,7 +334,8 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 </div>
             )}
             <div className="p-3 border-t border-gray-100 bg-gray-50 flex justify-between items-center text-sm text-gray-500">
-                <span>{paginatedData.length} / {filteredProfiles.length} 筆</span>
+                {/* 修正後的筆數顯示 */}
+                <span>{paginatedData.length} / {processedProfiles.length} 筆</span>
                 <div className="flex gap-2">
                     <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-1 border rounded bg-white disabled:opacity-50"><ChevronLeft size={16} /></button>
                     <span className="px-2">{currentPage} / {totalPages || 1}</span>
@@ -266,7 +365,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                                         setEditForm(prev => ({
                                             ...prev, 
                                             role: newRole,
-                                            // [關鍵修正] 切換角色時，清空個別開關，使其回復該角色的預設值
+                                            // 切換角色時，清空個別開關，使其回復該角色的預設值
                                             feature_flags: {} 
                                         }));
                                         setHasChanges(true);
