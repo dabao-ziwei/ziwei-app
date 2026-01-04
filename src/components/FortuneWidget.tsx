@@ -1,11 +1,19 @@
-import React, { useMemo, useState } from 'react';
-import { createPortal } from 'react-dom'; // [新增] 引入 Portal
+import React, { useMemo, useState, useRef } from 'react';
+import { toBlob } from 'html-to-image';
 import { type Client, type UserProfile } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
-import { calculateDailyFortune, calculateWeeklyFortune, type DailyFortune, type WeeklyFortune, getFortuneLevel } from '../logic/fortune';
-import { Loader2, HelpCircle, Moon, Sun, Sparkles, Info, ChevronRight, X, Activity } from 'lucide-react';
+import { calculateDailyFortune, calculateWeeklyFortune } from '../logic/fortune';
+import { 
+    Loader2, HelpCircle, Moon, Sun, Sparkles, Activity, Share2, Download, Smartphone, X, 
+    MessageCircle, Lock, ChevronRight, Bug, Terminal, Calendar, User
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { FocusTrendChart } from './FocusTrendChart';
+
+const ADD_FRIEND_URL = 'https://line.me/R/ti/p/@653jrxjt?oat_content=url&ts=03241123';
+const SUPER_ADMIN_EMAIL = 'stephenwu.0926@gmail.com';
+const WEBSITE_URL = 'ziweiapp.dabao.life';
 
 interface FortuneWidgetProps {
     userProfile: UserProfile | null;
@@ -13,18 +21,171 @@ interface FortuneWidgetProps {
     clientName: string;
 }
 
-const SCORES = [
-    { key: 'total', label: '綜合', color: 'from-blue-500 to-indigo-600', icon: Sparkles },
-    { key: 'wealth', label: '財運', color: 'from-amber-400 to-orange-500', icon: Sun },
-    { key: 'career', label: '事業', color: 'from-green-400 to-teal-500', icon: Moon },
-    { key: 'travel', label: '外出', color: 'from-sky-400 to-cyan-500', icon: Sun },
-    { key: 'love', label: '感情', color: 'from-pink-400 to-rose-500', icon: Moon },
-] as const;
+// ----------------------------------------------------------------------
+// CSS 樣式
+// ----------------------------------------------------------------------
+const CustomScrollbarStyles = () => (
+    <style>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgba(255, 255, 255, 0.4); }
+        
+        @keyframes jelly-pulse {
+            0% { transform: scaleX(1); }
+            50% { transform: scaleX(1.05); }
+            100% { transform: scaleX(1); }
+        }
+        .jelly-active {
+            animation: jelly-pulse 3s infinite ease-in-out;
+        }
+    `}</style>
+);
 
+const DebugLogBlock = ({ title, score, logs }: { title: string, score: number, logs: string[] }) => (
+    <div className="bg-slate-900/80 p-3 rounded border border-slate-700/50 flex flex-col gap-2 h-full min-h-[120px]">
+        <div className="flex justify-between items-center border-b border-slate-700 pb-2 mb-1">
+            <span className="text-cyan-400 font-bold text-[11px] uppercase tracking-wider">{title}</span>
+            <span className={`font-mono font-bold text-sm ${score >= 0 ? 'text-green-400' : 'text-red-400'}`}>{score}</span>
+        </div>
+        <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 max-h-[100px]">
+            {logs && logs.length > 0 ? (
+                <ul className="space-y-1">
+                    {logs.map((log, i) => (
+                        <li key={i} className="text-[10px] text-slate-300 font-mono leading-relaxed border-l-2 border-slate-700 pl-2 hover:border-cyan-500 transition-colors">
+                            {log}
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <div className="text-[10px] text-slate-600 italic">無特殊星曜影響</div>
+            )}
+        </div>
+    </div>
+);
+
+// ----------------------------------------------------------------------
+// [核心] 相對能量果凍圖
+// ----------------------------------------------------------------------
+const JellyBarChart = ({ data, baseScore, isShareMode }: { data: any, baseScore: number, isShareMode?: boolean }) => {
+    const safeBase = isNaN(baseScore) ? 60 : baseScore;
+
+    return (
+        // [修正] 分享模式高度從 400px 縮減為 320px，消除過多的垂直留白，讓畫面更緊湊
+        <div className={`w-full flex items-end justify-between relative ${isShareMode ? 'h-[320px] gap-3 px-2 mb-2 shrink-0' : 'flex-1 h-[320px] sm:h-[380px] gap-2 sm:gap-4'} py-2`}>
+            
+            {['self', 'wealth', 'social', 'travel', 'love'].map((k, i) => {
+                const val = data.scores[k];
+                const labels = ['工作', '理財', '交友', '外出', '感情'];
+                
+                const isPositive = val >= safeBase;
+                const diff = Math.abs(val - safeBase);
+                
+                // 高度計算
+                const hPercent = Math.min(6 + diff * 1.2, 48);
+
+                const colors = [
+                    { main: '#FF9E9E', light: '#FFE4E1', shadow: '#E55B5B' },
+                    { main: '#6EE7B7', light: '#D1FAE5', shadow: '#059669' },
+                    { main: '#FCD34D', light: '#FEF3C7', shadow: '#D97706' },
+                    { main: '#F472B6', light: '#FBCFE8', shadow: '#DB2777' },
+                    { main: '#C084FC', light: '#E9D5FF', shadow: '#9333EA' },
+                ];
+                const c = colors[i];
+                const isLastItem = i === 4;
+
+                return (
+                    <div key={k} className={`flex flex-col items-center h-full w-full relative group ${isShareMode ? 'gap-3' : 'gap-4'}`}>
+                        
+                        {/* 1. 上方資訊區 */}
+                        <div className="flex flex-col items-center justify-end z-20 shrink-0 transition-transform duration-300 group-hover:-translate-y-1">
+                            <span className={`font-bold mb-1 tracking-wider opacity-80 ${isShareMode ? 'text-xs text-amber-100/60 font-serif' : 'text-xs sm:text-sm text-slate-400'}`}>{labels[i]}</span>
+                            <div className={`px-2 py-0.5 rounded-md border border-white/10 shadow-sm backdrop-blur-md ${isPositive ? 'bg-slate-800/80 text-white' : 'bg-slate-900/80 text-slate-400'}`}>
+                                <span className="font-mono font-black text-sm">{val}</span>
+                            </div>
+                        </div>
+
+                        {/* 2. 下方軌道區 */}
+                        <div className={`flex-1 w-full relative rounded-full overflow-visible ${isShareMode ? '' : 'border border-white/5 bg-white/5'}`}>
+                            
+                            <div className="absolute inset-0 rounded-full overflow-hidden z-0">
+                                {/* 基準線 */}
+                                <div 
+                                    className="absolute left-0 w-full h-[1px] z-50 pointer-events-none"
+                                    style={{ 
+                                        top: '50%',
+                                        background: isShareMode ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.8)', 
+                                        boxShadow: isShareMode ? '0 0 8px rgba(255,255,255,0.8), 0 0 15px cyan' : '0 0 4px #fff, 0 0 8px cyan'
+                                    }}
+                                />
+
+                                {/* 3. 果凍柱 (分享模式：純靜態) */}
+                                {isShareMode ? (
+                                    <div 
+                                        className="absolute left-0 w-full z-10"
+                                        style={{
+                                            height: `${hPercent}%`,
+                                            bottom: isPositive ? '50%' : 'auto',
+                                            top: isPositive ? 'auto' : '50%',
+                                            borderRadius: isPositive ? '20px 20px 0 0' : '0 0 20px 20px',
+                                            background: `linear-gradient(${isPositive ? 'to top' : 'to bottom'}, ${c.shadow} 0%, ${c.main} 60%, ${c.light} 100%)`,
+                                            boxShadow: `0 0 25px ${c.main}, inset 0 0 15px rgba(255,255,255,0.4)`
+                                        }}
+                                    >
+                                        <div className={`absolute left-1/4 right-1/4 h-[2px] bg-white/60 rounded-full blur-[1px] ${isPositive ? 'top-1' : 'bottom-1'}`} />
+                                    </div>
+                                ) : (
+                                    <motion.div 
+                                        className="absolute left-0 w-full jelly-active z-10"
+                                        initial={{ height: 0 }}
+                                        animate={{ height: `${hPercent}%` }}
+                                        transition={{ duration: 0.8, type: "spring", bounce: 0.4 }}
+                                        style={{
+                                            bottom: isPositive ? '50%' : 'auto',
+                                            top: isPositive ? 'auto' : '50%',
+                                            borderRadius: isPositive ? '20px 20px 0 0' : '0 0 20px 20px',
+                                            background: `linear-gradient(${isPositive ? 'to top' : 'to bottom'}, ${c.shadow} 0%, ${c.main} 60%, ${c.light} 100%)`,
+                                            boxShadow: `0 0 15px ${c.main}, inset 0 0 10px rgba(255,255,255,0.3)`
+                                        }}
+                                    >
+                                        <div className={`absolute left-1/4 right-1/4 h-[2px] bg-white/60 rounded-full blur-[1px] ${isPositive ? 'top-1' : 'bottom-1'}`} />
+                                    </motion.div>
+                                )}
+                            </div>
+                            
+                            {/* 基準分標籤 */}
+                            {isLastItem && (
+                                <div className={`absolute right-0 top-1/2 -translate-y-1/2 translate-x-full pl-3 font-mono whitespace-nowrap z-50 flex items-center ${isShareMode ? 'text-[10px] text-amber-200/60' : 'text-[9px] text-white/40'}`}>
+                                    <div className={`w-2 h-[1px] mr-2 ${isShareMode ? 'bg-amber-200/40' : 'bg-white/30'}`}></div>
+                                    {safeBase}
+                                </div>
+                            )}
+
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+// ----------------------------------------------------------------------
+// 主組件
+// ----------------------------------------------------------------------
 export const FortuneWidget: React.FC<FortuneWidgetProps> = ({ userProfile, client, clientName }) => {
     const navigate = useNavigate();
     const [mode, setMode] = useState<'daily' | 'weekly'>('daily');
     const [isTooltipOpen, setIsTooltipOpen] = useState(false);
+    const [showDebug, setShowDebug] = useState(false);
+    const [isGeneratingShare, setIsGeneratingShare] = useState(false);
+    const [shareImageUrl, setShareImageUrl] = useState<string | null>(null);
+    const [shareBlob, setShareBlob] = useState<Blob | null>(null);
+    const shareCardRef = useRef<HTMLDivElement>(null);
+
+    const isSuperAdmin = useMemo(() => userProfile?.email === SUPER_ADMIN_EMAIL, [userProfile]);
 
     const engine = useMemo(() => {
         try {
@@ -33,235 +194,299 @@ export const FortuneWidget: React.FC<FortuneWidgetProps> = ({ userProfile, clien
     }, [client]);
 
     const dailyFortune = useMemo(() => engine ? calculateDailyFortune(engine) : null, [engine]);
-    const weeklyFortune = useMemo(() => engine ? calculateWeeklyFortune(engine) : null, [engine]);
+    
+    const weeklyDetailedData = useMemo(() => {
+        if (!engine) return [];
+        try {
+            const data = [];
+            for(let i = 0; i < 7; i++) {
+                const d = new Date();
+                d.setDate(d.getDate() + i);
+                const f = calculateDailyFortune(engine, d);
+                data.push({
+                    label: `${d.getMonth()+1}/${d.getDate()}`,
+                    scores: f.scores,
+                    baseScore: f.devInfo.baseScore,
+                    dateStr: `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`
+                });
+            }
+            return data;
+        } catch (e) { return []; }
+    }, [engine]);
 
-    if (!engine || !dailyFortune || !weeklyFortune) return null;
+    if (!engine || !dailyFortune) return null;
 
-    const currentData = mode === 'daily' ? dailyFortune : weeklyFortune;
-    const baseScore = dailyFortune.baseScore;
+    const currentData = dailyFortune;
+    const baseScore = dailyFortune.devInfo?.baseScore || 60;
+    
+    const today = new Date();
+    const dateStr = today.toISOString().split('T')[0].replace(/-/g, '.');
+    const dayOfWeek = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][today.getDay()];
+
+    const handleShareClick = async () => {
+        if (!shareCardRef.current) return;
+        setIsGeneratingShare(true);
+        
+        setTimeout(async () => {
+            try {
+                // 背景色深炭色，質感黑卡
+                const blob = await toBlob(shareCardRef.current!, { pixelRatio: 3, backgroundColor: '#09090b' });
+                if (!blob) throw new Error('Image generation failed');
+                const url = URL.createObjectURL(blob);
+                setShareBlob(blob);
+                setShareImageUrl(url);
+            } catch (err) { alert('圖片生成失敗，請稍後再試。'); } 
+            finally { setIsGeneratingShare(false); }
+        }, 800);
+    };
+
+    const handleDownloadImage = () => {
+        if (!shareImageUrl) return;
+        const link = document.createElement('a');
+        link.download = `fortune-${clientName}-${dateStr}.png`;
+        link.href = shareImageUrl;
+        link.click();
+    };
+
+    const handleSystemShare = async () => {
+        if (!shareBlob || !navigator.share) return;
+        const file = new File([shareBlob], 'daily-fortune.png', { type: 'image/png' });
+        try { await navigator.share({ title: 'AI紫微斗數運勢', text: `這是 ${clientName} 的運勢分析`, files: [file] }); } catch (err) {}
+    };
+
+    const handleConsultTrigger = () => {
+         if (!dailyFortune?.consultationHook) return;
+         window.open(ADD_FRIEND_URL, '_blank');
+    };
 
     return (
-        <div className="w-full bg-[#1A2332] rounded-3xl p-4 sm:p-6 text-white shadow-xl shadow-blue-900/20 border border-blue-900/30 relative font-sans">
+        <div className="w-full relative flex flex-col items-center">
+            <CustomScrollbarStyles />
             
-            {/* 背景層 */}
-            <div className="absolute inset-0 rounded-3xl overflow-hidden pointer-events-none z-0">
-                <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/10 rounded-full blur-[80px] mix-blend-screen animate-pulse-slow"></div>
-                <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-600/10 rounded-full blur-[80px] mix-blend-screen animate-pulse-slow delay-1000"></div>
-            </div>
+            <div 
+                ref={shareCardRef} 
+                className={`
+                    relative font-sans overflow-hidden transition-all duration-500 ease-out
+                    ${isGeneratingShare 
+                        // [黑卡質感 + 緊湊版型]
+                        // 縮減上下 padding (p-6)
+                        ? 'w-[375px] h-auto p-6 rounded-2xl border border-amber-500/30 shadow-[0_20px_60px_-10px_rgba(0,0,0,0.8),inset_0_0_80px_rgba(0,0,0,0.9),0_0_20px_rgba(217,119,6,0.1)] bg-[#09090b]' 
+                        : 'w-full bg-[#0B1120] rounded-3xl p-4 sm:p-6 text-white shadow-xl border border-slate-800' 
+                    }
+                `}
+            >
+                
+                <div className={`absolute top-[-20%] left-[-20%] w-[60%] h-[60%] bg-blue-900/20 rounded-full blur-[120px] mix-blend-screen pointer-events-none transition-opacity duration-500 ${isGeneratingShare ? 'opacity-40' : 'opacity-100'}`}></div>
+                <div className={`absolute bottom-[-20%] right-[-20%] w-[60%] h-[60%] bg-purple-900/20 rounded-full blur-[120px] mix-blend-screen pointer-events-none transition-opacity duration-500 ${isGeneratingShare ? 'opacity-40' : 'opacity-100'}`}></div>
+                <div className={`absolute inset-0 bg-[linear-gradient(rgba(255,255,255,${isGeneratingShare ? '0.02' : '0.05'})_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,${isGeneratingShare ? '0.02' : '0.05'})_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none`}></div>
 
-            <div className="relative z-10">
-                {/* Header */}
-                <div className="flex flex-row flex-nowrap justify-between items-center gap-2 sm:gap-3 mb-6">
+                <div className={`relative z-10 flex flex-col ${isGeneratingShare ? 'h-auto' : 'h-full'}`}>
                     
-                    {/* Tab Buttons */}
-                    <div className="flex bg-[#252D3D] rounded-xl p-1 shadow-inner relative overflow-hidden shrink-0 flex-1 sm:flex-none">
-                        <motion.div 
-                            className="absolute top-1 bottom-1 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg shadow-md z-0"
-                            initial={false}
-                            animate={{ 
-                                left: mode === 'daily' ? '4px' : '50%', 
-                                width: 'calc(50% - 4px)',
-                                x: mode === 'daily' ? 0 : 0
-                             }}
-                             transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                        />
-                        {/* 手機版縮小 Padding (px-2 py-1.5) 與字體 */}
-                        <button 
-                            onClick={() => setMode('daily')} 
-                            className={`relative z-10 flex-1 flex items-center justify-center gap-1 sm:gap-1.5 px-2 py-1.5 sm:px-4 sm:py-2 rounded-lg transition-colors duration-200 font-bold text-xs sm:text-base ${mode === 'daily' ? 'text-white' : 'text-slate-400 hover:text-slate-200'}`}
-                        >
-                            <Sun size={14} className={`sm:w-4 sm:h-4 ${mode === 'daily' ? 'animate-spin-slow' : ''}`} /> <span className="whitespace-nowrap">今日</span><span className="hidden sm:inline">運勢</span>
-                        </button>
-                        <button 
-                            onClick={() => setMode('weekly')} 
-                            className={`relative z-10 flex-1 flex items-center justify-center gap-1 sm:gap-1.5 px-2 py-1.5 sm:px-4 sm:py-2 rounded-lg transition-colors duration-200 font-bold text-xs sm:text-base ${mode === 'weekly' ? 'text-white' : 'text-slate-400 hover:text-slate-200'}`}
-                        >
-                            <Activity size={14} className="sm:w-4 sm:h-4" /> <span className="whitespace-nowrap">本週</span><span className="hidden sm:inline">運勢</span>
-                        </button>
-                    </div>
-                    
-                    {/* Base Score Button */}
-                    <div className="relative shrink-0">
-                        <button
-                            onClick={() => setIsTooltipOpen(!isTooltipOpen)}
-                            className="bg-[#2A3441] hover:bg-[#333F50] transition-colors rounded-lg px-2 py-1.5 sm:px-3 sm:py-2 flex items-center gap-1.5 text-sm cursor-help select-none"
-                        >
-                             <span className="text-amber-400 font-bold text-lg leading-none">{baseScore}</span>
-                             {/* 手機版隱藏文字 */}
-                             <span className="text-slate-400 hidden sm:inline whitespace-nowrap">本命基數</span>
-                             <HelpCircle size={14} className="text-slate-500" />
-                        </button>
+                    {/* Header */}
+                    {isGeneratingShare ? (
+                        // [修正] 大幅縮減 header 的上下間距 (mb-2, pt-2)
+                        <div className="flex flex-col items-center justify-center mb-2 pt-2">
+                            <div className="flex items-center gap-3 mb-1 opacity-80">
+                                <Sparkles className="text-amber-400" size={16} />
+                                <span className="text-base font-serif font-bold tracking-[0.2em] text-transparent bg-clip-text bg-gradient-to-r from-amber-100 via-yellow-200 to-amber-100">
+                                    今日運勢
+                                </span>
+                                <Sparkles className="text-amber-400" size={16} />
+                            </div>
+                            
+                            <div className="flex flex-col items-center mt-1">
+                                <div className="flex items-center gap-3 text-amber-200/50 text-[10px] font-mono tracking-[0.2em] uppercase mb-1">
+                                    <span>{dateStr}</span>
+                                    <span className="text-amber-500/40">•</span>
+                                    <span>{dayOfWeek}</span>
+                                </div>
+                                <h2 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-b from-white via-amber-100 to-amber-200 tracking-widest drop-shadow-sm">
+                                    {clientName}
+                                </h2>
+                                <div className="w-12 h-[1px] bg-gradient-to-r from-transparent via-amber-500/40 to-transparent mt-2"></div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex flex-row flex-nowrap justify-between items-center gap-2 sm:gap-4 mb-6">
+                            <div className="flex bg-slate-900/80 p-1 rounded-lg border border-slate-700/50 backdrop-blur-sm shadow-lg shrink-0 flex-1 sm:flex-none">
+                                <button onClick={() => setMode('daily')} className={`flex items-center justify-center gap-1 sm:gap-2 px-3 py-2 rounded-md transition-all font-bold text-xs sm:text-sm flex-1 sm:flex-auto ${mode === 'daily' ? 'bg-cyan-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+                                    <Sun size={16} className={`sm:w-4 sm:h-4 ${mode === 'daily' ? 'animate-spin-slow' : ''}`} /> <span className="whitespace-nowrap">今日</span>
+                                </button>
+                                <button onClick={() => setMode('weekly')} className={`flex items-center justify-center gap-1 sm:gap-2 px-3 py-2 rounded-md transition-all font-bold text-xs sm:text-sm flex-1 sm:flex-auto ${mode === 'weekly' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+                                    <Activity size={16} className="sm:w-4 sm:h-4" /> <span className="whitespace-nowrap">一週</span>
+                                </button>
+                            </div>
+                            <div className="flex gap-3 shrink-0 items-center">
+                                <button onClick={handleShareClick} disabled={isGeneratingShare} className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-lg text-sm font-bold shadow-sm border border-slate-700 transition-all disabled:opacity-50">
+                                    {isGeneratingShare ? <Loader2 size={16} className="animate-spin"/> : <Share2 size={16} />} <span className="hidden sm:inline whitespace-nowrap">分享</span>
+                                </button>
+                                <div className="relative">
+                                    <button onClick={() => setIsTooltipOpen(!isTooltipOpen)} className="flex items-center justify-center gap-2 px-3 py-2 bg-slate-800/80 rounded-full border border-slate-700 cursor-help hover:bg-slate-700 transition-colors select-none">
+                                        <span className="text-amber-400 font-black text-base font-mono leading-none">{baseScore}</span>
+                                        <span className="text-xs text-slate-400 font-bold uppercase tracking-wider hidden sm:inline whitespace-nowrap">本命基數</span>
+                                        <HelpCircle size={16} className="text-slate-500" />
+                                    </button>
+                                    <AnimatePresence>
+                                        {isTooltipOpen && (
+                                            <>
+                                                <div className="fixed inset-0 z-[60] sm:hidden" onClick={() => setIsTooltipOpen(false)}></div>
+                                                <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} className="absolute z-[70] p-4 rounded-xl shadow-2xl bg-slate-900 border border-slate-700 text-white text-xs leading-relaxed whitespace-normal break-words sm:top-full sm:right-0 sm:mt-3 sm:w-64 top-full right-0 mt-3 w-[220px] sm:max-w-none">
+                                                    <button onClick={() => setIsTooltipOpen(false)} className="absolute top-2 right-2 text-slate-400 hover:text-white sm:hidden"><X size={14}/></button>
+                                                    <div className="font-bold text-amber-400 mb-2 flex items-center gap-1"><Sparkles size={14}/> 關於基礎運勢</div>
+                                                    <p className="opacity-90 text-slate-300">這是命盤的「先天體質」分數。<br/><span className="text-amber-200 font-bold">• 高分者 (80+)：</span> 抗壓強，但也易因大意而失荊州。<br/><span className="text-amber-200 font-bold">• 低分者 (60-)：</span> 敏感度高，善用流日運勢也能創造佳績。</p>
+                                                </motion.div>
+                                            </>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                                {isSuperAdmin && (
+                                    <button onClick={() => setShowDebug(!showDebug)} className={`p-2 rounded-lg border transition-colors ${showDebug ? 'bg-green-900/30 text-green-400 border-green-700' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}`}>
+                                        <Bug size={16}/>
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    )}
 
-                        {/* Desktop Tooltip (維持原本的 Absolute Positioning) */}
-                        <AnimatePresence>
-                            {isTooltipOpen && (
-                                <motion.div
-                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                    transition={{ duration: 0.2 }}
-                                    className="hidden sm:block absolute top-full right-0 mt-2 w-64 z-50 p-3 rounded-xl shadow-xl bg-[#252D3D] border border-slate-600/50 text-slate-300 text-xs leading-relaxed"
-                                >
-                                    <div className="font-bold text-amber-400 mb-1 text-xs">什麼是本命基數？</div>
-                                    <div className="mb-1">這是您命盤的「先天體質」分數。</div>
-                                    <ul className="list-disc list-inside space-y-0.5 text-slate-400">
-                                        <li><span className="text-slate-200">高分</span>：抗壓強，但易因大意失荊州。</li>
-                                        <li><span className="text-slate-200">低分</span>：敏感度高，善用運勢能創造成就。</li>
-                                    </ul>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
+                    {/* Content */}
+                    <div className={`relative flex-1 w-full flex ${isGeneratingShare ? 'flex-col' : 'flex-col lg:flex-row'} items-stretch z-10 gap-6`}>
+                        <div className={`flex flex-col items-center justify-center ${mode === 'weekly' ? 'w-full' : 'flex-1'}`}>
+                             {mode === 'daily' ? (
+                                <div className={`w-full max-w-3xl flex flex-col ${isGeneratingShare ? 'h-auto' : 'h-full'}`}>
+                                    <JellyBarChart data={currentData} baseScore={baseScore} isShareMode={isGeneratingShare} />
+                                    
+                                    {/* Footer */}
+                                    {isGeneratingShare && (
+                                        // [修正] 縮減 footer 的上間距 (mt-2)，讓整體更凝聚
+                                        <div className="mt-2 flex flex-col items-center gap-2">
+                                            
+                                            {/* 本命基數 */}
+                                            <div className="flex flex-col items-center">
+                                                <span className="text-[9px] text-amber-200/40 uppercase tracking-[0.2em] mb-1">Base Energy</span>
+                                                <div className="flex items-center justify-center gap-2 bg-gradient-to-b from-amber-900/30 to-transparent px-6 py-1 rounded-full border border-amber-500/20 shadow-[inset_0_0_10px_rgba(251,191,36,0.1)]">
+                                                    <span className="text-xl font-mono font-bold text-transparent bg-clip-text bg-gradient-to-b from-amber-100 to-amber-400">{baseScore}</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="w-3/4 flex items-center gap-2 opacity-30 mt-1">
+                                                <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent via-amber-500/50 to-transparent"></div>
+                                            </div>
+                                            
+                                            <div className="mt-1 flex items-center gap-1 text-[9px] text-amber-200/30 font-mono tracking-[0.3em] uppercase">
+                                                <Sparkles size={8} className="text-amber-500/40" />
+                                                <span>{WEBSITE_URL}</span>
+                                                <Sparkles size={8} className="text-amber-500/40" />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                             ) : (
+                                <div className="w-full h-full max-w-4xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                    <div className="w-full h-[350px]"> 
+                                        <FocusTrendChart data={weeklyDetailedData} />
+                                    </div>
+                                </div>
+                             )}
+                        </div>
+
+                        {/* Advice Panel */}
+                        {mode === 'daily' && !isGeneratingShare && (
+                             <div className="w-full lg:w-[340px] shrink-0 animate-in slide-in-from-right-4 duration-500 delay-150">
+                                  <AdvicePanel fortune={dailyFortune} userProfile={userProfile} onConsultClick={handleConsultTrigger} />
+                             </div>
+                        )}
                     </div>
                 </div>
+            </div>
 
-                {/* Mobile Tooltip (使用 Portal 傳送到 body 層，解決所有被遮擋問題) */}
-                {isTooltipOpen && createPortal(
-                    <AnimatePresence>
-                        <motion.div 
-                            initial={{ opacity: 0 }} 
-                            animate={{ opacity: 1 }} 
-                            exit={{ opacity: 0 }}
-                            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:hidden"
-                        >
-                            {/* 遮罩 */}
-                            <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" onClick={() => setIsTooltipOpen(false)}></div>
-                            
-                            {/* 內容卡片 */}
-                            <motion.div 
-                                initial={{ scale: 0.9, opacity: 0 }}
-                                animate={{ scale: 1, opacity: 1 }}
-                                exit={{ scale: 0.9, opacity: 0 }}
-                                className="relative bg-[#252D3D] w-full max-w-xs rounded-2xl shadow-2xl border border-slate-600/50 p-5 text-slate-300 text-sm leading-relaxed overflow-y-auto max-h-[80vh]"
-                            >
-                                <button onClick={() => setIsTooltipOpen(false)} className="absolute top-3 right-3 text-slate-400 hover:text-white p-1">
-                                    <X size={20}/>
-                                </button>
-
-                                <div className="font-bold text-amber-400 mb-3 text-base flex items-center gap-2">
-                                    <HelpCircle size={18}/> 
-                                    本命基數說明
-                                </div>
-                                <div className="mb-3 text-slate-200">這是您命盤的「先天體質」分數，代表您天生對抗環境變動的抗壓性。</div>
-                                <ul className="list-disc list-inside space-y-2 text-slate-400 bg-black/20 p-3 rounded-xl">
-                                    <li><span className="text-amber-200 font-bold">分數較高</span>：<br/>先天抗壓性強，運勢波動對您的影響較小。但也需注意不要因過於自信大意而失荊州。</li>
-                                    <li><span className="text-amber-200 font-bold">分數較低</span>：<br/>先天敏感度高，容易察覺環境變化。雖然易受波動影響，但若能善用流日運勢趨吉避凶，也能創造非凡成就。</li>
-                                </ul>
-                            </motion.div>
-                        </motion.div>
-                    </AnimatePresence>,
-                    document.body
-                )}
-
-                {/* Content */}
-                <AnimatePresence mode="wait">
-                    <motion.div
-                        key={mode}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        transition={{ duration: 0.3 }}
-                        className="grid grid-cols-1 md:grid-cols-12 gap-6"
-                    >
-                         <div className="md:col-span-7 grid grid-cols-5 gap-2 sm:gap-4 h-64 sm:h-72 items-end pb-2 relative">
-                             {SCORES.map((scoreItem, index) => {
-                                 const scoreValue = currentData.scores[scoreItem.key as keyof typeof currentData.scores] as number;
-                                 const level = getFortuneLevel(scoreValue);
-                                 const heightPercent = Math.max(15, Math.min(100, scoreValue));
- 
-                                 return (
-                                     <div key={scoreItem.key} className="flex flex-col items-center justify-end h-full group relative">
-                                         <div className="mb-2 text-center relative z-10">
-                                             <div className="text-[10px] sm:text-xs text-slate-400 mb-0.5">{scoreItem.label}</div>
-                                             <div className={`text-xl sm:text-2xl font-bold font-mono bg-clip-text text-transparent bg-gradient-to-b ${scoreItem.color} leading-none filter drop-shadow-sm`}>
-                                                 <CountUp end={scoreValue} duration={1} />
-                                             </div>
-                                         </div>
- 
-                                         <div className="relative w-full max-w-[40px] sm:max-w-[48px] h-[70%] sm:h-[75%] bg-[#111827] rounded-2xl border-2 border-blue-900/50 overflow-hidden shadow-inner">
-                                             <div className="absolute inset-0 flex flex-col justify-between p-1 pointer-events-none z-20 opacity-30">
-                                                 {[...Array(9)].map((_, i) => <div key={i} className="w-full h-px bg-blue-500/30"></div>)}
-                                             </div>
-                                             <motion.div
-                                                 className="absolute bottom-0 left-0 right-0 bg-gradient-to-t transition-all duration-1000 ease-out relative overflow-hidden"
-                                                 style={{ height: `${heightPercent}%` }}
-                                                 initial={{ height: 0 }}
-                                                 animate={{ height: `${heightPercent}%` }}
-                                             >
-                                                 <div className={`absolute inset-0 bg-gradient-to-t ${scoreItem.color} opacity-80`}></div>
-                                                 <div className="absolute inset-0 animate-pulse-slow mix-blend-overlay opacity-50 bg-[url('data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjAwIDIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSI0MCIgY3k9IjQwIiByPSIxLjUiIGZpbGw9IndoaXRlIiBvcGFjaXR5PSIwLjQiLz48Y2lyY2xlIGN4PSIxMDAiIGN5PSIxMjAiIHI9IjEiIGZpbGw9IndoaXRlIiBvcGFjaXR5PSIwLjMiLz48Y2lyY2xlIGN4PSIxNjAiIGN5PSI2MCIgcj0iMS4yIiBmaWxsPSJ3aGl0ZSIgb3BhY2lXR5PSIwLjUiLz48L3N2Zz4=')] bg-repeat"></div>
-                                                 <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${scoreItem.color} filter brightness-150 shadow-[0_-2px_4px_rgba(255,255,255,0.3)]`}></div>
-                                             </motion.div>
-                                         </div>
- 
-                                         <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30 hidden sm:block">
-                                             <div className={`px-3 py-1.5 rounded-lg bg-gradient-to-r ${scoreItem.color} text-white text-xs font-bold shadow-lg whitespace-nowrap`}>
-                                                 {level.label}
-                                             </div>
-                                         </div>
-                                     </div>
-                                 );
-                             })}
-                         </div>
-
-                        <div className="md:col-span-5 flex flex-col gap-4">
-                             <GuidanceCard 
-                                 icon={Moon} 
-                                 title={`${mode === 'daily' ? '今日' : '本週'}指引`} 
-                                 content={currentData.guidance.summary} 
-                                 type="general"
-                             />
-                             <GuidanceCard 
-                                 icon={Sparkles} 
-                                 title="幸運提醒" 
-                                 content={currentData.guidance.luckyTips} 
-                                 type="lucky"
-                             />
- 
-                             <button 
-                                 onClick={() => navigate(mode === 'daily' ? `/daily/${client.id}` : `/weekly/${client.id}`)} 
-                                 className="mt-auto w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 rounded-xl text-white font-bold shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2 group transition-all duration-200 active:scale-[0.98]"
-                             >
-                                 <span>查看完整{mode === 'daily' ? '今日' : '本週'}運勢報告</span>
-                                 <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform"/>
-                             </button>
+            {/* Modals... */}
+            <SharePreviewModal isOpen={!!shareImageUrl} onClose={() => { setShareImageUrl(null); setShareBlob(null); }} imageUrl={shareImageUrl} onDownload={handleDownloadImage} onSystemShare={handleSystemShare} />
+            {showDebug && isSuperAdmin && (
+                <div className="relative mt-4 z-50 bg-[#020617]/95 border border-green-500/30 backdrop-blur-md rounded-xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-4 w-full max-w-4xl">
+                    {/* Debug 內容略，保持不變 */}
+                    <div className="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-700">
+                        <div className="flex items-center gap-2 text-green-400"><Terminal size={14} /><span className="text-xs font-mono font-bold">DEV_CONSOLE</span></div>
+                        <button onClick={() => setShowDebug(false)} className="text-slate-400 hover:text-white"><X size={14} /></button>
+                    </div>
+                    <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+                         <div className="flex flex-col gap-4">
+                            <DebugLogBlock title="Time Params" score={0} logs={[dailyFortune.devInfo.lunarDateStr, `流年:${dailyFortune.devInfo.flowYearZhi}`, `流月:${dailyFortune.devInfo.flowMonthZhi}`, `流日:${dailyFortune.devInfo.flowDayZhi}`]} />
+                            <DebugLogBlock title="Base Score" score={dailyFortune.devInfo.baseScore} logs={dailyFortune.devInfo.formulas.base} />
                         </div>
-                    </motion.div>
-                </AnimatePresence>
+                        <div className="flex flex-col gap-4">
+                            <DebugLogBlock title="Work" score={dailyFortune.scores.self} logs={dailyFortune.devInfo.formulas.self} />
+                            <DebugLogBlock title="Wealth" score={dailyFortune.scores.wealth} logs={dailyFortune.devInfo.formulas.wealth} />
+                        </div>
+                        <div className="flex flex-col gap-4">
+                            <DebugLogBlock title="Social" score={dailyFortune.scores.social} logs={dailyFortune.devInfo.formulas.social} />
+                            <DebugLogBlock title="Travel" score={dailyFortune.scores.travel} logs={dailyFortune.devInfo.formulas.travel} />
+                        </div>
+                        <div className="flex flex-col gap-4">
+                            <DebugLogBlock title="Love" score={dailyFortune.scores.love} logs={dailyFortune.devInfo.formulas.love} />
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// ... (SharePreviewModal 與 AdvicePanel 保持不變)
+interface SharePreviewModalProps { isOpen: boolean; onClose: () => void; imageUrl: string | null; onDownload: () => void; onSystemShare: () => void; }
+const SharePreviewModal: React.FC<SharePreviewModalProps> = ({ isOpen, onClose, imageUrl, onDownload, onSystemShare }) => {
+    if (!isOpen || !imageUrl) return null;
+    return (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+            <div className="bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col relative border border-slate-700">
+                <div className="flex justify-between items-center p-4 border-b border-slate-700">
+                    <h3 className="text-white font-bold flex items-center gap-2"><Sparkles size={18} className="text-purple-400"/> 分享運勢卡片</h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors"><X size={20} /></button>
+                </div>
+                <div className="p-6 flex justify-center bg-[#020617]"><div className="relative shadow-[0_0_30px_rgba(139,92,246,0.3)] rounded-lg overflow-hidden"><img src={imageUrl} alt="Daily Fortune Card" className="max-h-[50vh] object-contain rounded-lg" /></div></div>
+                <div className="p-4 bg-slate-900 border-t border-slate-700 flex flex-col gap-3">
+                    <button onClick={onDownload} className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-900/20"><Download size={18} /> 下載圖片 (推薦)</button>
+                    {navigator.share && (<button onClick={onSystemShare} className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold flex items-center justify-center gap-2 transition-all border border-slate-700"><Smartphone size={18} /> 呼叫系統分享 (手機用)</button>)}
+                </div>
             </div>
         </div>
     );
 };
 
-const CountUp = ({ end, duration }: { end: number, duration: number }) => {
-    const [count, setCount] = useState(0);
-    React.useEffect(() => {
-        let start = 0;
-        const increment = end / (duration * 60);
-        const timer = setInterval(() => {
-            start += increment;
-            if (start >= end) {
-                clearInterval(timer);
-                setCount(end);
-            } else {
-                setCount(Math.floor(start));
-            }
-        }, 1000 / 60);
-        return () => clearInterval(timer);
-    }, [end, duration]);
-    return <>{count}</>;
-};
-
-const GuidanceCard = ({ icon: Icon, title, content, type }: { icon: any, title: string, content: string, type: 'general' | 'lucky' }) => (
-    <div className={`rounded-2xl p-4 border ${type === 'general' ? 'bg-blue-900/20 border-blue-800/50' : 'bg-amber-900/20 border-amber-800/50'} relative overflow-hidden`}>
-        <div className={`absolute top-0 left-0 w-1 h-full ${type === 'general' ? 'bg-blue-500' : 'bg-amber-500'}`}></div>
-        <div className="flex items-start gap-3">
-            <div className={`p-2 rounded-full shrink-0 ${type === 'general' ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-400'}`}>
-                <Icon size={18} />
-            </div>
-            <div>
-                <h4 className={`font-bold mb-1 text-sm ${type === 'general' ? 'text-blue-300' : 'text-amber-300'}`}>{title}</h4>
-                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed opacity-90">{content}</p>
+const AdvicePanel = ({ fortune, userProfile, onConsultClick }: { fortune: any, userProfile: UserProfile | null, onConsultClick: () => void }) => {
+    const isVip = useMemo(() => {
+        if (!userProfile) return false;
+        if (['admin', 'student'].includes(userProfile.role)) return true;
+        if (userProfile.accessExpiry && new Date(userProfile.accessExpiry) > new Date()) return true;
+        return false;
+    }, [userProfile]);
+    const categories = [
+        { key: 'self', label: '工作', color: 'text-amber-500', bg: 'bg-amber-500/10 border-amber-500/20', icon: Sun },
+        { key: 'wealth', label: '理財', color: 'text-green-500', bg: 'bg-green-500/10 border-green-500/20', icon: Activity },
+        { key: 'love', label: '感情', color: 'text-pink-500', bg: 'bg-pink-500/10 border-pink-500/20', icon: Moon },
+        { key: 'social', label: '交友', color: 'text-blue-500', bg: 'bg-blue-500/10 border-blue-500/20', icon: Sparkles },
+        { key: 'travel', label: '外出', color: 'text-purple-500', bg: 'bg-purple-500/10 border-purple-500/20', icon: Sun },
+    ];
+    return (
+        <div className="flex flex-col bg-slate-900/50 rounded-2xl border border-slate-700/50 overflow-hidden relative shadow-lg h-[350px] sm:h-[410px]">
+            <div className="p-4 border-b border-slate-700/50 bg-slate-800/30 shrink-0 flex justify-between items-center"><h3 className="text-sm font-bold text-slate-300 flex items-center gap-2"><SparklesIcon /> 今日指引{!isVip && <span className="text-[10px] bg-slate-700/80 text-slate-300 px-2 py-0.5 rounded-full border border-slate-600">試閱模式</span>}</h3></div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+                {fortune.consultationHook && fortune.consultationHook.show && (
+                    <div className="p-4 bg-gradient-to-r from-amber-900/40 to-orange-900/40 border border-amber-500/30 rounded-xl shadow-lg shadow-amber-900/10 shrink-0 relative overflow-hidden group">
+                        <div className="absolute inset-0 bg-amber-500/5 group-hover:bg-amber-500/10 transition-colors"></div>
+                        <div className="flex items-start gap-3 mb-3 relative z-10"><div className="p-2 bg-amber-500/20 rounded-full shrink-0"><MessageCircle size={20} className="text-amber-400" /></div><div><p className="text-sm font-bold text-amber-400 mb-1 tracking-wide">{fortune.consultationHook.reason}</p><p className="text-xs text-amber-100/80 leading-relaxed">{fortune.consultationHook.text}</p></div></div>
+                        <button onClick={onConsultClick} className="w-full py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold rounded-lg shadow-md transition-all flex items-center justify-center gap-2 relative z-10 group-hover:shadow-lg hover:brightness-110">{fortune.consultationHook.linkText} <ChevronRight size={14} /></button>
+                    </div>
+                )}
+                {categories.map((cat) => {
+                    const Icon = cat.icon;
+                    return (
+                    <div key={cat.key} className={`rounded-xl border p-4 ${cat.bg} shrink-0 transition-all hover:bg-opacity-70`}>
+                        <div className="flex items-center gap-2 mb-3"><Icon size={14} className={cat.color} /><span className={`text-xs font-black ${cat.color} uppercase tracking-widest`}>{cat.label}</span><div className={`h-[1px] flex-1 ${cat.color} opacity-20`}></div></div>
+                        <div className="relative min-h-[40px] flex items-center"><p className={`text-sm text-slate-300 leading-relaxed font-medium ${!isVip ? 'blur-[4px] select-none opacity-60' : ''}`}>{fortune.advice[cat.key]}</p>{!isVip && (<div className="absolute inset-0 flex items-center justify-center"><div className="bg-slate-900/80 backdrop-blur-[2px] px-4 py-2 rounded-full border border-slate-600/50 flex items-center gap-2 shadow-xl"><Lock size={14} className="text-amber-400" /><span className="text-xs text-slate-300 font-bold">會員限定觀看</span></div></div>)}</div>
+                    </div>
+                )})}
             </div>
         </div>
-    </div>
-);
+    );
+};
+const SparklesIcon = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-purple-400"><path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" /><path d="M17 4a2 2 0 0 0 2 2a2 2 0 0 0 -2 2a2 2 0 0 0 2 -2" /><path d="M19 11h2m-1 -1v2" /></svg>);
