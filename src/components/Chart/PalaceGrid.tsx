@@ -37,7 +37,7 @@ interface PalaceGridProps {
   
   flyingStarsLookup?: Record<string, '祿' | '權' | '科' | '忌'>;
 
-  getRelativeNames: (idx: number) => { daName?: string; liuName?: string; xiaoName?: string; divinationName?: string };
+  getRelativeNames: (idx: number) => { daName?: string; liuName?: string; xiaoName?: string; divinationName?: string; yueName?: string; riName?: string }; // [修改] 增加 yueName, riName
   getIsBenMingMing: (idx: number) => boolean;
   getAnchorCoord: (idx: number) => { x: number; y: number };
 
@@ -57,6 +57,16 @@ interface PalaceGridProps {
       inverted: PermissionState;
       xiao: PermissionState;
   };
+
+  // [新增] 流月流日相關
+  liuMonth?: number | null;
+  isLiuMonthLeap?: boolean;
+  liuDay?: number | null;
+  onSetLiuMonth?: (m: number | null, isLeap: boolean) => void;
+  onSetLiuDay?: (d: number | null) => void;
+  liuMonthGan?: number;
+  liuDayGan?: number;
+  liuNianYear?: number | null; // [新增]
 }
 
 export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
@@ -69,7 +79,9 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
   getRelativeNames, getIsBenMingMing, getAnchorCoord,
   onHistoryBack, onNavigate, onCompatibility, onChangeHour, onResetTime,
   onToggleTwin, onToggleInverted, onToggleSmallLimit, onPalaceClick, onTriggerClick,
-  permissionFlags
+  permissionFlags,
+  // [新增]
+  liuMonth, isLiuMonthLeap, liuDay, onSetLiuMonth, onSetLiuDay, liuMonthGan, liuDayGan
 }, ref) => {
 
   const gridLayout = [5, 6, 7, 8, 4, null, null, 9, 3, null, null, 10, 2, 1, 0, 11];
@@ -113,6 +125,16 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
                           isLiuNian={liuNianYear !== null}
                           
                           permissionFlags={permissionFlags}
+
+                          // [新增] 傳遞流月流日 Props
+                          liuMonth={liuMonth}
+                          isLiuMonthLeap={isLiuMonthLeap}
+                          liuDay={liuDay}
+                          onSetLiuMonth={onSetLiuMonth}
+                          onSetLiuDay={onSetLiuDay}
+                          liuNianYear={liuNianYear} // 傳遞流年年份
+                          liuMonthGan={liuMonthGan}
+                          liuDayGan={liuDayGan}
                       />
                   </div>
               );
@@ -123,10 +145,15 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
 
           const relNames = getRelativeNames(palaceIdx);
           const isBenMingMing = getIsBenMingMing(palaceIdx);
+          
+          const isDaXianActive = daXianSeq >= 0; 
+          const isLiuNianActive = liuNianYear !== null; 
+          const isXiaoXianActive = showXiaoXian;
+
           const isDaXianMing = daXianSeq >= 0 && daXianList[daXianSeq].palaceIdx === palaceIdx;
           const isLiuNianMing = liuNianYear !== null && chartData.palaces[palaceIdx].zhiIndex === (liuNianYear - 4) % 12;
           const isXiaoXianMingPalace = liuNianYear !== null && palaceIdx === xiaoXianMingIdx;
-          const isDaXianActive = daXianSeq >= 0; const isLiuNianActive = liuNianYear !== null; const isXiaoXianActive = showXiaoXian;
+          
           const isConnected = selectedPalace !== null && Object.values(connections).includes(palaceIdx);
           const showXiaoXianSeal = isXiaoXianMingPalace && !showXiaoXian;
           const isFlyingSource = flyingPalace === palaceIdx;
@@ -139,6 +166,9 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
                       daName={relNames.daName}
                       liuName={relNames.liuName}
                       xiaoName={relNames.xiaoName}
+                      yueName={relNames.yueName}
+                      riName={relNames.riName}
+
                       isBody={mode !== 'divination' && chartData.palaces[palaceIdx].isBody}
                       isXiaoXianMing={showXiaoXianSeal}
                       isBenMingMing={isBenMingMing}
