@@ -7,6 +7,9 @@ interface PalaceCardProps {
   daName?: string;
   liuName?: string;
   xiaoName?: string;
+  yueName?: string;
+  riName?: string;
+
   isBody?: boolean;
   isXiaoXianMing?: boolean;
 
@@ -27,7 +30,6 @@ interface PalaceCardProps {
   divinationName?: string;
 
   externalSiHua?: Record<string, '祿' | '權' | '科' | '忌'>;
-  // [新增] 紫占覆蓋用的四化
   divinationSiHua?: Record<string, '祿' | '權' | '科' | '忌'>;
 }
 
@@ -36,6 +38,8 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   daName,
   liuName,
   xiaoName,
+  yueName,
+  riName,
   isBody,
   isXiaoXianMing,
   isBenMingMing,
@@ -55,7 +59,6 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   const palaceGanZhi = `${GAN[palace.ganIndex]}${ZHI[palace.zhiIndex]}`;
   const isBenMing = !daName && !liuName && !xiaoName;
 
-  // --- 計算外來四化影響 ---
   let hasExternalLu = false;
   let hasExternalJi = false;
   
@@ -97,7 +100,6 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
 
   const reverseBaseName = isReverse ? PALACE_REVERSE_MAP[baseName] : null;
 
-  // 1. 渲染右上角的靜態標籤 (僅用於外來生年四化)
   const renderExternalChips = () => {
     if (!externalSiHua) return null;
     const chips: React.ReactNode[] = [];
@@ -124,7 +126,6 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
     return <div className="absolute top-0.5 right-0.5 flex flex-col gap-0.5 items-end z-30 pointer-events-none">{chips}</div>;
   };
 
-  // 2. 渲染正上方的懸浮名牌 (用於互動飛化)
   const renderInteractiveFlyingStars = () => {
     if (!flyingStars) return null;
     const chips: React.ReactNode[] = [];
@@ -149,8 +150,6 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
     });
 
     if (chips.length === 0) return null;
-    
-    // Position: Absolute Top Center, slightly overlapping the border (top: -10px)
     return (
       <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 flex gap-1 z-50 pointer-events-none filter drop-shadow-sm">
         {chips}
@@ -160,7 +159,6 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
 
   return (
     <div
-      // [修改] overflow-hidden 改為 overflow-visible，允許名牌凸出去
       className={`w-full h-full flex flex-col p-0.5 box-border relative overflow-visible ${bgColorClass} ${borderClass} ${xiaoXianClass} transition-colors duration-300`}
     >
       {renderExternalChips()}
@@ -226,18 +224,25 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
       </div>
 
       <div
-        className="absolute bottom-0 right-0 h-[50%] min-w-[30%] flex items-end justify-end gap-1 p-1 rounded-tl-lg cursor-pointer hover:bg-purple-100/50 transition-colors select-none group z-30"
+        className="absolute bottom-0 right-0 h-[70%] min-w-[30%] flex items-end justify-end gap-1 p-1 rounded-tl-lg cursor-pointer hover:bg-purple-100/50 transition-colors select-none group z-30"
         onClick={(e) => { e.stopPropagation(); onTriggerClick && onTriggerClick(); }}
         title="點擊查看此宮位之飛化 (四化)"
       >
         <div className="flex flex-col-reverse items-end leading-tight pointer-events-none">
-          <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right">
+          {/* [修正 2] 增加 pr-0.5 以對齊上方有 padding 的月/日標籤 */}
+          <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right pr-0.5">
               {reverseBaseName && <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none">{reverseBaseName}</span>}
               <span className="text-[13px] font-bold text-red-600 whitespace-nowrap leading-none">{baseName}</span>
           </div>
-          {daName && <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right">{isReverse && reverseDaName && <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none mb-[1px]">{reverseDaName}</span>}<span className="text-[13px] font-bold text-gray-500 whitespace-nowrap leading-none mb-[1px]">{daName}</span></div>}
-          {liuName && <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right">{isReverse && reverseLiuName && <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none mb-[1px]">{reverseLiuName}</span>}<span className="text-[13px] font-bold text-blue-600 whitespace-nowrap leading-none mb-[1px]">{liuName}</span></div>}
-          {xiaoName && <span className="text-[13px] font-bold text-green-600 whitespace-nowrap leading-none mb-[1px]">{xiaoName}</span>}
+          {/* [修正 2] 增加 pr-0.5 */}
+          {daName && <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right pr-0.5">{isReverse && reverseDaName && <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none mb-[1px]">{reverseDaName}</span>}<span className="text-[13px] font-bold text-gray-500 whitespace-nowrap leading-none mb-[1px]">{daName}</span></div>}
+          {liuName && <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right pr-0.5">{isReverse && reverseLiuName && <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none mb-[1px]">{reverseLiuName}</span>}<span className="text-[13px] font-bold text-blue-600 whitespace-nowrap leading-none mb-[1px]">{liuName}</span></div>}
+          {xiaoName && <span className="text-[13px] font-bold text-green-600 whitespace-nowrap leading-none mb-[1px] pr-0.5">{xiaoName}</span>}
+          
+          {/* [修正 1] 調整順序：先渲染 yueName (視覺在下)，再渲染 riName (視覺在上/最頂) */}
+          {yueName && <span className="text-[13px] font-bold text-amber-600 whitespace-nowrap leading-none mb-[1px] bg-white/80 px-0.5 rounded shadow-sm border border-amber-100">{yueName}</span>}
+          {riName && <span className="text-[13px] font-bold text-green-700 whitespace-nowrap leading-none mb-[1px] bg-white/80 px-0.5 rounded shadow-sm border border-green-100">{riName}</span>}
+        
         </div>
         <div className="flex flex-col leading-none text-[15px] font-bold text-black mb-[2px] ml-1 pointer-events-none">
           <span className="group-hover:text-purple-600 transition-colors">{palaceGanZhi[0]}</span>

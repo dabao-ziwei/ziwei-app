@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, UserCog, LogOut, User, Sparkles, Network, ArrowLeft } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, UserCog, LogOut, User, Sparkles, Network, ArrowLeft, Wrench } from 'lucide-react';
 import { loadClients, deleteClient, getMyProfile, getUsedChartCount, type Client, type UserProfile } from '../db';
 import { supabase } from '../supabase';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -8,6 +8,7 @@ import { UserManagementModal } from '../components/UserManagementModal';
 import { DivinationSetupModal } from '../components/DivinationSetupModal';
 import { RelationshipModal } from '../components/RelationshipModal';
 import { AddChartModal } from '../components/AddChartModal'; 
+import { ZiWeiEngine } from '../logic/engine'; // [新增] 引入引擎用於修復計算
 
 const CATEGORIES = ["我", "家人", "朋友", "客戶", "名人", "其他"];
 const STORAGE_KEY_CATS = 'ziwei_expanded_cats';
@@ -105,6 +106,51 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
           window.history.replaceState({}, document.title);
       }
   }, [location]);
+
+  // [新增] 資料修復功能
+  const handleDataRepair = async () => {
+      if (!confirm("確定要掃描並修復所有缺失「主星」的命盤資料嗎？\n這將會重新計算並寫入資料庫。")) return;
+      
+      setLoading(true);
+      let fixedCount = 0;
+      
+      try {
+          // 1. 找出有問題的資料 (majorStars 為 null 或 空字串)
+          const invalidClients = clients.filter(c => !c.majorStars || c.majorStars === '' || c.majorStars === '无主星');
+          
+          if (invalidClients.length === 0) {
+              alert("目前資料庫中沒有發現缺失主星的資料。");
+              setLoading(false);
+              return;
+          }
+
+          // 2. 逐筆修復
+          for (const c of invalidClients) {
+              try {
+                  const engine = new ZiWeiEngine(c.birthYear, c.birthMonth, c.birthDay, c.birthHour, c.birthMinute, c.gender);
+                  const chart = engine.getChartData();
+                  const mingPos = engine.getMingPos();
+                  const mingPalace = chart.palaces[mingPos];
+                  const majorStarNames = mingPalace.majorStars.map(s => s.name).join('') || '無主星';
+
+                  // 寫入資料庫 (使用 snake_case 對應 DB)
+                  await supabase.from('clients').update({ major_stars: majorStarNames }).eq('id', c.id);
+                  fixedCount++;
+              } catch (err) {
+                  console.error(`Repair failed for ${c.name}:`, err);
+              }
+          }
+
+          alert(`修復完成！共修復了 ${fixedCount} 筆資料。`);
+          refreshData();
+
+      } catch (e) {
+          console.error(e);
+          alert("修復過程發生錯誤，請稍後再試。");
+      } finally {
+          setLoading(false);
+      }
+  };
 
   const getTimeDisplay = (hour?: number, minute?: number) => {
     if (hour === undefined || minute === undefined) return '--:--';
@@ -214,6 +260,17 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                         <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-200 ease-in-out ${showOnlyMine ? 'translate-x-4' : 'translate-x-0'}`} />
                     </div>
                 </div>
+            )}
+
+            {/* [新增] 資料修復按鈕 (僅 Super Admin 可見，或所有人都可見視需求而定，目前設為 Super Admin) */}
+            {isSuperAdmin && (
+                <button
+                    onClick={handleDataRepair}
+                    className="w-10 h-10 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-xl flex items-center justify-center transition-colors"
+                    title="修復缺失主星的資料"
+                >
+                    <Wrench size={20} />
+                </button>
             )}
 
             <div className="flex items-center gap-2">

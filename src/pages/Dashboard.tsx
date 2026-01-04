@@ -57,7 +57,7 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
                 } catch (error) {
                     console.error("Setup failed:", error);
                     alert("建立失敗，請檢查網路連線後重試。");
-                    // [關鍵修改] 失敗時退回上一步 (Step 3)，避免卡死在 Loading
+                    // 失敗時退回上一步 (Step 3)，避免卡死在 Loading
                     setStep(3);
                 }
             }, 2500);
@@ -158,7 +158,6 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
 
                     <div className="bg-amber-50 border border-amber-100 p-3 rounded-lg text-xs text-amber-700 text-left leading-relaxed flex gap-2">
                         <Sparkles size={14} className="shrink-0 mt-0.5" />
-                        {/* [修改] 文案更新 */}
                         紫微斗數中，男女的排盤方式大不相同，這會影響系統分析的運勢走向。
                     </div>
                 </div>
@@ -184,7 +183,6 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
                             <Calendar size={14}/> 出生日期 (西元)
                         </div>
                         <div className="flex gap-2">
-                            {/* [修改] 年份輸入框：加入 onFocus 清空預設值邏輯，並允許暫時為空 */}
                             <input 
                                 type="number" 
                                 className="flex-1 min-w-0 border rounded-lg px-2 py-2 text-center" 
@@ -336,7 +334,6 @@ export const Dashboard: React.FC = () => {
   const initDashboard = async () => {
     setLoading(true);
     try {
-        // [修正 1] 先直接取得 Auth User，確保有 ID 可用，不用等 Profile 建立
         const { data: { user } } = await supabase.auth.getUser();
 
         const profile = await getMyProfile();
@@ -345,12 +342,10 @@ export const Dashboard: React.FC = () => {
         const allClients = await loadClients();
         const loadedClients = Array.isArray(allClients) ? allClients : [];
 
-        // 尋找「我」的命盤 (寬鬆比對)
+        // 尋找「我」的命盤
         const myCharts = loadedClients.filter(c => {
-            // [修正 2] 優先使用 profile.id，若無則使用 auth user.id，確保剛註冊也能抓到
             const currentUserId = profile?.id || user?.id;
             const isOwner = c.user_id === currentUserId;
-            
             const cleanType = (c.type || '').trim();
             return isOwner && (cleanType === '我' || cleanType === 'Me');
         });
@@ -382,34 +377,37 @@ export const Dashboard: React.FC = () => {
 
   const handleWizardComplete = async (data: any) => {
     try {
-        // [修正核心問題]
-        // 移除 id: crypto.randomUUID()
-        // 改為 id: ''，這樣傳給 db.ts 的 saveClient 時
-        // 才會觸發 else 區塊 (addClient)，執行資料庫 INSERT 指令
+        // [關鍵修正] 在儲存前，先使用 ZiWeiEngine 計算命宮主星 (Major Stars)
+        const engine = new ZiWeiEngine(
+            Number(data.year), data.month, data.day,
+            data.hour, data.minute, data.gender
+        );
+        const chart = engine.getChartData();
+        const mingPos = engine.getMingPos();
+        const mingPalace = chart.palaces[mingPos];
+        const majorStarNames = mingPalace.majorStars.map(s => s.name).join('') || '無主星';
+
         const newClient = {
             id: '', 
             name: data.name,
             gender: data.gender,
             type: '我',
-            birthYear: Number(data.year), // 確保轉為數字
+            birthYear: Number(data.year),
             birthMonth: data.month,
             birthDay: data.day,
             birthHour: data.hour,
             birthMinute: data.minute,
             bornCity: '',
             tags: [],
-            // 這裡也加入防呆，優先使用 Profile ID，若無則為 undefined (addClient 內部會自己抓 Auth User)
-            user_id: userProfile?.id
+            user_id: userProfile?.id,
+            majorStars: majorStarNames // [新增] 將計算好的主星存入
         };
         await saveClient(newClient);
         
-        // 只有成功才關閉 Wizard
         setForceOnboarding(false);
         await initDashboard();
     } catch (e) {
-        // [關鍵] 這裡將錯誤拋出，讓 OnboardingWizard 元件的 catch 區塊捕捉到
-        // 這樣 Wizard 就不會關閉，而是顯示錯誤並退回上一步
-        throw e;
+        throw e; // 讓 Wizard 捕獲錯誤並處理
     }
   };
 
@@ -418,7 +416,6 @@ export const Dashboard: React.FC = () => {
   return (
     <div className="h-screen w-full bg-slate-50 flex flex-col font-sans overflow-hidden">
         
-        {/* Header: 固定不縮放 (shrink-0) */}
         <header className="shrink-0 px-6 py-4 flex justify-between items-center bg-white border-b border-slate-100 z-50 shadow-sm">
             <div className="relative">
                 <button 
@@ -438,7 +435,6 @@ export const Dashboard: React.FC = () => {
                             </button>
                         )}
 
-                        {/* 針對特定帳號顯示測試入口 */}
                         {userProfile?.email === SUPER_ADMIN_EMAIL && (
                             <button 
                                 onClick={() => { 
@@ -467,13 +463,8 @@ export const Dashboard: React.FC = () => {
             <div className="w-10"></div> 
         </header>
 
-        {/* Main: flex-1 佔滿剩餘空間 + overflow-y-auto 允許內部捲動 */}
         <main className="flex-1 w-full overflow-y-auto">
             <div className="max-w-4xl mx-auto p-6 flex flex-col items-center pb-20">
-                
-                {/* 邏輯：有命盤且無強制 -> 顯示儀表板
-                    否則 -> 顯示 Wizard
-                */}
                 {meClient && !forceOnboarding ? (
                     <>
                         {dailyFortune && (
@@ -486,7 +477,6 @@ export const Dashboard: React.FC = () => {
                             </div>
                         )}
 
-                        {/* 功能按鈕區 */}
                         <div className="w-full mt-6 flex justify-center">
                             <button
                                 onClick={() => navigate('/list')}
@@ -503,7 +493,6 @@ export const Dashboard: React.FC = () => {
                         </div>
                     </>
                 ) : (
-                    /* 顯示新手引導 Wizard */
                     <div className="mt-6 w-full flex justify-center">
                         <OnboardingWizard 
                             userProfile={userProfile}
