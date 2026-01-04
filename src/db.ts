@@ -17,7 +17,7 @@ export interface UserProfile {
   feature_flags?: UserFeatures; 
   activeCount?: number;
   deletedCount?: number;
-  joinDate?: string; // [新增] 加入系統日 (Profile 建立日)
+  joinDate?: string; 
 }
 
 export interface Client {
@@ -249,6 +249,18 @@ export const saveClient = async (clientData: any): Promise<string | null> => {
 export const addClient = async (client: any): Promise<string | null> => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
+
+    // [新增] 強制檢查配額：若非管理員且已達上限，禁止新增
+    // 這是一個後端的安全鎖，防止繞過前端 UI
+    const profile = await getMyProfile();
+    if (profile && profile.role !== 'admin') {
+        const currentCount = await getUsedChartCount(user.id);
+        if (currentCount >= profile.maxCharts) {
+            // 拋出錯誤，讓呼叫端的 try-catch (例如 AddChartModal) 捕捉並顯示 Alert
+            throw new Error(`您的命盤數量已達上限 (${profile.maxCharts} 張)，無法再新增。`);
+        }
+    }
+
     const dbPayload = {
         user_id: user.id,
         name: client.name,
@@ -316,7 +328,7 @@ export const getAllProfilesWithStats = async (): Promise<UserProfile[]> => {
     accessExpiry: p.access_expiry,
     feature_flags: p.feature_flags, 
     activeCount: p.active_count, deletedCount: p.deleted_count,
-    joinDate: p.created_at // [新增] 對應資料庫的建立時間
+    joinDate: p.created_at 
   }));
 };
 
