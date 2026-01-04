@@ -37,7 +37,7 @@ interface PalaceGridProps {
   
   flyingStarsLookup?: Record<string, '祿' | '權' | '科' | '忌'>;
 
-  getRelativeNames: (idx: number) => { daName?: string; liuName?: string; xiaoName?: string; divinationName?: string; yueName?: string; riName?: string }; // [修改] 增加 yueName, riName
+  getRelativeNames: (idx: number) => { daName?: string; liuName?: string; xiaoName?: string; divinationName?: string; yueName?: string; riName?: string };
   getIsBenMingMing: (idx: number) => boolean;
   getAnchorCoord: (idx: number) => { x: number; y: number };
 
@@ -56,9 +56,11 @@ interface PalaceGridProps {
       twin: PermissionState;
       inverted: PermissionState;
       xiao: PermissionState;
+      // [新增]
+      liu_month: PermissionState;
+      liu_day: PermissionState;
   };
 
-  // [新增] 流月流日相關
   liuMonth?: number | null;
   isLiuMonthLeap?: boolean;
   liuDay?: number | null;
@@ -66,7 +68,7 @@ interface PalaceGridProps {
   onSetLiuDay?: (d: number | null) => void;
   liuMonthGan?: number;
   liuDayGan?: number;
-  liuNianYear?: number | null; // [新增]
+  liuNianYear?: number | null;
 }
 
 export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
@@ -80,7 +82,6 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
   onHistoryBack, onNavigate, onCompatibility, onChangeHour, onResetTime,
   onToggleTwin, onToggleInverted, onToggleSmallLimit, onPalaceClick, onTriggerClick,
   permissionFlags,
-  // [新增]
   liuMonth, isLiuMonthLeap, liuDay, onSetLiuMonth, onSetLiuDay, liuMonthGan, liuDayGan
 }, ref) => {
 
@@ -126,13 +127,12 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
                           
                           permissionFlags={permissionFlags}
 
-                          // [新增] 傳遞流月流日 Props
                           liuMonth={liuMonth}
                           isLiuMonthLeap={isLiuMonthLeap}
                           liuDay={liuDay}
                           onSetLiuMonth={onSetLiuMonth}
                           onSetLiuDay={onSetLiuDay}
-                          liuNianYear={liuNianYear} // 傳遞流年年份
+                          liuNianYear={liuNianYear}
                           liuMonthGan={liuMonthGan}
                           liuDayGan={liuDayGan}
                       />
