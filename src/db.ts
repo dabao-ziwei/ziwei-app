@@ -1,5 +1,5 @@
 import { supabase } from './supabase'; 
-import type { UserFeatures } from './logic/permissions'; // [新增]
+import type { UserFeatures } from './logic/permissions'; 
 
 // --- 設定 ---
 const SUPER_VIEW_EMAIL = 'stephenwu.0926@gmail.com';
@@ -8,15 +8,16 @@ const SUPER_VIEW_EMAIL = 'stephenwu.0926@gmail.com';
 export interface UserProfile {
   id: string;
   email: string;
-  role: 'admin' | 'student' | 'general' | 'competitor'; // [修改]
+  role: 'admin' | 'student' | 'general' | 'competitor'; 
   maxCharts: number;
   maxEditsPerChart: number;
   isBanned: boolean;
   can_use_divination: boolean;
   accessExpiry?: string; 
-  feature_flags?: UserFeatures; // [新增]
+  feature_flags?: UserFeatures; 
   activeCount?: number;
   deletedCount?: number;
+  joinDate?: string; // [新增] 加入系統日 (Profile 建立日)
 }
 
 export interface Client {
@@ -226,7 +227,7 @@ export const getMyProfile = async (): Promise<UserProfile | null> => {
     isBanned: data.is_banned || false,
     can_use_divination: data.can_use_divination ?? true,
     accessExpiry: data.access_expiry,
-    feature_flags: data.feature_flags // [新增]
+    feature_flags: data.feature_flags 
   };
 };
 
@@ -237,7 +238,7 @@ export const getClient = async (id: string): Promise<Client | null> => {
 };
 
 export const saveClient = async (clientData: any): Promise<string | null> => {
-    if (clientData.id && !clientData.id.toString().startsWith('temp-')) {
+    if (clientData.id && !clientData.id.toString().startsWith('temp-') && clientData.id !== '') {
         const success = await updateClient(clientData.id, clientData);
         return success ? clientData.id : null;
     } else {
@@ -313,8 +314,9 @@ export const getAllProfilesWithStats = async (): Promise<UserProfile[]> => {
     maxEditsPerChart: p.max_edits_per_chart, isBanned: p.is_banned,
     can_use_divination: p.can_use_divination ?? true,
     accessExpiry: p.access_expiry,
-    feature_flags: p.feature_flags, // [新增]
-    activeCount: p.active_count, deletedCount: p.deleted_count
+    feature_flags: p.feature_flags, 
+    activeCount: p.active_count, deletedCount: p.deleted_count,
+    joinDate: p.created_at // [新增] 對應資料庫的建立時間
   }));
 };
 
@@ -330,7 +332,7 @@ export const updateProfile = async (id: string, updates: Partial<UserProfile>): 
     max_edits_per_chart: updates.maxEditsPerChart,
     can_use_divination: updates.can_use_divination,
     access_expiry: updates.accessExpiry, 
-    feature_flags: updates.feature_flags // [新增]
+    feature_flags: updates.feature_flags 
   };
   const { error } = await supabase.from('profiles').update(dbUpdates).eq('id', id);
   return !error;
@@ -339,9 +341,29 @@ export const updateProfile = async (id: string, updates: Partial<UserProfile>): 
 export const deleteUserProfile = async (targetUserId: string): Promise<boolean> => {
     const { data: { user: currentUser } } = await supabase.auth.getUser();
     if (currentUser?.email !== SUPER_VIEW_EMAIL) return false;
-    const { error: transferError } = await supabase.from('clients').update({ user_id: currentUser.id }).eq('user_id', targetUserId);
-    if (transferError) return false;
+
+    const { data: targetUser } = await supabase.from('profiles').select('email').eq('id', targetUserId).single();
+    const sourceLabel = targetUser?.email || '未知使用者';
+
+    const { data: clients } = await supabase.from('clients').select('id, name').eq('user_id', targetUserId);
+
+    if (clients && clients.length > 0) {
+        const updates = clients.map(client => ({
+            id: client.id,
+            user_id: currentUser.id, 
+            name: `${client.name} (來源: ${sourceLabel})` 
+        }));
+
+        const { error: transferError } = await supabase.from('clients').upsert(updates);
+        
+        if (transferError) {
+            console.error("Transfer failed:", transferError);
+            return false;
+        }
+    }
+
     const { error: deleteError } = await supabase.from('profiles').delete().eq('id', targetUserId);
+    
     return !deleteError;
 };
 

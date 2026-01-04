@@ -36,7 +36,7 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
     const [timeMode, setTimeMode] = useState<'precise' | 'zhi' | 'unsure'>('precise');
     const [loadingText, setLoadingText] = useState('正在連結星曜數據...');
 
-    // 動畫控制
+    // 動畫控制與送出邏輯
     useEffect(() => {
         if (step === 4) {
             const sequence = [
@@ -45,16 +45,29 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
                 { t: 1600, msg: '正在分析本週運勢能量...' },
             ];
             
-            sequence.forEach(({ t, msg }) => {
-                setTimeout(() => setLoadingText(msg), t);
+            // 播放文字動畫
+            const timers = sequence.map(({ t, msg }) => {
+                return setTimeout(() => setLoadingText(msg), t);
             });
 
-            // 2.5秒後執行完成
-            setTimeout(() => {
-                onComplete(formData);
+            // 2.5秒後執行完成，並加入錯誤處理
+            const finalTimer = setTimeout(async () => {
+                try {
+                    await onComplete(formData);
+                } catch (error) {
+                    console.error("Setup failed:", error);
+                    alert("建立失敗，請檢查網路連線後重試。");
+                    // [關鍵修改] 失敗時退回上一步 (Step 3)，避免卡死在 Loading
+                    setStep(3);
+                }
             }, 2500);
+
+            return () => {
+                timers.forEach(t => clearTimeout(t));
+                clearTimeout(finalTimer);
+            };
         }
-    }, [step]);
+    }, [step, formData, onComplete]);
 
     const handleNext = () => {
         if (step === 1 && !formData.name) return alert('請輸入您的稱呼');
@@ -389,11 +402,14 @@ export const Dashboard: React.FC = () => {
             user_id: userProfile?.id
         };
         await saveClient(newClient);
+        
+        // 只有成功才關閉 Wizard
         setForceOnboarding(false);
         await initDashboard();
     } catch (e) {
-        alert("建立失敗，請重試");
-        setForceOnboarding(false); // 失敗也先關閉，避免卡死
+        // [關鍵] 這裡將錯誤拋出，讓 OnboardingWizard 元件的 catch 區塊捕捉到
+        // 這樣 Wizard 就不會關閉，而是顯示錯誤並退回上一步
+        throw e;
     }
   };
 
