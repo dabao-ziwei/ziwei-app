@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Users, Repeat, Clock, ArrowLeft, ChevronRight, Eye, RefreshCw, X, Calendar, Sun } from 'lucide-react';
+import { Users, Repeat, Clock, ArrowLeft, ChevronRight, Eye, RefreshCw, X, Calendar, Sun, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import type { Client, Relationship } from '../db';
@@ -63,9 +63,11 @@ interface CenterInfoBoardProps {
       twin: PermissionState;
       inverted: PermissionState;
       xiao: PermissionState;
+      // [新增]
+      liu_month: PermissionState;
+      liu_day: PermissionState;
   };
 
-  // [新增] 流月流日
   liuMonth?: number | null;
   isLiuMonthLeap?: boolean;
   liuDay?: number | null;
@@ -111,7 +113,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
     const [isDayPickerOpen, setIsDayPickerOpen] = useState(false);
 
-    // [新增] 計算真實農曆時間 (用於標記當前時間)
     const { realLunarMonth, realLunarDay, realIsLeap, isCurrentYear } = useMemo(() => {
         if (!liuNianYear) return { realLunarMonth: 0, realLunarDay: 0, realIsLeap: false, isCurrentYear: false };
         
@@ -120,7 +121,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
         const lunar = solar.getLunar();
         
         const isYearMatch = lunar.getYear() === liuNianYear;
-        // lunar-typescript 的 getMonth() 回傳值：正數為一般月，負數為閏月 (例如 -6 代表閏6月)
         const rawMonth = lunar.getMonth();
         const realLunarMonth = Math.abs(rawMonth);
         const realIsLeap = rawMonth < 0;
@@ -129,7 +129,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
         return { realLunarMonth, realLunarDay, realIsLeap, isCurrentYear: isYearMatch };
     }, [liuNianYear]);
 
-    // 計算當年閏月 (用於顯示選單)
     const leapMonthOfLiuNian = useMemo(() => {
         if (!liuNianYear) return 0;
         return LunarYear.fromYear(liuNianYear).getLeapMonth();
@@ -273,7 +272,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                     </div>
 
                     <div className="mt-auto flex justify-center shrink-0 mb-1 w-full px-1">
-                        {/* [修改] 容器改為 flex-col，將功能按鈕與時間導航分兩列 */}
                         <div className="flex flex-col gap-1 w-full bg-slate-100/80 rounded-lg p-1 border border-slate-200">
                             
                             {/* 第一列：功能開關 */}
@@ -308,65 +306,101 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                 {isLiuNian && (
                                     <>
                                         <div className="w-px bg-gray-300 my-0.5"></div>
-                                        <button onClick={onToggleSmallLimit} className={`flex-1 py-1 text-[10px] font-bold rounded transition-colors flex items-center justify-center gap-1 ${showSmallLimit ? 'bg-green-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}><Clock size={12} /> <span className="hidden sm:inline">小限</span></button>
+                                        {permissionFlags?.xiao !== 'hidden' && (
+                                            <button 
+                                                onClick={onToggleSmallLimit} 
+                                                disabled={permissionFlags?.xiao === 'disabled'}
+                                                className={`flex-1 py-1 text-[10px] font-bold rounded transition-colors flex items-center justify-center gap-1 ${showSmallLimit ? 'bg-green-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'} ${permissionFlags?.xiao === 'disabled' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                title={permissionFlags?.xiao === 'disabled' ? '權限已到期' : ''}
+                                            >
+                                                {permissionFlags?.xiao === 'disabled' ? <Lock size={12}/> : <Clock size={12} />} <span className="hidden sm:inline">小限</span>
+                                            </button>
+                                        )}
                                     </>
                                 )}
                             </div>
 
-                            {/* 第二列：時間導航 (流月、流日) - 僅電腦版且在流年模式下顯示 */}
+                            {/* 第二列：時間導航 (流月、流日) - 依權限控制 */}
                             {isLiuNian && (
                                 <div className="hidden md:flex justify-center gap-1 w-full border-t border-gray-200 pt-1">
-                                    <div className="relative flex-1">
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); closePickers(); setIsMonthPickerOpen(!isMonthPickerOpen); }}
-                                            className={`w-full py-1 text-[10px] font-bold rounded transition-colors flex items-center justify-center gap-1 ${liuMonth !== null ? 'bg-amber-500 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}
-                                        >
-                                            <Calendar size={12} /> 
-                                            {liuMonth !== null ? `${NUM_CN[liuMonth-1]}月 ${isLiuMonthLeap ? '(閏)' : ''}` : '流月'}
-                                            {liuMonth !== null && liuMonthGan !== undefined && <span className="text-[9px] opacity-90 scale-90 ml-0.5 font-mono">({GAN[liuMonthGan]})</span>}
-                                        </button>
-
-                                        {isMonthPickerOpen && onSetLiuMonth && (
-                                            <div className="absolute bottom-full left-0 mb-2 w-48 bg-white border border-amber-200 rounded-lg shadow-xl p-2 z-[60] grid grid-cols-3 gap-1 animate-in slide-in-from-bottom-2 fade-in duration-200" onClick={e => e.stopPropagation()}>
-                                                {Array.from({length: 12}, (_, i) => i + 1).map(m => {
-                                                    const isReal = isCurrentYear && !realIsLeap && realLunarMonth === m;
-                                                    return (
-                                                        <React.Fragment key={m}>
-                                                            <button 
-                                                                onClick={() => { onSetLiuMonth(m, false); closePickers(); }}
-                                                                className={`text-xs py-1.5 rounded hover:bg-amber-50 text-gray-700 
-                                                                    ${liuMonth === m && !isLiuMonthLeap ? 'bg-amber-100 font-bold text-amber-700' : ''}
-                                                                    ${isReal ? 'border-2 border-red-400' : ''}
-                                                                `}
-                                                            >
-                                                                {NUM_CN[m-1]}月
-                                                            </button>
-                                                            {leapMonthOfLiuNian === m && (
-                                                                <button 
-                                                                    onClick={() => { onSetLiuMonth(m, true); closePickers(); }}
-                                                                    className={`text-[10px] py-1.5 rounded hover:bg-amber-50 text-amber-600 border border-amber-100 col-span-1 
-                                                                        ${liuMonth === m && isLiuMonthLeap ? 'bg-amber-100 font-bold' : ''}
-                                                                        ${isCurrentYear && realIsLeap && realLunarMonth === m ? 'border-2 border-red-400' : ''}
-                                                                    `}
-                                                                >
-                                                                    閏{NUM_CN[m-1]}
-                                                                </button>
-                                                            )}
-                                                        </React.Fragment>
-                                                    );
-                                                })}
-                                                <button onClick={() => { onSetLiuMonth(null, false); closePickers(); }} className="col-span-3 mt-1 text-[10px] text-gray-400 hover:text-gray-600 border-t border-gray-100 pt-1">清除流月</button>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {liuMonth !== null && (
+                                    
+                                    {/* 流月按鈕 */}
+                                    {permissionFlags?.liu_month !== 'hidden' && (
                                         <div className="relative flex-1">
                                             <button 
-                                                onClick={(e) => { e.stopPropagation(); closePickers(); setIsDayPickerOpen(!isDayPickerOpen); }}
-                                                className={`w-full py-1 text-[10px] font-bold rounded transition-colors flex items-center justify-center gap-1 ${liuDay !== null ? 'bg-green-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}`}
+                                                onClick={(e) => { 
+                                                    e.stopPropagation(); 
+                                                    if (permissionFlags?.liu_month !== 'disabled') {
+                                                        closePickers(); 
+                                                        setIsMonthPickerOpen(!isMonthPickerOpen); 
+                                                    }
+                                                }}
+                                                disabled={permissionFlags?.liu_month === 'disabled'}
+                                                className={`w-full py-1 text-[10px] font-bold rounded transition-colors flex items-center justify-center gap-1 
+                                                    ${liuMonth !== null ? 'bg-amber-500 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}
+                                                    ${permissionFlags?.liu_month === 'disabled' ? 'opacity-50 cursor-not-allowed' : ''}
+                                                `}
+                                                title={permissionFlags?.liu_month === 'disabled' ? '權限已到期' : ''}
                                             >
-                                                <Sun size={12} /> 
+                                                {permissionFlags?.liu_month === 'disabled' ? <Lock size={12} /> : <Calendar size={12} />}
+                                                {liuMonth !== null ? `${NUM_CN[liuMonth-1]}月 ${isLiuMonthLeap ? '(閏)' : ''}` : '流月'}
+                                                {liuMonth !== null && liuMonthGan !== undefined && <span className="text-[9px] opacity-90 scale-90 ml-0.5 font-mono">({GAN[liuMonthGan]})</span>}
+                                            </button>
+
+                                            {isMonthPickerOpen && onSetLiuMonth && (
+                                                <div className="absolute bottom-full left-0 mb-2 w-48 bg-white border border-amber-200 rounded-lg shadow-xl p-2 z-[60] grid grid-cols-3 gap-1 animate-in slide-in-from-bottom-2 fade-in duration-200" onClick={e => e.stopPropagation()}>
+                                                    {Array.from({length: 12}, (_, i) => i + 1).map(m => {
+                                                        const isReal = isCurrentYear && !realIsLeap && realLunarMonth === m;
+                                                        return (
+                                                            <React.Fragment key={m}>
+                                                                <button 
+                                                                    onClick={() => { onSetLiuMonth(m, false); closePickers(); }}
+                                                                    className={`text-xs py-1.5 rounded hover:bg-amber-50 text-gray-700 
+                                                                        ${liuMonth === m && !isLiuMonthLeap ? 'bg-amber-100 font-bold text-amber-700' : ''}
+                                                                        ${isReal ? 'border-2 border-red-400' : ''}
+                                                                    `}
+                                                                >
+                                                                    {NUM_CN[m-1]}月
+                                                                </button>
+                                                                {leapMonthOfLiuNian === m && (
+                                                                    <button 
+                                                                        onClick={() => { onSetLiuMonth(m, true); closePickers(); }}
+                                                                        className={`text-[10px] py-1.5 rounded hover:bg-amber-50 text-amber-600 border border-amber-100 col-span-1 
+                                                                            ${liuMonth === m && isLiuMonthLeap ? 'bg-amber-100 font-bold' : ''}
+                                                                            ${isCurrentYear && realIsLeap && realLunarMonth === m ? 'border-2 border-red-400' : ''}
+                                                                        `}
+                                                                    >
+                                                                        閏{NUM_CN[m-1]}
+                                                                    </button>
+                                                                )}
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
+                                                    <button onClick={() => { onSetLiuMonth(null, false); closePickers(); }} className="col-span-3 mt-1 text-[10px] text-gray-400 hover:text-gray-600 border-t border-gray-100 pt-1">清除流月</button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* 流日按鈕 (只在選中流月且有權限時顯示) */}
+                                    {liuMonth !== null && permissionFlags?.liu_day !== 'hidden' && (
+                                        <div className="relative flex-1">
+                                            <button 
+                                                onClick={(e) => { 
+                                                    e.stopPropagation(); 
+                                                    if (permissionFlags?.liu_day !== 'disabled') {
+                                                        closePickers(); 
+                                                        setIsDayPickerOpen(!isDayPickerOpen); 
+                                                    }
+                                                }}
+                                                disabled={permissionFlags?.liu_day === 'disabled'}
+                                                className={`w-full py-1 text-[10px] font-bold rounded transition-colors flex items-center justify-center gap-1 
+                                                    ${liuDay !== null ? 'bg-green-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}
+                                                    ${permissionFlags?.liu_day === 'disabled' ? 'opacity-50 cursor-not-allowed' : ''}
+                                                `}
+                                                title={permissionFlags?.liu_day === 'disabled' ? '權限已到期' : ''}
+                                            >
+                                                {permissionFlags?.liu_day === 'disabled' ? <Lock size={12} /> : <Sun size={12} />}
                                                 {liuDay !== null ? `${liuDay}日` : '流日'}
                                                 {liuDay !== null && liuDayGan !== undefined && <span className="text-[9px] opacity-90 scale-90 ml-0.5 font-mono">({GAN[liuDayGan]})</span>}
                                             </button>
@@ -374,7 +408,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                             {isDayPickerOpen && onSetLiuDay && (
                                                 <div className="absolute bottom-full left-[-50px] mb-2 w-64 bg-white border border-green-200 rounded-lg shadow-xl p-2 z-[60] grid grid-cols-5 gap-1 animate-in slide-in-from-bottom-2 fade-in duration-200" onClick={e => e.stopPropagation()}>
                                                     {Array.from({length: 30}, (_, i) => i + 1).map(d => {
-                                                        // 判斷是否為真實當天
                                                         const isRealDay = isCurrentYear && 
                                                                           realLunarMonth === liuMonth && 
                                                                           realIsLeap === !!isLiuMonthLeap && 
@@ -442,7 +475,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                                         <div className="flex justify-between items-center px-2 py-1 border-b border-gray-50 mb-1"><span className="text-[10px] text-gray-400 font-medium">功能選單</span><button onClick={(e) => { e.stopPropagation(); setSelectedNodeId(null); }} className="text-gray-400 hover:text-gray-600"><X size={12} /></button></div>
                                                         <button onClick={(e) => { e.stopPropagation(); onNavigate(node.data); }} className="flex items-center gap-2 px-2 py-2 text-xs text-gray-700 hover:bg-blue-50 rounded-lg text-left transition-colors"><Eye size={14} className="text-blue-500"/> 看他命盤</button>
                                                         
-                                                        {/* [權限控制] 雙人合盤 */}
                                                         {permissionFlags?.dual_chart !== 'hidden' && (
                                                             <button 
                                                                 onClick={(e) => { 

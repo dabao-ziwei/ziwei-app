@@ -74,7 +74,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const [isReverse, setIsReverse] = useState<boolean>(false);
   const [isTwinMode, setIsTwinMode] = useState<boolean>(false);
 
-  // [新增] 流月流日狀態
+  // 流月流日狀態
   const [liuMonth, setLiuMonth] = useState<number | null>(null); // 1-12
   const [isLiuMonthLeap, setIsLiuMonthLeap] = useState<boolean>(false);
   const [liuDay, setLiuDay] = useState<number | null>(null); // 1-30
@@ -127,12 +127,15 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     fetchData();
   }, [id, client, navigate, mode]);
 
+  // [新增] 讀取流月流日權限
   const canTwin = useMemo(() => getFeaturePermission(userProfile, 'twin'), [userProfile]);
   const canInvert = useMemo(() => getFeaturePermission(userProfile, 'inverted'), [userProfile]);
   const canScreenshot = useMemo(() => getFeaturePermission(userProfile, 'screenshot'), [userProfile]);
   const canDual = useMemo(() => getFeaturePermission(userProfile, 'dual_chart'), [userProfile]);
   const canFlying = useMemo(() => getFeaturePermission(userProfile, 'flying_star'), [userProfile]);
   const canXiao = useMemo(() => getFeaturePermission(userProfile, 'xiao_limit'), [userProfile]);
+  const canLiuMonth = useMemo(() => getFeaturePermission(userProfile, 'liu_month'), [userProfile]);
+  const canLiuDay = useMemo(() => getFeaturePermission(userProfile, 'liu_day'), [userProfile]);
 
   const baseEngine = useMemo(() => {
     if (!client || currentHour === -1) return null;
@@ -143,38 +146,32 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
   const baseChartData = useMemo(() => baseEngine?.getChartData(), [baseEngine]);
 
-  // [新增] 計算流月、流日邏輯
   const { liuMonthIdx, liuDayIdx, liuMonthGan, liuDayGan } = useMemo(() => {
       if (!baseChartData || !liuNianYear || liuMonth === null) {
           return { liuMonthIdx: -1, liuDayIdx: -1, liuMonthGan: -1, liuDayGan: -1 };
       }
 
-      // 1. 計算流月起點 (斗君)
-      // 邏輯: 流年地支 + (本命斗君偏移)
-      const yearZhi = (liuNianYear - 4) % 12; // 流年地支 (子=0, 丑=1...)
-      const douJunPalace = baseChartData.palaces[2]; // 本命盤 index 2 (寅位) 是本命斗君參考點
+      const yearZhi = (liuNianYear - 4) % 12;
+      const douJunPalace = baseChartData.palaces[2];
       const douJunName = douJunPalace.name;
       const nameIdx = PALACE_NAMES.indexOf(douJunName);
       const offset = (12 - nameIdx) % 12; 
-      const flowMonthAnchor = (yearZhi + offset) % 12; // 流年正月的宮位索引
+      const flowMonthAnchor = (yearZhi + offset) % 12;
 
-      // 2. 計算流月位置 (考慮閏月)
       const lunarYear = LunarYear.fromYear(liuNianYear);
       const leapMonth = lunarYear.getLeapMonth();
       
-      let monthSteps = liuMonth - 1; // 1月走0步
+      let monthSteps = liuMonth - 1;
       if (leapMonth > 0) {
           if (liuMonth > leapMonth) {
-              monthSteps += 1; // 過了閏月多走一步
+              monthSteps += 1;
           } else if (liuMonth === leapMonth && isLiuMonthLeap) {
-              monthSteps += 1; // 正是閏月多走一步
+              monthSteps += 1;
           }
       }
       const flowMonthIdx = (flowMonthAnchor + monthSteps) % 12;
       const mGan = baseChartData.palaces[flowMonthIdx].ganIndex;
 
-      // 3. 計算流日位置
-      // 邏輯: 流月宮位起初一
       if (liuDay === null) {
           return { liuMonthIdx: flowMonthIdx, liuDayIdx: -1, liuMonthGan: mGan, liuDayGan: -1 };
       }
@@ -222,8 +219,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     }
 
     displayEngine.computeLimitStars(daGan, liuGan, liuZhi, xiaoGan, showXiaoXian);
-    
-    // [修改] 將流月、流日天干也傳入 computeSiHua (若 Engine 支援，目前僅傳入前三層)
     displayEngine.computeSiHua(daGan, liuGan, xiaoGan);
     
     return displayEngine.getChartData();
@@ -242,8 +237,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       return { divMingIndex: foundMingIdx, divSiHuaMap: siHuaMap };
   }, [divNum, mode, chartData]);
 
-  // [新增] 整合流月/流日四化到 externalSiHuaMap (給 PalaceGrid 顯示)
-  // 優先級: 外來 > 流日 > 流月 (越上層越蓋過下層)
   const activeExtraSiHua = useMemo(() => {
       if (externalGan !== null) return getSiHuaMap(externalGan);
       if (liuDayGan !== -1) return getSiHuaMap(liuDayGan);
@@ -299,7 +292,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
   const resetAllStates = () => {
     setDaXianSeq(-1); setLiuNianYear(null); setShowXiaoXian(false);
-    // [新增] 重置流月日
     setLiuMonth(null); setIsLiuMonthLeap(false); setLiuDay(null);
     setSelectedPalace(null); setFlyingPalace(null); setIsReverse(false); setIsTwinMode(false);
   };
@@ -353,12 +345,12 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const handleDaXianClick = (seq: number) => { 
       setDaXianSeq(daXianSeq === seq ? -1 : seq); 
       setLiuNianYear(null); 
-      setLiuMonth(null); setLiuDay(null); // 重置子層級
+      setLiuMonth(null); setLiuDay(null);
       setShowXiaoXian(false); setFlyingPalace(null); setSelectedPalace(null); setIsReverse(false); 
   };
   const handleLiuNianClick = (year: number) => { 
       setLiuNianYear(liuNianYear === year ? null : year); 
-      setLiuMonth(null); setLiuDay(null); // 重置子層級
+      setLiuMonth(null); setLiuDay(null);
       setShowXiaoXian(false); setFlyingPalace(null); setSelectedPalace(null); setIsReverse(false); 
   };
   const toggleXiaoXian = () => { setShowXiaoXian(!showXiaoXian); setFlyingPalace(null); setSelectedPalace(null); };
@@ -382,7 +374,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       
       if (xiaoXianMingIdx >= 0 && showXiaoXian) { const offset = (xiaoXianMingIdx - currentIdx + 12) % 12; xiaoName = `小${PALACE_NAMES[offset].substring(0, 1)}`; } 
       
-      // [新增] 流月流日名稱計算
       if (liuMonthIdx >= 0) {
           const offset = (liuMonthIdx - currentIdx + 12) % 12;
           yueName = `月${PALACE_NAMES[offset].substring(0, 1)}`;
@@ -408,7 +399,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
         {mode === 'standard' && (
             <div className="flex gap-2">
-                {/* 雙人合盤 */}
                 {canDual !== 'hidden' && (
                     <button 
                         onClick={() => navigate('/compatibility', { state: { clientA: client } })}
@@ -421,7 +411,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
                     </button>
                 )}
 
-                {/* 他人生年飛化 */}
                 {canFlying !== 'hidden' && (
                     externalGan !== null ? (
                         <div className="flex items-center gap-1 bg-purple-100 border border-purple-200 px-3 py-1.5 rounded-lg animate-in fade-in">
@@ -441,7 +430,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
                     )
                 )}
 
-                {/* 截圖 */}
                 {canScreenshot !== 'hidden' && isCleanState && (
                     <button 
                         onClick={handleDownload}
@@ -493,7 +481,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
             isDivinationReady={isDivinationReady}
             divSiHuaMap={divSiHuaMap}
             externalGan={externalGan}
-            externalSiHuaMap={activeExtraSiHua} // [修改] 使用整合後的四化Map (包含流月日)
+            externalSiHuaMap={activeExtraSiHua}
             benMingMajorStarsStr={benMingMajorStarsStr}
             currentHourZhi={currentHourZhi}
             isTimeModified={isTimeModified}
@@ -508,25 +496,29 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
             onCompatibility={handleCompatibility}
             onChangeHour={changeHour}
             onResetTime={resetTime}
-            // 權限控制傳遞
+            // [修改] 傳遞完整權限
             onToggleTwin={() => canTwin !== 'hidden' && canTwin !== 'disabled' && setIsTwinMode(!isTwinMode)}
             onToggleInverted={() => canInvert !== 'hidden' && canInvert !== 'disabled' && setIsReverse(!isReverse)}
             onToggleSmallLimit={toggleXiaoXian}
             onPalaceClick={handlePalaceClick}
             onTriggerClick={handleTriggerClick}
             flyingStarsLookup={flyingStarsLookup}
-            permissionFlags={{ twin: canTwin, inverted: canInvert, xiao: canXiao }}
+            permissionFlags={{ 
+                twin: canTwin, 
+                inverted: canInvert, 
+                xiao: canXiao, 
+                liu_month: canLiuMonth, 
+                liu_day: canLiuDay 
+            }}
             
-            // [新增] 傳遞流月流日控制
             liuMonth={liuMonth}
             isLiuMonthLeap={isLiuMonthLeap}
             liuDay={liuDay}
             onSetLiuMonth={(m, isLeap) => { setLiuMonth(m); setIsLiuMonthLeap(isLeap); setLiuDay(null); }}
             onSetLiuDay={setLiuDay}
-            // [新增] 傳遞對應天干給 CenterInfoBoard 顯示
             liuMonthGan={liuMonthGan}
             liuDayGan={liuDayGan}
-            liuNianYear={liuNianYear} // [新增] 傳遞流年年份以計算閏月與真實時間
+            liuNianYear={liuNianYear}
         />
       </div>
 
