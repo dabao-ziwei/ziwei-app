@@ -5,7 +5,8 @@ import { AddChartModal } from './components/AddChartModal';
 import { Auth } from './components/Auth';
 import { UpdatePassword } from './components/UpdatePassword';
 import { ClientList } from './pages/ClientList'; 
-import { Dashboard } from './pages/Dashboard'; // [新增] 引入 Dashboard
+import { Dashboard } from './pages/Dashboard';
+import { DivinationAdminPanel } from './components/DivinationAdminPanel'; // [新增]
 import { saveClient, type Client } from './db';
 import { supabase } from './supabase';
 import { Loader2 } from 'lucide-react';
@@ -94,10 +95,8 @@ function App() {
       <Route path="/login" element={!session ? <Auth /> : <Navigate to="/" replace />} />
       
       <Route element={<ProtectedLayout />}>
-        {/* [修改] 首頁改為 Dashboard */}
         <Route path="/" element={<Dashboard />} />
         
-        {/* [修改] 命盤列表移至 /list */}
         <Route 
           path="/list" 
           element={
@@ -120,6 +119,9 @@ function App() {
         <Route path="/dual-chart" element={<DualChart />} />
 
         <Route path="/divination" element={<ChartBoard mode="divination" />} />
+        
+        {/* [新增] 占卜文案管理後台 */}
+        <Route path="/admin" element={<DivinationAdminPanel />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
