@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Save, ArrowLeft, Database, CheckCircle, AlertCircle, Plus, Trash2, Smile, Frown, Meh } from 'lucide-react';
+import { Save, ArrowLeft, Database, CheckCircle, AlertCircle, Plus, Trash2, Smile, Frown, Meh, HelpCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 // --- 常數定義 ---
@@ -7,16 +7,16 @@ const CATEGORIES = ['感情', '工作', '理財', '健康', '交友'];
 const ZHI = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
 const GAN = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'];
 
-// 定義吉凶類型
-type LuckType = '吉' | '凶' | '吉凶參半';
+// [修改] 定義吉凶類型：新增 '無結果'
+type LuckType = '吉' | '凶' | '吉凶參半' | '無結果';
 
-// [升級] 資料庫結構：現在是一個物件，包含內容與吉凶
+// 資料庫結構：物件格式
 type DivinationItem = {
     content: string;
     luck: LuckType;
 };
 
-// 為了相容舊資料，這裡允許 string，但在讀取時會統一轉成 DivinationItem
+// 為了相容舊資料
 type DivinationDB = { [key: string]: DivinationItem | string };
 
 export const DivinationAdminPanel: React.FC = () => {
@@ -24,12 +24,12 @@ export const DivinationAdminPanel: React.FC = () => {
     
     // 狀態管理
     const [activeCat, setActiveCat] = useState<string>('感情');
-    const [db, setDb] = useState<{ [key: string]: DivinationItem }>({}); // 確保內部 state 統一使用新格式
+    const [db, setDb] = useState<{ [key: string]: DivinationItem }>({});
     
     // 控制 Modal
     const [editingKey, setEditingKey] = useState<string | null>(null);
     const [tempContent, setTempContent] = useState('');
-    const [tempLuck, setTempLuck] = useState<LuckType>('吉凶參半'); // 新增吉凶狀態
+    const [tempLuck, setTempLuck] = useState<LuckType>('吉凶參半');
 
     // --- 初始化 & 資料遷移 (Migration) ---
     useEffect(() => {
@@ -38,14 +38,11 @@ export const DivinationAdminPanel: React.FC = () => {
             const rawDb = JSON.parse(savedData);
             const migratedDb: { [key: string]: DivinationItem } = {};
 
-            // 遍歷所有資料，進行格式檢查與升級
             Object.keys(rawDb).forEach(key => {
                 const item = rawDb[key];
                 if (typeof item === 'string') {
-                    // [重要] 如果是舊的純文字，自動升級為物件，預設吉凶為「吉凶參半」
                     migratedDb[key] = { content: item, luck: '吉凶參半' };
                 } else {
-                    // 已經是新格式，直接使用
                     migratedDb[key] = item;
                 }
             });
@@ -93,7 +90,6 @@ export const DivinationAdminPanel: React.FC = () => {
         if (tempContent.trim() === '') {
             delete newDb[editingKey];
         } else {
-            // [升級] 儲存為物件格式
             newDb[editingKey] = {
                 content: tempContent,
                 luck: tempLuck
@@ -119,12 +115,14 @@ export const DivinationAdminPanel: React.FC = () => {
         return { cat, zhi, gan };
     };
 
-    // 取得吉凶顏色 (用於標記)
+    // [修改] 取得吉凶顏色 (新增無結果的灰色)
     const getLuckColor = (luck: LuckType) => {
         switch (luck) {
             case '吉': return 'bg-rose-500';
-            case '凶': return 'bg-slate-600';
-            default: return 'bg-amber-400';
+            case '凶': return 'bg-slate-700';
+            case '吉凶參半': return 'bg-amber-400';
+            case '無結果': return 'bg-gray-400'; // 灰色代表笑杯/無結果
+            default: return 'bg-gray-200';
         }
     };
 
@@ -223,7 +221,7 @@ export const DivinationAdminPanel: React.FC = () => {
                                                         <>
                                                             <div className="text-emerald-500 icon-glow relative">
                                                                 <CheckCircle size={28} strokeWidth={2.5} />
-                                                                {/* [新增] 吉凶小圓點標記 */}
+                                                                {/* 吉凶小圓點標記 */}
                                                                 <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${getLuckColor(item.luck)}`} title={item.luck}></div>
                                                             </div>
                                                         </>
@@ -261,27 +259,33 @@ export const DivinationAdminPanel: React.FC = () => {
                             <button onClick={() => setEditingKey(null)} className="p-2 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-800 transition-colors">✕</button>
                         </div>
 
-                        {/* [新增] 吉凶選擇器 */}
+                        {/* 吉凶選擇器 (四顆按鈕) */}
                         <div className="mb-4 shrink-0">
                             <label className="block text-sm font-bold text-gray-500 mb-2">占卜吉凶判定</label>
-                            <div className="flex gap-3">
+                            <div className="grid grid-cols-4 gap-2">
                                 <button 
                                     onClick={() => setTempLuck('吉')}
-                                    className={`flex-1 py-3 rounded-xl border-2 flex items-center justify-center gap-2 font-bold transition-all ${tempLuck === '吉' ? 'border-rose-500 bg-rose-50 text-rose-600 shadow-inner' : 'border-gray-200 text-gray-400 hover:border-rose-200'}`}
+                                    className={`py-3 rounded-xl border-2 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-bold transition-all text-xs sm:text-sm ${tempLuck === '吉' ? 'border-rose-500 bg-rose-50 text-rose-600 shadow-inner' : 'border-gray-200 text-gray-400 hover:border-rose-200'}`}
                                 >
-                                    <Smile size={20} /> 吉 (Lucky)
+                                    <Smile size={18} /> 吉
                                 </button>
                                 <button 
                                     onClick={() => setTempLuck('吉凶參半')}
-                                    className={`flex-1 py-3 rounded-xl border-2 flex items-center justify-center gap-2 font-bold transition-all ${tempLuck === '吉凶參半' ? 'border-amber-400 bg-amber-50 text-amber-600 shadow-inner' : 'border-gray-200 text-gray-400 hover:border-amber-200'}`}
+                                    className={`py-3 rounded-xl border-2 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-bold transition-all text-xs sm:text-sm ${tempLuck === '吉凶參半' ? 'border-amber-400 bg-amber-50 text-amber-600 shadow-inner' : 'border-gray-200 text-gray-400 hover:border-amber-200'}`}
                                 >
-                                    <Meh size={20} /> 吉凶參半 (Mixed)
+                                    <Meh size={18} /> 參半
                                 </button>
                                 <button 
                                     onClick={() => setTempLuck('凶')}
-                                    className={`flex-1 py-3 rounded-xl border-2 flex items-center justify-center gap-2 font-bold transition-all ${tempLuck === '凶' ? 'border-slate-600 bg-slate-100 text-slate-700 shadow-inner' : 'border-gray-200 text-gray-400 hover:border-slate-300'}`}
+                                    className={`py-3 rounded-xl border-2 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-bold transition-all text-xs sm:text-sm ${tempLuck === '凶' ? 'border-slate-600 bg-slate-100 text-slate-700 shadow-inner' : 'border-gray-200 text-gray-400 hover:border-slate-300'}`}
                                 >
-                                    <Frown size={20} /> 凶 (Unlucky)
+                                    <Frown size={18} /> 凶
+                                </button>
+                                <button 
+                                    onClick={() => setTempLuck('無結果')}
+                                    className={`py-3 rounded-xl border-2 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-bold transition-all text-xs sm:text-sm ${tempLuck === '無結果' ? 'border-gray-400 bg-gray-100 text-gray-600 shadow-inner' : 'border-gray-200 text-gray-400 hover:border-gray-300'}`}
+                                >
+                                    <HelpCircle size={18} /> 無結果
                                 </button>
                             </div>
                         </div>
