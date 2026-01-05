@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Save, Edit3, Plus, Trash2, CheckCircle, AlertCircle, ArrowLeft, Database } from 'lucide-react';
+import { Save, ArrowLeft, Database, CheckCircle, AlertCircle, Plus, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 // --- 常數定義 ---
@@ -82,10 +82,6 @@ export const DivinationAdminPanel: React.FC = () => {
     };
 
     return (
-        // [修正] 關鍵修改：
-        // 1. h-full: 填滿父容器 (ProtectedLayout) 的高度
-        // 2. overflow-y-auto: 內容超過時，在這個 div 內部產生捲軸
-        // 3. bg-gray-50: 維持白色/淺灰主題
         <div className="h-full overflow-y-auto bg-gray-50 text-gray-800 p-4 sm:p-8 font-sans">
             <div className="max-w-7xl mx-auto pb-20">
                 
@@ -177,20 +173,18 @@ export const DivinationAdminPanel: React.FC = () => {
                                                 className={`
                                                     relative group h-20 rounded-xl border-2 transition-all duration-200 flex flex-col items-center justify-center p-2
                                                     ${hasContent 
-                                                        /* 已建立：淺綠底、深綠字、綠框 */
+                                                        /* 已建立：淺綠底、綠框 */
                                                         ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-400 hover:shadow-md hover:-translate-y-1' 
-                                                        /* 未建立：淺灰底、灰字 */
+                                                        /* 未建立：淺灰底、虛線框 */
                                                         : 'bg-gray-50/50 border-dashed border-gray-200 hover:border-purple-300 hover:bg-white'
                                                     }
                                                 `}
                                             >
                                                 {hasContent ? (
-                                                    <>
-                                                        <div className="text-emerald-500 mb-1"><CheckCircle size={20} strokeWidth={2.5} /></div>
-                                                        <div className="text-[10px] text-emerald-700 font-medium truncate w-full text-center leading-tight px-1">
-                                                            {content.slice(0, 8)}...
-                                                        </div>
-                                                    </>
+                                                    // [修正] 移除文字預覽，只保留置中的打勾圖示
+                                                    <div className="text-emerald-500 icon-glow">
+                                                        <CheckCircle size={28} strokeWidth={2.5} />
+                                                    </div>
                                                 ) : (
                                                     <div className="text-gray-300 group-hover:text-purple-400 transition-colors">
                                                         <Plus size={24} />
