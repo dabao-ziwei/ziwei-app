@@ -27,7 +27,8 @@ const DEFAULT_FLAGS_BY_ROLE: Record<string, Partial<UserFeatures>> = {
         flying_star: false,
         dual_chart: false,
         screenshot: false,
-        divination: false
+        divination: false,
+        lucky_divination: false
     },
     student: {
         liu_month: true,
@@ -38,7 +39,8 @@ const DEFAULT_FLAGS_BY_ROLE: Record<string, Partial<UserFeatures>> = {
         flying_star: true,
         dual_chart: true,
         screenshot: true,
-        divination: false
+        divination: false,
+        lucky_divination: false
     },
     admin: {
         liu_month: true,
@@ -49,7 +51,8 @@ const DEFAULT_FLAGS_BY_ROLE: Record<string, Partial<UserFeatures>> = {
         flying_star: true,
         dual_chart: true,
         screenshot: true,
-        divination: true
+        divination: true,
+        lucky_divination: true
     },
     competitor: {
         liu_month: true,
@@ -60,7 +63,8 @@ const DEFAULT_FLAGS_BY_ROLE: Record<string, Partial<UserFeatures>> = {
         flying_star: false,
         dual_chart: false,
         screenshot: false,
-        divination: false
+        divination: false,
+        lucky_divination: false
     }
 };
 
@@ -123,7 +127,6 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
   const checkIsSuperAdmin = (email: string) => email?.trim().toLowerCase() === SUPER_ADMIN_EMAIL;
 
-  // 綜合過濾與排序邏輯
   const processedProfiles = useMemo(() => {
     let result = profiles.filter(p => p.email.toLowerCase().includes(searchTerm.toLowerCase()));
     if (filterRole !== 'all') {
@@ -195,10 +198,9 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
           const newFlags = { ...currentFlags };
           
           if (value === undefined) {
-              delete newFlags[key]; // 回復預設
+              delete newFlags[key]; 
           } else {
               newFlags[key] = value;
-              // 連動：關閉流月 -> 強制關閉流日
               if (key === 'liu_month' && value === false) {
                   newFlags['liu_day'] = false;
               }
@@ -209,7 +211,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
   };
 
   const handleRoleChange = (newRole: any) => {
-      // 切換角色時，保留 feature_flags 為空，這樣就會自動吃新角色的 DEFAULT
+      const defaultFlags = DEFAULT_FLAGS_BY_ROLE[newRole] || {};
       setEditForm(prev => ({
           ...prev, 
           role: newRole,
@@ -288,7 +290,6 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
       </th>
   );
 
-  // [List View] 輔助功能：計算並渲染功能圖示
   const renderFeatureIcons = (user: UserProfile) => {
       const defaultFlags = DEFAULT_FLAGS_BY_ROLE[user.role] || {};
       const userFlags = user.feature_flags || {};
@@ -304,6 +305,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
           { key: 'flying_star', icon: UserPlus, label: '飛化', color: 'text-purple-600' },
           { key: 'dual_chart', icon: RefreshCw, label: '合盤', color: 'text-purple-600' },
           { key: 'liu_month', icon: Calendar, label: '流月日', color: 'text-amber-500' },
+          { key: 'lucky_divination', icon: Sparkles, label: '吉凶占卜', color: 'text-rose-500' },
       ];
 
       return (
@@ -499,7 +501,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                                 return (
                                     <div key={key} className={`flex items-center justify-between p-3 rounded-lg border border-gray-100 bg-white hover:border-blue-200 transition-colors ${isLiuDayDisabled ? 'opacity-40 pointer-events-none grayscale' : ''}`}>
                                         <div className="flex flex-col">
-                                            <span className="text-sm font-bold text-gray-700">{FEATURE_NAMES[key]}</span>
+                                            <span className="text-sm font-medium text-gray-700">{FEATURE_NAMES[key]}</span>
                                             {isLiuDayDisabled && <span className="text-[10px] text-red-500">(需開啟流月)</span>}
                                         </div>
                                         <div className="flex items-center gap-2">
@@ -559,6 +561,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 </div>
             </div>
         )}
+        {/* Invite Modal */}
         {isInviteOpen && (
             <div className="absolute inset-0 bg-black/50 z-[70] flex items-center justify-center p-4 animate-in fade-in duration-200">
                 <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 relative">

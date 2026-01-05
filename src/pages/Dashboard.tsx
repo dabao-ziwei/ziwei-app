@@ -1,13 +1,15 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, ArrowRight, Menu, LogOut, UserCog, Loader2, Save, PlusCircle, X, ChevronRight, Clock, Calendar, HelpCircle, User } from 'lucide-react';
+import { Sparkles, ArrowRight, Menu, LogOut, UserCog, Loader2, PlusCircle, Calendar, Clock, HelpCircle } from 'lucide-react';
 import { supabase } from '../supabase';
-import { loadClients, saveClient, getMyProfile, type Client, type UserProfile } from '../db';
+import { loadClients, saveClient, getMyProfile, getUsedChartCount, type Client, type UserProfile } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
 import { calculateDailyFortune, type DailyFortune } from '../logic/fortune';
 import { FortuneWidget } from '../components/FortuneWidget';
 import { UserManagementModal } from '../components/UserManagementModal';
+import { LuckyDivinationModal } from '../components/LuckyDivinationModal';
 import { ZHI } from '../logic/constants';
+import { getFeaturePermission } from '../logic/permissions';
 
 const SUPER_ADMIN_EMAIL = 'stephenwu.0926@gmail.com';
 
@@ -24,7 +26,6 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
     const [formData, setFormData] = useState({
         name: '',
         gender: '' as '男' | '女' | '',
-        // [修改] 預設年份改為 2000
         year: 2000,
         month: 1,
         day: 1,
@@ -77,7 +78,6 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
 
     const handleZhiSelect = (zhiIdx: number) => {
         // 地支對應的小時 (取中間值，例如子時取 0, 丑時取 2)
-        // 子:0, 丑:2, 寅:4 ...
         const hour = zhiIdx === 0 ? 0 : zhiIdx * 2; 
         setFormData({ ...formData, hour, minute: 0 });
     };
@@ -103,7 +103,7 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
     if (step === 1) {
         return (
             <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 relative">
-                {isTestMode && <button onClick={onCancelTest} className="absolute top-4 right-4 p-1 text-gray-400 hover:text-gray-600"><X size={20}/></button>}
+                {isTestMode && <button onClick={onCancelTest} className="absolute top-4 right-4 p-1 text-gray-400 hover:text-gray-600"><PlusCircle size={20} className="rotate-45"/></button>}
                 <div className="p-8 pt-12 flex flex-col items-center text-center space-y-6">
                     <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 mb-2">
                         <Sparkles size={32} />
@@ -135,7 +135,7 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
     if (step === 2) {
         return (
             <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-right-8 duration-300 relative">
-                <button onClick={() => setStep(1)} className="absolute top-4 left-4 p-1 text-gray-400 hover:text-gray-600 flex items-center gap-1 text-xs font-bold"><ChevronRight size={14} className="rotate-180"/> 上一步</button>
+                <button onClick={() => setStep(1)} className="absolute top-4 left-4 p-1 text-gray-400 hover:text-gray-600 flex items-center gap-1 text-xs font-bold"><ArrowRight size={14} className="rotate-180"/> 上一步</button>
                 <div className="p-8 pt-12 flex flex-col items-center text-center space-y-6">
                     <h2 className="text-xl font-bold text-slate-800">請問您的性別？</h2>
                     
@@ -169,7 +169,7 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
     if (step === 3) {
         return (
             <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-right-8 duration-300 relative">
-                <button onClick={() => setStep(2)} className="absolute top-4 left-4 p-1 text-gray-400 hover:text-gray-600 flex items-center gap-1 text-xs font-bold"><ChevronRight size={14} className="rotate-180"/> 上一步</button>
+                <button onClick={() => setStep(2)} className="absolute top-4 left-4 p-1 text-gray-400 hover:text-gray-600 flex items-center gap-1 text-xs font-bold"><ArrowRight size={14} className="rotate-180"/> 上一步</button>
                 
                 <div className="p-6 pt-12 flex flex-col space-y-5">
                     <div className="text-center">
@@ -327,6 +327,7 @@ export const Dashboard: React.FC = () => {
   
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false);
+  const [isLuckyDivinationOpen, setIsLuckyDivinationOpen] = useState(false);
 
   // 強制顯示新手引導的開關 (測試用)
   const [forceOnboarding, setForceOnboarding] = useState(false);
@@ -377,7 +378,7 @@ export const Dashboard: React.FC = () => {
 
   const handleWizardComplete = async (data: any) => {
     try {
-        // [關鍵修正] 在儲存前，先使用 ZiWeiEngine 計算命宮主星 (Major Stars)
+        // 在儲存前，先使用 ZiWeiEngine 計算命宮主星
         const engine = new ZiWeiEngine(
             Number(data.year), data.month, data.day,
             data.hour, data.minute, data.gender
@@ -400,16 +401,19 @@ export const Dashboard: React.FC = () => {
             bornCity: '',
             tags: [],
             user_id: userProfile?.id,
-            majorStars: majorStarNames // [新增] 將計算好的主星存入
+            majorStars: majorStarNames 
         };
         await saveClient(newClient);
         
         setForceOnboarding(false);
         await initDashboard();
     } catch (e) {
-        throw e; // 讓 Wizard 捕獲錯誤並處理
+        throw e;
     }
   };
+
+  // 讀取吉凶占卜權限
+  const canLuckyDivination = useMemo(() => getFeaturePermission(userProfile, 'lucky_divination'), [userProfile]);
 
   if (loading) return <div className="flex h-screen items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-slate-400" /></div>;
 
@@ -477,19 +481,57 @@ export const Dashboard: React.FC = () => {
                             </div>
                         )}
 
-                        <div className="w-full mt-6 flex justify-center">
+                        <div className="w-full mt-6 flex gap-3 max-w-md">
+                            {/* 命盤列表按鈕 */}
                             <button
                                 onClick={() => navigate('/list')}
-                                className="w-full max-w-md bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 font-bold py-4 rounded-2xl shadow-sm transition-all flex items-center justify-between px-6 group"
+                                className="flex-1 bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 font-bold py-4 rounded-2xl shadow-sm transition-all flex items-center justify-between px-4 group"
                             >
                                 <div className="flex flex-col items-start">
-                                    <span className="text-lg text-slate-800 group-hover:text-blue-700 transition-colors">進入命盤列表</span>
-                                    <span className="text-xs text-slate-400 font-normal">查看命盤、管理客戶</span>
+                                    <span className="text-base sm:text-lg text-slate-800 group-hover:text-blue-700 transition-colors">命盤列表</span>
+                                    <span className="text-xs text-slate-400 font-normal">管理客戶</span>
                                 </div>
-                                <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all">
-                                    <ArrowRight size={20} />
+                                <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all">
+                                    <ArrowRight size={16} />
                                 </div>
                             </button>
+
+                            {/* 吉凶占卜按鈕 */}
+                            {canLuckyDivination !== 'hidden' && (
+                                <button
+                                    onClick={() => {
+                                        if (canLuckyDivination === 'enabled') setIsLuckyDivinationOpen(true);
+                                    }}
+                                    disabled={canLuckyDivination === 'disabled'}
+                                    className={`flex-1 border font-bold py-4 rounded-2xl shadow-sm transition-all flex items-center justify-between px-4 group relative overflow-hidden
+                                        ${canLuckyDivination === 'enabled' 
+                                            ? 'bg-slate-900 border-slate-800 text-white hover:bg-slate-800 hover:shadow-lg hover:shadow-purple-500/20' 
+                                            : 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                                        }
+                                    `}
+                                >
+                                    <div className="flex flex-col items-start z-10">
+                                        <span className={`text-base sm:text-lg transition-colors ${canLuckyDivination === 'enabled' ? 'text-white group-hover:text-purple-300' : 'text-gray-500'}`}>
+                                            吉凶占卜
+                                        </span>
+                                        <span className="text-xs opacity-60 font-normal">
+                                            {canLuckyDivination === 'enabled' ? '直覺測算' : 'Coming Soon'}
+                                        </span>
+                                    </div>
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all z-10
+                                        ${canLuckyDivination === 'enabled' 
+                                            ? 'bg-white/10 group-hover:bg-purple-600 group-hover:text-white' 
+                                            : 'bg-gray-200 text-gray-400'
+                                        }
+                                    `}>
+                                        <Sparkles size={16} />
+                                    </div>
+                                    
+                                    {canLuckyDivination === 'enabled' && (
+                                        <div className="absolute -right-4 -bottom-4 w-20 h-20 bg-purple-500/20 blur-xl rounded-full group-hover:bg-purple-500/30 transition-all"></div>
+                                    )}
+                                </button>
+                            )}
                         </div>
                     </>
                 ) : (
@@ -508,6 +550,11 @@ export const Dashboard: React.FC = () => {
         <UserManagementModal 
             isOpen={isUserMgmtOpen} 
             onClose={() => setIsUserMgmtOpen(false)} 
+        />
+
+        <LuckyDivinationModal 
+            isOpen={isLuckyDivinationOpen} 
+            onClose={() => setIsLuckyDivinationOpen(false)} 
         />
     </div>
   );
