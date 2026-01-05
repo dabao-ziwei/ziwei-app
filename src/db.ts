@@ -399,3 +399,87 @@ export const bulkUpdateAccessExpiry = async (ids: string[], expiryDate: string):
     }
     return true;
 };
+
+// ... (保留原本的 code)
+
+// --- 占卜文案相關 API ---
+
+export interface DivinationContent {
+    category: string;
+    zhi: string;
+    gan: string;
+    content: string;
+    luck: string;
+}
+
+// 1. 讀取單筆資料 (給前台 Modal 用)
+export const getDivinationResult = async (category: string, zhi: string, gan: string) => {
+    const { data, error } = await supabase
+        .from('divination_contents')
+        .select('*')
+        .eq('category', category)
+        .eq('zhi', zhi)
+        .eq('gan', gan)
+        .maybeSingle(); // 使用 maybeSingle，找不到不會噴錯，只會回傳 null
+
+    if (error) {
+        console.error('Error fetching divination:', error);
+        return null;
+    }
+    return data;
+};
+
+// 2. 讀取所有資料 (給後台 AdminPanel 用)
+export const getAllDivinationContents = async () => {
+    const { data, error } = await supabase
+        .from('divination_contents')
+        .select('*');
+    
+    if (error) return [];
+    
+    // 轉換成矩陣需要的格式: { "感情-子-甲": { content: "...", luck: "..." } }
+    const dbMap: Record<string, any> = {};
+    data.forEach((row: any) => {
+        const key = `${row.category}-${row.zhi}-${row.gan}`;
+        dbMap[key] = { content: row.content, luck: row.luck };
+    });
+    return dbMap;
+};
+
+// 3. 儲存/更新單筆資料
+export const saveDivinationContent = async (category: string, zhi: string, gan: string, content: string, luck: string) => {
+    const { error } = await supabase
+        .from('divination_contents')
+        .upsert({ 
+            category, 
+            zhi, 
+            gan, 
+            content, 
+            luck,
+            updated_at: new Date().toISOString()
+        }, { onConflict: 'category,zhi,gan' }); // 遇到重複組合就更新
+
+    return !error;
+};
+
+// 4. 刪除單筆資料
+export const deleteDivinationContent = async (category: string, zhi: string, gan: string) => {
+    const { error } = await supabase
+        .from('divination_contents')
+        .delete()
+        .eq('category', category)
+        .eq('zhi', zhi)
+        .eq('gan', gan);
+        
+    return !error;
+};
+
+// 5. 批量上傳 (用於從 LocalStorage 遷移資料)
+export const bulkUploadDivination = async (items: DivinationContent[]) => {
+    if (items.length === 0) return true;
+    const { error } = await supabase
+        .from('divination_contents')
+        .upsert(items, { onConflict: 'category,zhi,gan' });
+    
+    return !error;
+};
