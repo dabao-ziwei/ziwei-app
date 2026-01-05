@@ -29,7 +29,7 @@ export const DivinationAdminPanel: React.FC = () => {
         }
     }, []);
 
-    // --- [新增] ESC 鍵監聽 ---
+    // --- ESC 鍵監聽 ---
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
@@ -82,8 +82,11 @@ export const DivinationAdminPanel: React.FC = () => {
     };
 
     return (
-        // [修正] 改為 bg-gray-50 (淺灰白底)，字體顏色加深
-        <div className="min-h-screen bg-gray-50 text-gray-800 p-4 sm:p-8 font-sans">
+        // [修正] 關鍵修改：
+        // 1. h-full: 填滿父容器 (ProtectedLayout) 的高度
+        // 2. overflow-y-auto: 內容超過時，在這個 div 內部產生捲軸
+        // 3. bg-gray-50: 維持白色/淺灰主題
+        <div className="h-full overflow-y-auto bg-gray-50 text-gray-800 p-4 sm:p-8 font-sans">
             <div className="max-w-7xl mx-auto pb-20">
                 
                 {/* --- Header --- */}
@@ -140,7 +143,6 @@ export const DivinationAdminPanel: React.FC = () => {
 
                 {/* --- 矩陣區域 (白底 + 淺綠標記) --- */}
                 <div className="rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden">
-                    {/* [修正] overflow-x-auto 放在這裡，讓內容可以捲動，但不影響外層 */}
                     <div className="overflow-x-auto">
                         <div className="min-w-[1000px] p-6">
                             {/* Header Row (天干) */}
