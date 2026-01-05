@@ -82,28 +82,31 @@ export const DivinationAdminPanel: React.FC = () => {
     };
 
     return (
-        <div className="h-full overflow-y-auto bg-gray-50 text-gray-800 p-4 sm:p-8 font-sans">
-            <div className="max-w-7xl mx-auto pb-20">
+        // [佈局修正] 使用 h-screen 與 flex-col，讓滾動區域限制在中間的 flex-1 區塊
+        <div className="h-screen flex flex-col bg-gray-50 text-gray-800 font-sans overflow-hidden">
+            
+            {/* 1. 頂部固定區 (Header + Tabs + Progress) */}
+            <div className="flex-none px-4 sm:px-8 pt-6 pb-2 max-w-7xl mx-auto w-full z-20">
                 
-                {/* --- Header --- */}
-                <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-6">
-                    <div className="flex items-center gap-4">
+                {/* Header */}
+                <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                    <div className="flex items-center gap-4 self-start md:self-auto">
                         <button onClick={() => navigate('/')} className="p-2 bg-white rounded-full hover:bg-gray-100 transition-colors border border-gray-200 shadow-sm text-gray-500 hover:text-gray-800">
                             <ArrowLeft size={20} />
                         </button>
-                        <h1 className="text-2xl sm:text-3xl font-bold tracking-wider text-gray-900 flex items-center gap-3">
+                        <h1 className="text-2xl font-bold tracking-wider text-gray-900 flex items-center gap-3">
                             <Database className="text-purple-600" />
                             占卜文案矩陣
                         </h1>
                     </div>
                     
-                    {/* 分類 Tabs (白底樣式) */}
-                    <div className="flex p-1 bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto max-w-full">
+                    {/* Tabs */}
+                    <div className="flex p-1 bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto max-w-full no-scrollbar">
                         {CATEGORIES.map(cat => (
                             <button
                                 key={cat}
                                 onClick={() => setActiveCat(cat)}
-                                className={`px-4 sm:px-6 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${
+                                className={`px-5 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${
                                     activeCat === cat 
                                     ? 'bg-purple-600 text-white shadow-md' 
                                     : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
@@ -115,92 +118,103 @@ export const DivinationAdminPanel: React.FC = () => {
                     </div>
                 </div>
 
-                {/* --- 進度條 (白底卡片) --- */}
-                <div className="mb-8 bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-6">
-                    <div className="flex items-center gap-4 w-full sm:w-auto">
-                        <div className={`p-3 rounded-full ${progress.percentage === 100 ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
-                            {progress.percentage === 100 ? <CheckCircle size={24} /> : <AlertCircle size={24} />}
-                        </div>
-                        <div>
-                            <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Writing Progress</div>
-                            <div className="text-xl font-bold text-gray-900">
-                                {activeCat} <span className="text-gray-400 text-base font-normal mx-2">|</span> {progress.current} <span className="text-gray-400 text-sm">/ {progress.total}</span>
-                            </div>
-                        </div>
+                {/* Progress Bar */}
+                <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 mb-2">
+                    <div className={`p-2 rounded-full ${progress.percentage === 100 ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
+                        {progress.percentage === 100 ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
                     </div>
-                    <div className="flex-1 w-full sm:max-w-md h-4 bg-gray-100 rounded-full overflow-hidden shadow-inner">
-                        <div 
-                            className={`h-full transition-all duration-500 ease-out ${progress.percentage === 100 ? 'bg-green-500' : 'bg-purple-500'}`}
-                            style={{ width: `${progress.percentage}%` }}
-                        />
-                    </div>
-                    <div className="text-3xl font-black text-gray-300 w-20 text-right hidden sm:block">{progress.percentage}%</div>
-                </div>
-
-                {/* --- 矩陣區域 (白底 + 淺綠標記) --- */}
-                <div className="rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <div className="min-w-[1000px] p-6">
-                            {/* Header Row (天干) */}
-                            <div className="grid grid-cols-[80px_repeat(10,1fr)] gap-3 mb-3">
-                                <div className="flex items-center justify-center font-bold text-gray-400 text-xs tracking-widest bg-gray-50 rounded-lg">地支 \ 天干</div>
-                                {GAN.map(gan => (
-                                    <div key={gan} className="h-10 flex items-center justify-center bg-gray-100 rounded-lg text-gray-600 font-bold border border-gray-200">
-                                        {gan}
-                                    </div>
-                                ))}
-                            </div>
-
-                            {/* Rows (地支) */}
-                            {ZHI.map(zhi => (
-                                <div key={zhi} className="grid grid-cols-[80px_repeat(10,1fr)] gap-3 mb-3">
-                                    {/* Row Header */}
-                                    <div className="flex items-center justify-center bg-gray-100 rounded-lg text-gray-600 font-bold border border-gray-200 h-20">
-                                        {zhi}
-                                    </div>
-
-                                    {/* Cells */}
-                                    {GAN.map(gan => {
-                                        const key = `${activeCat}-${zhi}-${gan}`;
-                                        const content = db[key];
-                                        const hasContent = !!content;
-
-                                        return (
-                                            <button
-                                                key={key}
-                                                onClick={() => handleCellClick(zhi, gan)}
-                                                title={hasContent ? content : "尚未建立"}
-                                                className={`
-                                                    relative group h-20 rounded-xl border-2 transition-all duration-200 flex flex-col items-center justify-center p-2
-                                                    ${hasContent 
-                                                        /* 已建立：淺綠底、綠框 */
-                                                        ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-400 hover:shadow-md hover:-translate-y-1' 
-                                                        /* 未建立：淺灰底、虛線框 */
-                                                        : 'bg-gray-50/50 border-dashed border-gray-200 hover:border-purple-300 hover:bg-white'
-                                                    }
-                                                `}
-                                            >
-                                                {hasContent ? (
-                                                    // [修正] 移除文字預覽，只保留置中的打勾圖示
-                                                    <div className="text-emerald-500 icon-glow">
-                                                        <CheckCircle size={28} strokeWidth={2.5} />
-                                                    </div>
-                                                ) : (
-                                                    <div className="text-gray-300 group-hover:text-purple-400 transition-colors">
-                                                        <Plus size={24} />
-                                                    </div>
-                                                )}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            ))}
+                    <div className="flex-1">
+                        <div className="flex justify-between items-end mb-1">
+                            <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">Progress ({activeCat})</div>
+                            <div className="text-sm font-bold text-gray-900">{progress.current} / {progress.total}</div>
+                        </div>
+                        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div className={`h-full transition-all duration-500 ease-out ${progress.percentage === 100 ? 'bg-green-500' : 'bg-purple-500'}`} style={{ width: `${progress.percentage}%` }} />
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* --- 編輯視窗 (Light Mode Modal) --- */}
+            {/* 2. 矩陣滾動區 (Scrollable Matrix) */}
+            <div className="flex-1 overflow-hidden px-4 sm:px-8 pb-6 max-w-7xl mx-auto w-full">
+                <div className="h-full bg-white rounded-2xl border border-gray-200 shadow-xl overflow-hidden flex flex-col relative">
+                    
+                    {/* [關鍵] overflow-auto 設在這裡，這是唯一的捲軸容器 */}
+                    <div className="flex-1 overflow-auto p-0 relative">
+                        <div className="inline-block min-w-full p-6 align-middle">
+                            <div className="min-w-[1000px]"> {/* 強制最小寬度，確保不擠壓 */}
+                                
+                                {/* [凍結窗格魔法] 
+                                    Header Row: sticky top-0
+                                    Left Col: sticky left-0
+                                    Corner: sticky top-0 left-0
+                                */}
+
+                                {/* Header Row (天干) */}
+                                <div className="sticky top-0 z-30 grid grid-cols-[80px_repeat(10,1fr)] gap-3 mb-3 bg-white pb-2 border-b border-gray-100">
+                                    {/* 左上角十字區 (雙向凍結) */}
+                                    <div className="sticky left-0 z-40 flex items-center justify-center font-bold text-gray-400 text-xs tracking-widest bg-gray-50 rounded-lg border border-gray-200 shadow-sm h-10">
+                                        地支 \ 天干
+                                    </div>
+                                    
+                                    {/* 天干標題 (凍結上方) */}
+                                    {GAN.map(gan => (
+                                        <div key={gan} className="h-10 flex items-center justify-center bg-gray-100 rounded-lg text-gray-600 font-bold border border-gray-200 shadow-sm">
+                                            {gan}
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Body Rows (地支) */}
+                                {ZHI.map(zhi => (
+                                    <div key={zhi} className="grid grid-cols-[80px_repeat(10,1fr)] gap-3 mb-3">
+                                        
+                                        {/* 地支標題 (凍結左側) */}
+                                        <div className="sticky left-0 z-20 flex items-center justify-center bg-gray-100 rounded-lg text-gray-600 font-bold border border-gray-200 h-20 shadow-sm">
+                                            {zhi}
+                                        </div>
+
+                                        {/* 內容格子 */}
+                                        {GAN.map(gan => {
+                                            const key = `${activeCat}-${zhi}-${gan}`;
+                                            const hasContent = !!db[key];
+
+                                            return (
+                                                <button
+                                                    key={key}
+                                                    onClick={() => handleCellClick(zhi, gan)}
+                                                    className={`
+                                                        relative group h-20 rounded-xl border-2 transition-all duration-200 flex flex-col items-center justify-center p-2
+                                                        ${hasContent 
+                                                            /* 已建立：淺綠底、綠框 */
+                                                            ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-400 hover:shadow-md hover:-translate-y-1' 
+                                                            /* 未建立：白底、淺灰虛線框 */
+                                                            : 'bg-white border-dashed border-gray-200 hover:border-purple-300 hover:bg-purple-50/10'
+                                                        }
+                                                    `}
+                                                >
+                                                    {hasContent ? (
+                                                        // [修正] 移除文字，只保留置中大圖示
+                                                        <div className="text-emerald-500 transform transition-transform duration-200 group-hover:scale-110">
+                                                            <CheckCircle size={28} strokeWidth={2.5} />
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-gray-200 group-hover:text-purple-400 transition-colors">
+                                                            <Plus size={24} />
+                                                        </div>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* --- 編輯視窗 (Light Mode) --- */}
             {editingKey && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
                     <div className="bg-white w-full max-w-2xl rounded-2xl border border-gray-200 shadow-2xl p-6 md:p-8 animate-in zoom-in-95 duration-200 relative flex flex-col max-h-[90vh]">
