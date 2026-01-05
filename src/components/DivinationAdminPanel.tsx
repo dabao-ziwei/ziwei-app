@@ -7,7 +7,7 @@ const CATEGORIES = ['感情', '工作', '理財', '健康', '交友'];
 const ZHI = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
 const GAN = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'];
 
-// [修改] 定義吉凶類型：新增 '無結果'
+// 定義吉凶類型
 type LuckType = '吉' | '凶' | '吉凶參半' | '無結果';
 
 // 資料庫結構：物件格式
@@ -41,6 +41,7 @@ export const DivinationAdminPanel: React.FC = () => {
             Object.keys(rawDb).forEach(key => {
                 const item = rawDb[key];
                 if (typeof item === 'string') {
+                    // 舊資料預設為吉凶參半（綠色）
                     migratedDb[key] = { content: item, luck: '吉凶參半' };
                 } else {
                     migratedDb[key] = item;
@@ -115,13 +116,13 @@ export const DivinationAdminPanel: React.FC = () => {
         return { cat, zhi, gan };
     };
 
-    // [修改] 取得吉凶顏色 (新增無結果的灰色)
+    // [修改 1] 取得吉凶顏色小圓點 (依照新配色)
     const getLuckColor = (luck: LuckType) => {
         switch (luck) {
-            case '吉': return 'bg-rose-500';
-            case '凶': return 'bg-slate-700';
-            case '吉凶參半': return 'bg-amber-400';
-            case '無結果': return 'bg-gray-400'; // 灰色代表笑杯/無結果
+            case '吉': return 'bg-red-600';         // 亮紅
+            case '凶': return 'bg-gray-900';        // 黑
+            case '吉凶參半': return 'bg-emerald-500'; // 綠
+            case '無結果': return 'bg-gray-400';      // 灰
             default: return 'bg-gray-200';
         }
     };
@@ -259,31 +260,35 @@ export const DivinationAdminPanel: React.FC = () => {
                             <button onClick={() => setEditingKey(null)} className="p-2 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-800 transition-colors">✕</button>
                         </div>
 
-                        {/* 吉凶選擇器 (四顆按鈕) */}
+                        {/* 吉凶選擇器 (四顆按鈕) - [修改 2] 按鈕配色更新 */}
                         <div className="mb-4 shrink-0">
                             <label className="block text-sm font-bold text-gray-500 mb-2">占卜吉凶判定</label>
                             <div className="grid grid-cols-4 gap-2">
+                                {/* 吉：亮紅 */}
                                 <button 
                                     onClick={() => setTempLuck('吉')}
-                                    className={`py-3 rounded-xl border-2 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-bold transition-all text-xs sm:text-sm ${tempLuck === '吉' ? 'border-rose-500 bg-rose-50 text-rose-600 shadow-inner' : 'border-gray-200 text-gray-400 hover:border-rose-200'}`}
+                                    className={`py-3 rounded-xl border-2 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-bold transition-all text-xs sm:text-sm ${tempLuck === '吉' ? 'border-red-600 bg-red-50 text-red-700 shadow-inner' : 'border-gray-200 text-gray-400 hover:border-red-200'}`}
                                 >
                                     <Smile size={18} /> 吉
                                 </button>
+                                {/* 參半：綠 */}
                                 <button 
                                     onClick={() => setTempLuck('吉凶參半')}
-                                    className={`py-3 rounded-xl border-2 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-bold transition-all text-xs sm:text-sm ${tempLuck === '吉凶參半' ? 'border-amber-400 bg-amber-50 text-amber-600 shadow-inner' : 'border-gray-200 text-gray-400 hover:border-amber-200'}`}
+                                    className={`py-3 rounded-xl border-2 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-bold transition-all text-xs sm:text-sm ${tempLuck === '吉凶參半' ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-inner' : 'border-gray-200 text-gray-400 hover:border-emerald-200'}`}
                                 >
                                     <Meh size={18} /> 參半
                                 </button>
+                                {/* 凶：黑 */}
                                 <button 
                                     onClick={() => setTempLuck('凶')}
-                                    className={`py-3 rounded-xl border-2 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-bold transition-all text-xs sm:text-sm ${tempLuck === '凶' ? 'border-slate-600 bg-slate-100 text-slate-700 shadow-inner' : 'border-gray-200 text-gray-400 hover:border-slate-300'}`}
+                                    className={`py-3 rounded-xl border-2 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-bold transition-all text-xs sm:text-sm ${tempLuck === '凶' ? 'border-gray-900 bg-gray-100 text-gray-900 shadow-inner' : 'border-gray-200 text-gray-400 hover:border-gray-400'}`}
                                 >
                                     <Frown size={18} /> 凶
                                 </button>
+                                {/* 無結果：灰 */}
                                 <button 
                                     onClick={() => setTempLuck('無結果')}
-                                    className={`py-3 rounded-xl border-2 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-bold transition-all text-xs sm:text-sm ${tempLuck === '無結果' ? 'border-gray-400 bg-gray-100 text-gray-600 shadow-inner' : 'border-gray-200 text-gray-400 hover:border-gray-300'}`}
+                                    className={`py-3 rounded-xl border-2 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 font-bold transition-all text-xs sm:text-sm ${tempLuck === '無結果' ? 'border-gray-500 bg-gray-100 text-gray-700 shadow-inner' : 'border-gray-200 text-gray-400 hover:border-gray-300'}`}
                                 >
                                     <HelpCircle size={18} /> 無結果
                                 </button>
