@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, ArrowRight, Menu, LogOut, UserCog, Loader2, PlusCircle, Calendar, Clock, HelpCircle } from 'lucide-react';
+import { Sparkles, ArrowRight, Menu, LogOut, UserCog, Loader2, PlusCircle, Calendar, Clock, HelpCircle, Database } from 'lucide-react';
 import { supabase } from '../supabase';
 import { loadClients, saveClient, getMyProfile, getUsedChartCount, type Client, type UserProfile } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
@@ -436,6 +436,19 @@ export const Dashboard: React.FC = () => {
                                 className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-2 text-gray-700 font-medium"
                             >
                                 <UserCog size={16} /> 使用者管理
+                            </button>
+                        )}
+
+                        {/* [新增] 占卜文案矩陣入口 (僅限管理員或特定Email) */}
+                        {(userProfile?.role === 'admin' || userProfile?.email === SUPER_ADMIN_EMAIL) && (
+                            <button
+                                onClick={() => {
+                                    navigate('/admin');
+                                    setIsMenuOpen(false);
+                                }}
+                                className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-2 text-gray-700 font-medium"
+                            >
+                                <Database size={16} /> 占卜文案矩陣
                             </button>
                         )}
 
