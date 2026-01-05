@@ -74,8 +74,16 @@ const JellyBarChart = ({ data, baseScore, isShareMode }: { data: any, baseScore:
     const safeBase = isNaN(baseScore) ? 60 : baseScore;
 
     return (
-        // [修正] 分享模式高度從 400px 縮減為 320px，消除過多的垂直留白，讓畫面更緊湊
-        <div className={`w-full flex items-end justify-between relative ${isShareMode ? 'h-[320px] gap-3 px-2 mb-2 shrink-0' : 'flex-1 h-[320px] sm:h-[380px] gap-2 sm:gap-4'} py-2`}>
+        // [修正重點] 
+        // 1. 移除 flex-1: 避免在高度不足時被壓縮
+        // 2. 加入 shrink-0: 強制保留指定高度，不可縮小
+        // 3. 確保 h-[320px] 是硬性指標
+        <div className={`w-full flex items-end justify-between relative shrink-0 py-2
+            ${isShareMode 
+                ? 'h-[320px] gap-3 px-2 mb-2' 
+                : 'h-[320px] sm:h-[380px] gap-2 sm:gap-4'
+            }`}
+        >
             
             {['self', 'wealth', 'social', 'travel', 'love'].map((k, i) => {
                 const val = data.scores[k];
@@ -122,7 +130,7 @@ const JellyBarChart = ({ data, baseScore, isShareMode }: { data: any, baseScore:
                                     }}
                                 />
 
-                                {/* 3. 果凍柱 (分享模式：純靜態) */}
+                                {/* 3. 果凍柱 */}
                                 {isShareMode ? (
                                     <div 
                                         className="absolute left-0 w-full z-10"
@@ -229,7 +237,6 @@ export const FortuneWidget: React.FC<FortuneWidgetProps> = ({ userProfile, clien
         
         setTimeout(async () => {
             try {
-                // 背景色深炭色，質感黑卡
                 const blob = await toBlob(shareCardRef.current!, { pixelRatio: 3, backgroundColor: '#09090b' });
                 if (!blob) throw new Error('Image generation failed');
                 const url = URL.createObjectURL(blob);
@@ -268,23 +275,18 @@ export const FortuneWidget: React.FC<FortuneWidgetProps> = ({ userProfile, clien
                 className={`
                     relative font-sans overflow-hidden transition-all duration-500 ease-out
                     ${isGeneratingShare 
-                        // [黑卡質感 + 緊湊版型]
-                        // 縮減上下 padding (p-6)
                         ? 'w-[375px] h-auto p-6 rounded-2xl border border-amber-500/30 shadow-[0_20px_60px_-10px_rgba(0,0,0,0.8),inset_0_0_80px_rgba(0,0,0,0.9),0_0_20px_rgba(217,119,6,0.1)] bg-[#09090b]' 
-                        : 'w-full bg-[#0B1120] rounded-3xl p-4 sm:p-6 text-white shadow-xl border border-slate-800' 
+                        : 'w-full bg-[#0B1120] rounded-3xl p-4 text-white shadow-xl border border-slate-800' 
                     }
                 `}
             >
-                
                 <div className={`absolute top-[-20%] left-[-20%] w-[60%] h-[60%] bg-blue-900/20 rounded-full blur-[120px] mix-blend-screen pointer-events-none transition-opacity duration-500 ${isGeneratingShare ? 'opacity-40' : 'opacity-100'}`}></div>
                 <div className={`absolute bottom-[-20%] right-[-20%] w-[60%] h-[60%] bg-purple-900/20 rounded-full blur-[120px] mix-blend-screen pointer-events-none transition-opacity duration-500 ${isGeneratingShare ? 'opacity-40' : 'opacity-100'}`}></div>
                 <div className={`absolute inset-0 bg-[linear-gradient(rgba(255,255,255,${isGeneratingShare ? '0.02' : '0.05'})_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,${isGeneratingShare ? '0.02' : '0.05'})_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none`}></div>
 
                 <div className={`relative z-10 flex flex-col ${isGeneratingShare ? 'h-auto' : 'h-full'}`}>
                     
-                    {/* Header */}
                     {isGeneratingShare ? (
-                        // [修正] 大幅縮減 header 的上下間距 (mb-2, pt-2)
                         <div className="flex flex-col items-center justify-center mb-2 pt-2">
                             <div className="flex items-center gap-3 mb-1 opacity-80">
                                 <Sparkles className="text-amber-400" size={16} />
@@ -293,7 +295,6 @@ export const FortuneWidget: React.FC<FortuneWidgetProps> = ({ userProfile, clien
                                 </span>
                                 <Sparkles className="text-amber-400" size={16} />
                             </div>
-                            
                             <div className="flex flex-col items-center mt-1">
                                 <div className="flex items-center gap-3 text-amber-200/50 text-[10px] font-mono tracking-[0.2em] uppercase mb-1">
                                     <span>{dateStr}</span>
@@ -307,7 +308,7 @@ export const FortuneWidget: React.FC<FortuneWidgetProps> = ({ userProfile, clien
                             </div>
                         </div>
                     ) : (
-                        <div className="flex flex-row flex-nowrap justify-between items-center gap-2 sm:gap-4 mb-6">
+                        <div className="flex flex-row flex-nowrap justify-between items-center gap-2 sm:gap-4 mb-4">
                             <div className="flex bg-slate-900/80 p-1 rounded-lg border border-slate-700/50 backdrop-blur-sm shadow-lg shrink-0 flex-1 sm:flex-none">
                                 <button onClick={() => setMode('daily')} className={`flex items-center justify-center gap-1 sm:gap-2 px-3 py-2 rounded-md transition-all font-bold text-xs sm:text-sm flex-1 sm:flex-auto ${mode === 'daily' ? 'bg-cyan-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
                                     <Sun size={16} className={`sm:w-4 sm:h-4 ${mode === 'daily' ? 'animate-spin-slow' : ''}`} /> <span className="whitespace-nowrap">今日</span>
@@ -348,30 +349,23 @@ export const FortuneWidget: React.FC<FortuneWidgetProps> = ({ userProfile, clien
                         </div>
                     )}
 
-                    {/* Content */}
-                    <div className={`relative flex-1 w-full flex ${isGeneratingShare ? 'flex-col' : 'flex-col lg:flex-row'} items-stretch z-10 gap-6`}>
+                    <div className={`relative flex-1 w-full flex ${isGeneratingShare ? 'flex-col' : 'flex-col lg:flex-row'} items-stretch z-10 ${isGeneratingShare ? 'gap-2' : 'gap-3 lg:gap-6'}`}>
                         <div className={`flex flex-col items-center justify-center ${mode === 'weekly' ? 'w-full' : 'flex-1'}`}>
                              {mode === 'daily' ? (
-                                <div className={`w-full max-w-3xl flex flex-col ${isGeneratingShare ? 'h-auto' : 'h-full'}`}>
+                                <div className={`w-full max-w-3xl flex flex-col ${isGeneratingShare ? 'h-auto' : 'w-full'}`}>
                                     <JellyBarChart data={currentData} baseScore={baseScore} isShareMode={isGeneratingShare} />
                                     
-                                    {/* Footer */}
                                     {isGeneratingShare && (
-                                        // [修正] 縮減 footer 的上間距 (mt-2)，讓整體更凝聚
                                         <div className="mt-2 flex flex-col items-center gap-2">
-                                            
-                                            {/* 本命基數 */}
                                             <div className="flex flex-col items-center">
                                                 <span className="text-[9px] text-amber-200/40 uppercase tracking-[0.2em] mb-1">Base Energy</span>
                                                 <div className="flex items-center justify-center gap-2 bg-gradient-to-b from-amber-900/30 to-transparent px-6 py-1 rounded-full border border-amber-500/20 shadow-[inset_0_0_10px_rgba(251,191,36,0.1)]">
                                                     <span className="text-xl font-mono font-bold text-transparent bg-clip-text bg-gradient-to-b from-amber-100 to-amber-400">{baseScore}</span>
                                                 </div>
                                             </div>
-
                                             <div className="w-3/4 flex items-center gap-2 opacity-30 mt-1">
                                                 <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent via-amber-500/50 to-transparent"></div>
                                             </div>
-                                            
                                             <div className="mt-1 flex items-center gap-1 text-[9px] text-amber-200/30 font-mono tracking-[0.3em] uppercase">
                                                 <Sparkles size={8} className="text-amber-500/40" />
                                                 <span>{WEBSITE_URL}</span>
@@ -389,7 +383,6 @@ export const FortuneWidget: React.FC<FortuneWidgetProps> = ({ userProfile, clien
                              )}
                         </div>
 
-                        {/* Advice Panel */}
                         {mode === 'daily' && !isGeneratingShare && (
                              <div className="w-full lg:w-[340px] shrink-0 animate-in slide-in-from-right-4 duration-500 delay-150">
                                   <AdvicePanel fortune={dailyFortune} userProfile={userProfile} onConsultClick={handleConsultTrigger} />
@@ -399,11 +392,9 @@ export const FortuneWidget: React.FC<FortuneWidgetProps> = ({ userProfile, clien
                 </div>
             </div>
 
-            {/* Modals... */}
             <SharePreviewModal isOpen={!!shareImageUrl} onClose={() => { setShareImageUrl(null); setShareBlob(null); }} imageUrl={shareImageUrl} onDownload={handleDownloadImage} onSystemShare={handleSystemShare} />
             {showDebug && isSuperAdmin && (
                 <div className="relative mt-4 z-50 bg-[#020617]/95 border border-green-500/30 backdrop-blur-md rounded-xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-4 w-full max-w-4xl">
-                    {/* Debug 內容略，保持不變 */}
                     <div className="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-700">
                         <div className="flex items-center gap-2 text-green-400"><Terminal size={14} /><span className="text-xs font-mono font-bold">DEV_CONSOLE</span></div>
                         <button onClick={() => setShowDebug(false)} className="text-slate-400 hover:text-white"><X size={14} /></button>
@@ -431,7 +422,6 @@ export const FortuneWidget: React.FC<FortuneWidgetProps> = ({ userProfile, clien
     );
 };
 
-// ... (SharePreviewModal 與 AdvicePanel 保持不變)
 interface SharePreviewModalProps { isOpen: boolean; onClose: () => void; imageUrl: string | null; onDownload: () => void; onSystemShare: () => void; }
 const SharePreviewModal: React.FC<SharePreviewModalProps> = ({ isOpen, onClose, imageUrl, onDownload, onSystemShare }) => {
     if (!isOpen || !imageUrl) return null;
