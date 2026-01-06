@@ -473,7 +473,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
             selectedPalace={selectedPalace}
             flyingPalace={flyingPalace}
             daXianSeq={daXianSeq}
-            liuNianYear={liuNianYear}
             showXiaoXian={showXiaoXian}
             isReverse={isReverse}
             isTwinMode={isTwinMode}
