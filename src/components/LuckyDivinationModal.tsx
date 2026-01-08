@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
-import { X, Heart, Briefcase, Wallet, Activity, Users, Sparkles, Share2, AlertCircle, Loader2, Zap } from 'lucide-react';
+import { X, Heart, Briefcase, Wallet, Activity, Users, Sparkles, Share2, AlertCircle, Loader2, Zap, MessageCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toBlob } from 'html-to-image';
 import { getDivinationResult } from '../db';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { Environment, ContactShadows, Float, PerspectiveCamera, useGLTF, Center, useProgress, Html } from '@react-three/drei';
+import { Environment, ContactShadows, Float, PerspectiveCamera, useGLTF, Center, useProgress, Html, OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 
 // --- [設定區] 字體與全域樣式 ---
@@ -80,22 +80,19 @@ const CATEGORIES: { id: Category; icon: any; color: string; desc: string }[] = [
     { id: '交友', icon: Users, color: 'text-purple-400', desc: '人際、貴人、小人' },
 ];
 
-// 關鍵字對應表 (25-40歲女性受眾取向)
-const KEYWORDS: Record<Category, { good: string[], bad: string[], normal: string[] }> = {
-    '感情': { good: ['良緣', '花開', '相惜', '破繭'], bad: ['修心', '隨緣', '沉澱', '慎行'], normal: ['靜候', '觀照', '曖昧', '釐清'] },
-    '工作': { good: ['大展', '飛躍', '貴人', '突破'], bad: ['蓄勢', '潛沈', '重整', '避險'], normal: ['守成', '穩健', '磨練', '觀望'] },
-    '理財': { good: ['豐收', '進祿', '聚寶', '盈滿'], bad: ['節流', '止損', '保守', '警惕'], normal: ['佈局', '平衡', '積累', '審視'] },
-    '健康': { good: ['安康', '回春', '充盈', '活力'], bad: ['調養', '休息', '寬心', '慢活'], normal: ['平穩', '規律', '淨化', '養生'] },
-    '交友': { good: ['知音', '結緣', '融洽', '助力'], bad: ['識人', '慎獨', '清理', '邊界'], normal: ['和氣', '互動', '觀察', '隨和'] },
+const LINE_OA_URL = "https://line.me/R/ti/p/@653jrxjt?oat_content=url&ts=03241123";
+
+// [修改] 定義新的單詞對應表
+const LUCK_PHRASES: Record<string, string> = {
+    '吉': '順運',
+    '平': '靜待',
+    '吉凶參半': '靜待', // 相容 DB 可能的儲存值
+    '凶': '沉潛',
+    '無結果': '待觀'
 };
 
-const getKeyword = (cat: Category, luck: string): string => {
-    const target = KEYWORDS[cat];
-    let pool = target.normal;
-    if (luck === '吉') pool = target.good;
-    if (luck === '凶') pool = target.bad;
-    // 隨機取出一個
-    return pool[Math.floor(Math.random() * pool.length)];
+const getKeyword = (luck: string): string => {
+    return LUCK_PHRASES[luck] || '靜待';
 };
 
 // 獲取今日文青日期
@@ -223,12 +220,16 @@ const SacredJiaoScene3D = ({ luck }: { luck: string }) => {
                 className="w-full h-full z-20"
                 gl={{ preserveDrawingBuffer: true }} 
             >
-                <PerspectiveCamera makeDefault position={[0.5, 3, 4]} fov={35} /> 
+                {/* 固定視角：對應您的截圖 */}
+                <PerspectiveCamera makeDefault position={[0, 1.5, 6]} fov={35} /> 
+                
                 <ambientLight intensity={0.5} color="#ffdad4" />
                 <directionalLight position={[-2, 5, 2]} intensity={2} castShadow color="#fff0e0" />
                 <spotLight position={[5, 8, 5]} angle={0.5} penumbra={1} intensity={3} color="#fff0e0" castShadow />
                 <pointLight position={[-5, -5, 5]} intensity={0.5} color="#d32f2f" />
+                
                 <CameraRig />
+
                 <Suspense fallback={<Loader />}>
                     <Environment preset="sunset" blur={0.8} background={false} />
                     <group position={[0, 0, 0]}>
@@ -254,16 +255,11 @@ function CameraRig() {
     return null;
 }
 
-// [再次修正] 儀式感印章組件 - 直接控制圖片標籤，確保絕對是正方形
 const Seal = () => (
     <img
-        // 請確保 public 資料夾裡的這張圖本身是正方形的，效果最好
         src="/image_1bd31c.png"
         alt="大寶印章"
-        // w-8 h-8: 強制設定寬高為 32px
-        // object-cover: 關鍵屬性，讓圖片等比例填滿方框，多餘部分裁切，絕不變形
-        // flex-shrink-0: 防止被其他元素擠壓
-        className="w-8 h-8 rounded-md shadow-[0_2px_10px_rgba(185,28,28,0.4)] border border-red-900/20 object-cover flex-shrink-0 block"
+        className="h-10 w-auto rounded-md shadow-[0_2px_10px_rgba(185,28,28,0.4)] border border-red-900/20 object-contain flex-shrink-0 block"
     />
 );
 
@@ -329,11 +325,11 @@ export const LuckyDivinationModal: React.FC<Props> = ({ isOpen, onClose }) => {
                     if (data) { 
                         setFinalContent(data.content); 
                         setFinalLuck(data.luck); 
-                        setFinalKeyword(getKeyword(selectedCat, data.luck));
+                        setFinalKeyword(getKeyword(data.luck)); // [修改] 使用新的 mapping
                     } else { 
                         setFinalContent("星象混沌，天機未顯。此時心緒尚不穩，建議靜待時機，改日誠心再占。"); 
                         setFinalLuck('無結果'); 
-                        setFinalKeyword('混沌');
+                        setFinalKeyword(getKeyword('無結果'));
                     } 
                 } catch (e) { 
                     console.error("Fetch Error:", e); 
@@ -457,19 +453,36 @@ export const LuckyDivinationModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
                             <div className="w-full px-6 py-5 z-10 flex items-end justify-between mt-auto">
                                 <div className="text-[10px] text-slate-600 font-serif-tc tracking-widest">zeweiapp.dabao.life</div>
-                                {/* 使用修改後的圖片印章 */}
                                 <Seal />
                             </div>
                         </div>
 
+                        {/* 底部操作區 - [修改] 調整按鈕與文案 */}
                         <div className="flex-1 w-full max-w-sm mx-auto flex flex-col justify-end pb-safe px-4 gap-3 mt-4">
-                            <div className="flex gap-3 w-full">
-                                <button onClick={handleShare} disabled={isGeneratingImg} className="flex-1 py-3 bg-gradient-to-r from-purple-700 to-indigo-700 text-white rounded-full font-bold shadow-lg shadow-purple-900/30 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 font-serif-tc tracking-widest border border-white/10">{isGeneratingImg ? <Loader2 className="animate-spin" size={18}/> : <Share2 size={18} />} 結緣分享</button>
-                                <button onClick={reset} className="w-14 h-full bg-white/10 text-slate-300 rounded-full hover:bg-white/20 flex items-center justify-center border border-white/10"><X size={20} /></button>
+                            <div className="flex gap-2 w-full">
+                                {/* 分享按鈕 */}
+                                <button onClick={handleShare} disabled={isGeneratingImg} className="flex-1 py-3 bg-gradient-to-r from-purple-700 to-indigo-700 text-white rounded-full font-bold shadow-lg shadow-purple-900/30 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 font-serif-tc tracking-widest border border-white/10 text-sm">
+                                    {isGeneratingImg ? <Loader2 className="animate-spin" size={16}/> : <Share2 size={16} />} 分享
+                                </button>
+                                
+                                {/* [新增] 預約按鈕 */}
+                                <button onClick={() => window.open(LINE_OA_URL, '_blank')} className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-full font-bold shadow-lg shadow-emerald-900/30 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 font-serif-tc tracking-widest border border-white/10 text-sm">
+                                    <MessageCircle size={16} /> 預約
+                                </button>
+
+                                {/* 關閉按鈕 - 改為文字按鈕 */}
+                                <button onClick={reset} className="flex-1 py-3 bg-white/10 text-slate-300 rounded-full hover:bg-white/20 transition-all flex items-center justify-center gap-2 font-serif-tc tracking-widest border border-white/10 text-sm">
+                                    關閉
+                                </button>
                             </div>
-                            <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-500 mb-2">
-                                <AlertCircle size={10} />
-                                <span>結果僅供參考，詳批請洽大寶老師</span>
+                            
+                            {/* [修改] 免責聲明 */}
+                            <div className="flex flex-col items-center justify-center gap-1 text-[10px] text-slate-500 mb-2 text-center">
+                                <div className="flex items-center gap-1.5">
+                                    <AlertCircle size={10} />
+                                    <span>結果供一時參考，一週內一事不二問</span>
+                                </div>
+                                <span className="opacity-70">詳盡運勢分析歡迎預約</span>
                             </div>
                         </div>
                     </div>
