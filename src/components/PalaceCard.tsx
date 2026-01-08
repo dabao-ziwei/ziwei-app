@@ -24,9 +24,6 @@ interface PalaceCardProps {
   isTwinMode?: boolean; 
   isReverse?: boolean;
   
-  reverseDaName?: string;
-  reverseLiuName?: string;
-  
   divinationName?: string;
 
   externalSiHua?: Record<string, '祿' | '權' | '科' | '忌'>;
@@ -34,13 +31,19 @@ interface PalaceCardProps {
 }
 
 // 輔助函式：取得顛倒宮位名稱
+// 例如輸入 "大命"，回傳 "大遷"
 const getReversedName = (name: string): string | null => {
     if (!name) return null;
+    // 取最後一個字 (如 "命")
     const lastChar = name.slice(-1);
+    // 查表找全名 (如 "命" -> "命宮")
     const fullKey = Object.keys(PALACE_REVERSE_MAP).find(k => k.includes(lastChar));
     if (!fullKey) return null;
+    // 查表找對宮全名 (如 "命宮" -> "遷移")
     const reversedFull = PALACE_REVERSE_MAP[fullKey];
+    // 取對宮簡稱 (如 "遷")
     const reversedSuffix = reversedFull.substring(0, 1);
+    // 拼回原本的前綴 (如 "大" + "遷")
     const prefix = name.substring(0, name.length - 1);
     return `${prefix}${reversedSuffix}`;
 };
@@ -62,14 +65,19 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   flyingStars,
   isTwinMode,
   isReverse,
-  reverseDaName, 
-  reverseLiuName,
   divinationName, 
   externalSiHua,
   divinationSiHua
 }) => {
   const palaceGanZhi = `${GAN[palace.ganIndex]}${ZHI[palace.zhiIndex]}`;
   const isBenMing = !daName && !liuName && !xiaoName;
+
+  // --- 判斷當前最高層級 (Active Layer) ---
+  // 用於決定 "顛倒盤" 功能該作用在哪一層，而不影響其他層
+  let activeLayer: 'ben' | 'da' | 'liu' = 'ben';
+  if (liuName) activeLayer = 'liu';
+  else if (daName) activeLayer = 'da';
+  else activeLayer = 'ben';
 
   let hasExternalLu = false;
   let hasExternalJi = false;
@@ -85,13 +93,10 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   // 視覺分流：邊框圖層 (Border Layer)
   let siHuaBorderClass = '';
   if (hasExternalJi) {
-      siHuaBorderClass = 'ring-inset ring-2 ring-gray-600'; // 深灰色內縮框
+      siHuaBorderClass = 'ring-inset ring-2 ring-gray-600'; 
   } else if (hasExternalLu) {
-      siHuaBorderClass = 'ring-inset ring-2 ring-red-400'; // 紅色內縮框
+      siHuaBorderClass = 'ring-inset ring-2 ring-red-400'; 
   }
-
-  // [修正] 徹底移除 xiaoXianClass，避免未選中時出現綠色光暈
-  // const xiaoXianClass = isXiaoXianMingPalace ? 'shadow-[inset...]' : ''; // 已刪除
 
   const allStarsInPalace = [
     ...palace.majorStars,
@@ -100,6 +105,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
     ...palace.limitStars,
   ];
 
+  // 基礎宮位名稱 (本命或占卜)
   let baseName = palace.name;
   if (divinationName) {
       baseName = divinationName;
@@ -107,8 +113,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
       baseName = PALACE_REVERSE_MAP[palace.name];
   }
 
-  const displayReverseBaseName = isReverse ? PALACE_REVERSE_MAP[baseName] : null;
-
+  // 渲染外部飛化 Chips
   const renderExternalChips = () => {
     if (!externalSiHua) return null;
     const chips: React.ReactNode[] = [];
@@ -135,6 +140,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
     return <div className="absolute top-0.5 right-0.5 flex flex-col gap-0.5 items-end z-30 pointer-events-none">{chips}</div>;
   };
 
+  // 渲染互動飛化 Chips
   const renderInteractiveFlyingStars = () => {
     if (!flyingStars) return null;
     const chips: React.ReactNode[] = [];
@@ -166,9 +172,28 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
     );
   };
 
+  // 通用標籤渲染函式 (含顛倒盤邏輯)
+  const renderLabel = (name: string, colorClass: string, targetLayer: 'ben' | 'da' | 'liu') => {
+      // 邏輯核心：只有當 "開啟顛倒盤" 且 "目標層級等於當前最高層級" 時，才顯示顛倒名稱
+      const shouldReverse = isReverse && activeLayer === targetLayer;
+      const reversedName = shouldReverse ? getReversedName(name) : null;
+
+      return (
+        <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right pr-0.5">
+            {reversedName && (
+                <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none mb-[1px]">
+                    {reversedName}
+                </span>
+            )}
+            <span className={`text-[13px] font-bold ${colorClass} whitespace-nowrap leading-none mb-[1px]`}>
+                {name}
+            </span>
+        </div>
+      );
+  };
+
   return (
     <div
-      // [修正] 移除 xiaoXianClass
       className={`w-full h-full flex flex-col p-0.5 box-border relative overflow-visible ${siHuaBorderClass} transition-colors duration-300`}
     >
       {renderExternalChips()}
@@ -238,38 +263,45 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
         onClick={(e) => { e.stopPropagation(); onTriggerClick && onTriggerClick(); }}
         title="點擊查看此宮位之飛化 (四化)"
       >
+        {/* 宮位名稱堆疊區 (Stacking) 
+            使用 flex-col-reverse，第一個 child 在最下面
+            順序：本命(底) -> 大限 -> 流年 -> 流月 -> 流日 -> 小限(頂)
+        */}
         <div className="flex flex-col-reverse items-end leading-tight pointer-events-none">
-          <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right pr-0.5">
-              {displayReverseBaseName && <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none">{displayReverseBaseName}</span>}
-              <span className="text-[13px] font-bold text-red-600 whitespace-nowrap leading-none">{baseName}</span>
-          </div>
           
-          {daName && (
-              <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right pr-0.5">
-                  {isReverse && <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none mb-[1px]">{getReversedName(daName)}</span>}
-                  <span className="text-[13px] font-bold text-gray-500 whitespace-nowrap leading-none mb-[1px]">{daName}</span>
-              </div>
-          )}
+          {/* 1. 本命 (最底層) */}
+          {renderLabel(baseName, 'text-red-600', 'ben')}
           
-          {liuName && (
-              <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right pr-0.5">
-                  {isReverse && <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none mb-[1px]">{getReversedName(liuName)}</span>}
-                  <span className="text-[13px] font-bold text-blue-600 whitespace-nowrap leading-none mb-[1px]">{liuName}</span>
-              </div>
-          )}
+          {/* 2. 大限 */}
+          {daName && renderLabel(daName, 'text-gray-500', 'da')}
           
-          {xiaoName && (
-              <span className="text-[13px] font-bold text-green-600 whitespace-nowrap leading-none mb-[1px] pr-0.5">{xiaoName}</span>
-          )}
+          {/* 3. 流年 */}
+          {liuName && renderLabel(liuName, 'text-blue-600', 'liu')}
           
+          {/* 4. 流月 (無顛倒功能) */}
           {yueName && (
-              <span className="text-[13px] font-bold text-amber-600 whitespace-nowrap leading-none mb-[1px] bg-white/80 px-0.5 rounded shadow-sm border border-amber-100">{yueName}</span>
+              <span className="text-[13px] font-bold text-amber-600 whitespace-nowrap leading-none mb-[1px] bg-white/80 px-0.5 rounded shadow-sm border border-amber-100">
+                  {yueName}
+              </span>
           )}
+
+          {/* 5. 流日 (無顛倒功能) */}
           {riName && (
-              <span className="text-[13px] font-bold text-green-700 whitespace-nowrap leading-none mb-[1px] bg-white/80 px-0.5 rounded shadow-sm border border-green-100">{riName}</span>
+              <span className="text-[13px] font-bold text-green-700 whitespace-nowrap leading-none mb-[1px] bg-white/80 px-0.5 rounded shadow-sm border border-green-100">
+                  {riName}
+              </span>
+          )}
+
+          {/* 6. 小限 (最頂層，無顛倒功能) */}
+          {xiaoName && (
+              <span className="text-[13px] font-bold text-green-600 whitespace-nowrap leading-none mb-[1px] pr-0.5">
+                  {xiaoName}
+              </span>
           )}
         
         </div>
+        
+        {/* 天干地支 (顯示在最右下角) */}
         <div className="flex flex-col leading-none text-[15px] font-bold text-black mb-[2px] ml-1 pointer-events-none">
           <span className="group-hover:text-purple-600 transition-colors">{palaceGanZhi[0]}</span>
           <span>{palaceGanZhi[1]}</span>
