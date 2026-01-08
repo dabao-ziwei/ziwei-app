@@ -5,7 +5,7 @@ import { ZiWeiEngine } from '../logic/engine';
 import { calculateDailyFortune } from '../logic/fortune';
 import { 
     Loader2, HelpCircle, Moon, Sun, Sparkles, Activity, Share2, Download, Smartphone, X, 
-    MessageCircle, Lock, ChevronRight, Bug, Terminal, Users, Star, Quote
+    MessageCircle, Lock, ChevronRight, Bug, Terminal, Users, Info, Calendar
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
@@ -121,7 +121,6 @@ const JellyBarChart = ({ data, baseScore, isShareMode, containerRef }: { data: a
                 return (
                     <div key={config.key} className={`flex flex-col items-center h-full w-full relative group gap-1`}>
                         
-                        {/* 上方資訊區 */}
                         <div className="flex flex-col items-center justify-end z-20 shrink-0 mb-1">
                             <span className={`font-bold mb-1 tracking-wider opacity-90 ${isShareMode ? 'text-xs text-amber-100/80 font-serif' : 'text-xs text-slate-300'}`}>
                                 {config.label}
@@ -131,7 +130,6 @@ const JellyBarChart = ({ data, baseScore, isShareMode, containerRef }: { data: a
                             </div>
                         </div>
 
-                        {/* 下方軌道區 */}
                         <div className={`flex-1 w-full relative rounded-full overflow-visible`}>
                             {i === 4 && (
                                 <div className="absolute left-full top-[50%] -translate-y-1/2 ml-1 flex flex-col items-start leading-none z-50 opacity-60">
@@ -257,7 +255,107 @@ const MobileAdviceList = ({ fortune, userProfile, onConsultClick }: any) => {
 };
 
 // ----------------------------------------------------------------------
-// [電腦版] 心智圖佈局 (Hub & Spoke Layout) - [拉開垂直間距]
+// [電腦版] Header (標題 + 切換器 + 功能鈕)
+// ----------------------------------------------------------------------
+const WidgetHeader = ({ 
+    mode, 
+    setMode, 
+    dateStr, 
+    lunarDateStr, 
+    onShare,
+    showDebug,
+    toggleDebug,
+    isSuperAdmin
+}: any) => {
+    return (
+        // [修正] 使用 max-w-[640px] 強制縮減寬度，讓左右元件向中間靠攏
+        <div className="w-full max-w-[640px] mx-auto flex items-center justify-between mb-2 relative z-50">
+            {/* 左側：標題資訊 */}
+            <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                    <Calendar size={18} className="text-blue-500" />
+                    <h2 className="text-xl font-bold text-slate-800 tracking-wider">
+                        {mode === 'daily' ? '今日運勢' : '一週運勢'}
+                    </h2>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5 ml-0.5">
+                    <span className="font-mono">{dateStr}</span>
+                    <span>|</span>
+                    <span>{lunarDateStr}</span>
+                </div>
+            </div>
+
+            {/* 中間：視圖切換器 (絕對置中) */}
+            <div className="absolute left-1/2 -translate-x-1/2 bg-slate-100 p-1 rounded-full border border-slate-200 flex gap-1 shadow-inner">
+                <button
+                    onClick={() => setMode('daily')}
+                    className={`relative px-6 py-1.5 rounded-full text-sm font-bold transition-colors ${mode === 'daily' ? 'text-white' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                    {mode === 'daily' && (
+                        <motion.div
+                            layoutId="mode-pill"
+                            className="absolute inset-0 bg-blue-600 rounded-full shadow-md"
+                            transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                        />
+                    )}
+                    <span className="relative z-10">今日</span>
+                </button>
+                <button
+                    onClick={() => setMode('weekly')}
+                    className={`relative px-6 py-1.5 rounded-full text-sm font-bold transition-colors ${mode === 'weekly' ? 'text-white' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                    {mode === 'weekly' && (
+                        <motion.div
+                            layoutId="mode-pill"
+                            className="absolute inset-0 bg-purple-600 rounded-full shadow-md"
+                            transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                        />
+                    )}
+                    <span className="relative z-10">一週</span>
+                </button>
+            </div>
+
+            {/* 右側：功能按鈕 */}
+            <div className="flex items-center gap-2">
+                
+                {/* 說明按鈕 (Tooltip) */}
+                <div className="relative group">
+                    <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                        <HelpCircle size={20} />
+                    </button>
+                    {/* Popover Content */}
+                    <div className="absolute right-0 top-full mt-2 w-64 p-4 bg-slate-900 text-slate-300 text-xs leading-relaxed rounded-xl shadow-xl border border-slate-700 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity z-[60]">
+                        <div className="font-bold text-amber-400 mb-2 flex items-center gap-2">
+                            <Info size={14} /> 關於運勢評分
+                        </div>
+                        <p className="mb-2">BASE分數是您先天的運勢指標，高於指標代表鴻運當頭，低於指標建議低調沉潛；</p>
+                        <p>運勢僅代表一時好壞，努力仍能扭轉頹勢。</p>
+                    </div>
+                </div>
+
+                <button 
+                    onClick={onShare}
+                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    title="分享"
+                >
+                    <Share2 size={20} />
+                </button>
+
+                {isSuperAdmin && (
+                    <button 
+                        onClick={toggleDebug} 
+                        className={`p-2 rounded-lg border transition-colors ${showDebug ? 'bg-green-100 text-green-700 border-green-300' : 'text-slate-400 hover:text-slate-600 border-transparent hover:bg-slate-100'}`}
+                    >
+                        <Bug size={20} />
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// ----------------------------------------------------------------------
+// [電腦版] 心智圖佈局 (Hub & Spoke Layout)
 // ----------------------------------------------------------------------
 const MindMapLayout = ({ 
     fortune, 
@@ -266,9 +364,11 @@ const MindMapLayout = ({
     baseScore, 
 }: any) => {
     
+    // 透過 Ref 抓取 DOM 位置以繪製線條
     const containerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<HTMLDivElement>(null);
     const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+    
     const [lines, setLines] = useState<{ d: string, color: string }[]>([]);
 
     const isVip = useMemo(() => {
@@ -278,11 +378,13 @@ const MindMapLayout = ({
         return false;
     }, [userProfile]);
 
+    // [修正] 計算線條邏輯 - 純直線，調整終點至卡片側邊
     const calculateLines = () => {
         if (!containerRef.current || !chartRef.current) return;
         
         const containerRect = containerRef.current.getBoundingClientRect();
         const chartRect = chartRef.current.getBoundingClientRect();
+        
         const newLines: { d: string, color: string }[] = [];
 
         CATEGORY_CONFIG.forEach((config, index) => {
@@ -299,41 +401,58 @@ const MindMapLayout = ({
 
             // 1. 工作 (Self) - Index 0
             if (index === 0) {
+                // 起點：圖表最左側
                 startX = chartRect.left - containerRect.left;
                 startY = (chartRect.top - containerRect.top) + (chartRect.height / 2);
+                
+                // 終點：卡片最右側
                 endX = cardRect.right - containerRect.left;
                 endY = (cardRect.top - containerRect.top) + (cardRect.height / 2);
             }
-            // 2. 理財 (Wealth) - Index 1
+            // 2. 理財 (Wealth) - Index 1 [修正：連到卡片右側]
             else if (index === 1) {
+                // 起點：對應柱子的底部中心
                 startX = (chartRect.left - containerRect.left) + barCenterX;
                 startY = chartRect.bottom - containerRect.top - 2;
+
+                // 終點：卡片的右側邊緣
                 endX = cardRect.right - containerRect.left;
                 endY = (cardRect.top - containerRect.top) + (cardRect.height / 2);
             }
             // 3. 交友 (Social) - Index 2
             else if (index === 2) {
+                // 起點：對應柱子的底部中心
                 startX = (chartRect.left - containerRect.left) + barCenterX;
                 startY = chartRect.bottom - containerRect.top - 2;
+
+                // 終點：卡片的頂部中心 (維持不變)
                 endX = (cardRect.left - containerRect.left) + (cardRect.width / 2);
                 endY = cardRect.top - containerRect.top;
             }
-            // 4. 外出 (Travel) - Index 3
+            // 4. 外出 (Travel) - Index 3 [修正：連到卡片左側]
             else if (index === 3) {
+                // 起點：對應柱子的底部中心
                 startX = (chartRect.left - containerRect.left) + barCenterX;
                 startY = chartRect.bottom - containerRect.top - 2;
+
+                // 終點：卡片的左側邊緣
                 endX = cardRect.left - containerRect.left;
                 endY = (cardRect.top - containerRect.top) + (cardRect.height / 2);
             }
             // 5. 感情 (Love) - Index 4
             else {
+                // 起點：圖表最右側
                 startX = chartRect.right - containerRect.left;
                 startY = (chartRect.top - containerRect.top) + (chartRect.height / 2);
+                
+                // 終點：卡片最左側
                 endX = cardRect.left - containerRect.left;
                 endY = (cardRect.top - containerRect.top) + (cardRect.height / 2);
             }
 
+            // 直接連線 (Line)
             const d = `M ${startX} ${startY} L ${endX} ${endY}`;
+            
             newLines.push({ d, color: config.barColor.main });
         });
 
@@ -351,9 +470,9 @@ const MindMapLayout = ({
     }, [currentData]);
 
     return (
-        // 增加 min-h 到 600px 確保容器夠高，讓 flex-col 有空間拉開距離
-        <div ref={containerRef} className="relative w-full max-w-7xl mx-auto flex flex-col items-center justify-center py-4 min-h-[600px]">
+        <div ref={containerRef} className="relative w-full max-w-7xl mx-auto flex flex-col items-center justify-center py-4 min-h-[500px]">
             
+            {/* SVG 連線層 */}
             <svg className="absolute inset-0 w-full h-full pointer-events-none z-0 overflow-visible">
                 {lines.map((line, i) => (
                     <g key={i}>
@@ -368,11 +487,11 @@ const MindMapLayout = ({
                 ))}
             </svg>
 
-            {/* [修正] gap-y-6 -> gap-y-28 拉開垂直距離 */}
-            <div className="grid grid-cols-[1fr_500px_1fr] gap-x-12 gap-y-28 w-full relative z-10 items-center">
+            {/* 核心佈局 Grid */}
+            <div className="grid grid-cols-[1fr_500px_1fr] gap-x-12 gap-y-6 w-full relative z-10 items-center">
                 
-                {/* 1. 左側欄位 - 移除 mt-12 */}
-                <div className="flex flex-col gap-28 items-end">
+                {/* 1. 左側欄位 (工作、理財) */}
+                <div className="flex flex-col gap-6 items-end mt-12">
                     <AdviceCard 
                         catKey="self" 
                         score={currentData.scores.self} 
@@ -389,8 +508,8 @@ const MindMapLayout = ({
                     />
                 </div>
 
-                {/* 2. 中間欄位 - 增加高度 */}
-                <div className="flex flex-col items-center h-full pt-4 min-h-[500px]">
+                {/* 2. 中間欄位 */}
+                <div className="flex flex-col items-center h-full pt-4">
                     <div className="w-full mb-12 scale-110 transform origin-top"> 
                         <JellyBarChart 
                             containerRef={chartRef}
@@ -399,7 +518,6 @@ const MindMapLayout = ({
                             isShareMode={false} 
                         />
                     </div>
-                    {/* mt-auto 會自動把這個卡片推到底部，配合 min-h-[500px] 達成拉開效果 */}
                     <div className="w-full max-w-sm mt-auto">
                         <AdviceCard 
                             catKey="social" 
@@ -411,8 +529,8 @@ const MindMapLayout = ({
                     </div>
                 </div>
 
-                {/* 3. 右側欄位 - 移除 mt-12 */}
-                <div className="flex flex-col gap-28 items-start">
+                {/* 3. 右側欄位 (感情、外出) */}
+                <div className="flex flex-col gap-6 items-start mt-12">
                     <AdviceCard 
                         catKey="love" 
                         score={currentData.scores.love} 
@@ -523,35 +641,66 @@ export const FortuneWidget: React.FC<FortuneWidgetProps> = ({ userProfile, clien
         <div className="w-full relative flex flex-col items-center">
             <CustomScrollbarStyles />
             
-            {/* --- 電腦版：心智圖佈局 (md:block) --- */}
+            {/* --- 電腦版：標題 + 內容切換 (md:block) --- */}
             <div className="hidden md:block w-full">
-                {mode === 'daily' ? (
-                     <MindMapLayout 
-                        fortune={dailyFortune}
-                        userProfile={userProfile}
-                        currentData={currentData}
-                        baseScore={baseScore}
-                     />
-                ) : (
-                    <div className="w-full h-[400px] max-w-5xl mx-auto bg-slate-900/50 rounded-2xl border border-slate-700/50 p-6 shadow-xl backdrop-blur-md">
-                        <div className="flex justify-end mb-4">
-                            <button onClick={() => setMode('daily')} className="px-4 py-2 bg-slate-800 text-slate-400 hover:text-white rounded-lg text-sm font-bold transition-colors">返回今日</button>
-                        </div>
-                        <FocusTrendChart data={weeklyDetailedData} />
-                    </div>
-                )}
+                
+                <WidgetHeader 
+                    mode={mode} 
+                    setMode={setMode} 
+                    dateStr={dateStr}
+                    lunarDateStr={dailyFortune.devInfo.lunarDateStr}
+                    onShare={handleShareClick}
+                    showDebug={showDebug}
+                    toggleDebug={() => setShowDebug(!showDebug)}
+                    isSuperAdmin={isSuperAdmin}
+                />
+
+                <div className="relative min-h-[500px]">
+                    <AnimatePresence mode="wait">
+                        {mode === 'daily' ? (
+                            <motion.div
+                                key="daily"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                transition={{ duration: 0.3 }}
+                            >
+                                <MindMapLayout 
+                                    fortune={dailyFortune}
+                                    userProfile={userProfile}
+                                    currentData={currentData}
+                                    baseScore={baseScore}
+                                />
+                            </motion.div>
+                        ) : (
+                            <motion.div
+                                key="weekly"
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                transition={{ duration: 0.3 }}
+                                className="w-full h-[500px] bg-slate-900/50 rounded-3xl border border-slate-700/50 p-8 shadow-inner"
+                            >
+                                <FocusTrendChart data={weeklyDetailedData} />
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
             </div>
 
             {/* --- 手機版：原有佈局 (md:hidden) --- */}
+            {/* [修正] 截圖容器：放在左上角(0,0)，z-index 設為 -10，確保瀏覽器認為它「在畫面內」而正常渲染 */}
             <div 
                 ref={shareCardRef} 
                 className={`
-                    relative font-sans overflow-hidden transition-all duration-500 ease-out md:hidden
+                    relative font-sans overflow-hidden transition-all duration-500 ease-out
                     ${isGeneratingShare 
-                        ? 'w-[375px] h-auto p-6 rounded-2xl border border-amber-500/30 shadow-[0_20px_60px_-10px_rgba(0,0,0,0.8),inset_0_0_80px_rgba(0,0,0,0.9),0_0_20px_rgba(217,119,6,0.1)] bg-[#09090b] block' 
-                        : 'w-full bg-transparent p-0 block' 
+                        ? 'fixed top-0 left-0 w-[375px] z-[-10] block' 
+                        : 'w-full md:hidden' 
                     }
                 `}
+                // 強制觸發 GPU 渲染，避免某些瀏覽器忽略不繪製
+                style={isGeneratingShare ? { transform: 'translateZ(0)' } : {}}
             >
                 {isGeneratingShare && (
                     <>
@@ -612,9 +761,10 @@ export const FortuneWidget: React.FC<FortuneWidgetProps> = ({ userProfile, clien
 
                     <div className={`relative flex-1 w-full flex flex-col z-10`}>
                         
-                        {/* 手機版：果凍圖 */}
+                        {/* 手機版：果凍圖 - [修正] 分享模式下強制顯示果凍圖 */}
                         <div className="w-full flex flex-col items-center mb-4">
-                             {mode === 'daily' ? (
+                             {/* 若在生成分享圖，不管 mode 為何，都強制渲染 JellyChart (避免一週運勢模式下分享時圖表空白) */}
+                             {(mode === 'daily' || isGeneratingShare) ? (
                                  <JellyBarChart data={currentData} baseScore={baseScore} isShareMode={isGeneratingShare} />
                              ) : (
                                  <div className="w-full h-[220px]">
