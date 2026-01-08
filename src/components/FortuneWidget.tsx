@@ -268,7 +268,6 @@ const WidgetHeader = ({
     isSuperAdmin
 }: any) => {
     return (
-        // [修正] 使用 max-w-[640px] 強制縮減寬度，讓左右元件向中間靠攏
         <div className="w-full max-w-[640px] mx-auto flex items-center justify-between mb-2 relative z-50">
             {/* 左側：標題資訊 */}
             <div className="flex flex-col">
@@ -773,11 +772,11 @@ export const FortuneWidget: React.FC<FortuneWidgetProps> = ({ userProfile, clien
                              )}
                         </div>
 
-                        {/* 分享圖專用的詳細資訊 */}
+                        {/* 分享圖專用的詳細資訊 - [移除] guidance.luckyTips 區塊 */}
                         {isGeneratingShare && (
                             <div className="w-full mt-4 space-y-2">
                                 <div className="text-center text-xs text-slate-400 mb-2 font-mono">BASE ENERGY: {baseScore}</div>
-                                <div className="text-center text-xs text-amber-100/60 leading-relaxed px-4">{dailyFortune.guidance.luckyTips}</div>
+                                {/* [已移除] luckyTips 文字行 */}
                                 <div className="mt-4 flex items-center justify-center gap-2 text-[10px] text-amber-200/30 font-mono tracking-[0.2em] uppercase">
                                     <Sparkles size={8} className="text-amber-500/40" />
                                     <span>{WEBSITE_URL}</span>
