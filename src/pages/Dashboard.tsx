@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, ArrowRight, Menu, LogOut, UserCog, Loader2, PlusCircle, Calendar, Clock, HelpCircle, Database } from 'lucide-react';
+import { Sparkles, ArrowRight, Menu, LogOut, UserCog, Loader2, PlusCircle, Database, FileText, Calendar, Clock, HelpCircle, ArrowLeft } from 'lucide-react';
 import { supabase } from '../supabase';
 import { loadClients, saveClient, getMyProfile, getUsedChartCount, type Client, type UserProfile } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
@@ -13,7 +13,7 @@ import { getFeaturePermission } from '../logic/permissions';
 
 const SUPER_ADMIN_EMAIL = 'stephenwu.0926@gmail.com';
 
-// --- 新手引導精靈元件 (Wizard) ---
+// --- 新手引導精靈元件 (Wizard) - [完整程式碼] ---
 interface WizardProps {
     userProfile: UserProfile | null;
     onComplete: (data: any) => Promise<void>;
@@ -96,13 +96,34 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
         }
         setStep(4);
     };
+    
+    // Refs for input focus
+    const yearRef = useRef<HTMLInputElement>(null);
+    const monthRef = useRef<HTMLInputElement>(null);
+    const dayRef = useRef<HTMLInputElement>(null);
+    const hourRef = useRef<HTMLInputElement>(null);
+    const minuteRef = useRef<HTMLInputElement>(null);
 
-    // --- Render Steps ---
+    const handleDateInput = (e: React.ChangeEvent<HTMLInputElement>, setter: (v: any) => void, maxLen: number, nextRef?: React.RefObject<HTMLInputElement>) => {
+        const val = e.target.value.replace(/\D/g, '').slice(0, maxLen);
+        setter(val === '' ? '' : parseInt(val));
+        if (val.length === maxLen && nextRef?.current) {
+             nextRef.current.focus();
+             nextRef.current.select();
+        }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, currentVal: any, prevRef?: React.RefObject<HTMLInputElement>) => {
+         if (e.key === 'Backspace' && (currentVal === '' || currentVal === 0) && prevRef?.current) {
+             // e.preventDefault(); // 有時候會阻擋正常刪除，視情況開啟
+             prevRef.current.focus();
+         }
+    };
 
     // Step 1: 歡迎與稱呼
     if (step === 1) {
         return (
-            <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 relative">
+            <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 relative text-slate-800">
                 {isTestMode && <button onClick={onCancelTest} className="absolute top-4 right-4 p-1 text-gray-400 hover:text-gray-600"><PlusCircle size={20} className="rotate-45"/></button>}
                 <div className="p-8 pt-12 flex flex-col items-center text-center space-y-6">
                     <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 mb-2">
@@ -134,7 +155,7 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
     // Step 2: 性別選擇
     if (step === 2) {
         return (
-            <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-right-8 duration-300 relative">
+            <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-right-8 duration-300 relative text-slate-800">
                 <button onClick={() => setStep(1)} className="absolute top-4 left-4 p-1 text-gray-400 hover:text-gray-600 flex items-center gap-1 text-xs font-bold"><ArrowRight size={14} className="rotate-180"/> 上一步</button>
                 <div className="p-8 pt-12 flex flex-col items-center text-center space-y-6">
                     <h2 className="text-xl font-bold text-slate-800">請問您的性別？</h2>
@@ -168,7 +189,7 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
     // Step 3: 出生資料 (核心)
     if (step === 3) {
         return (
-            <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-right-8 duration-300 relative">
+            <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-right-8 duration-300 relative text-slate-800">
                 <button onClick={() => setStep(2)} className="absolute top-4 left-4 p-1 text-gray-400 hover:text-gray-600 flex items-center gap-1 text-xs font-bold"><ArrowRight size={14} className="rotate-180"/> 上一步</button>
                 
                 <div className="p-6 pt-12 flex flex-col space-y-5">
@@ -184,19 +205,13 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
                         </div>
                         <div className="flex gap-2">
                             <input 
+                                ref={yearRef}
                                 type="number" 
-                                className="flex-1 min-w-0 border rounded-lg px-2 py-2 text-center" 
+                                className="flex-1 min-w-0 border rounded-lg px-2 py-2 text-center bg-white" 
                                 placeholder="年" 
                                 value={formData.year} 
-                                onFocus={(e) => {
-                                    if (formData.year === 2000) {
-                                        setFormData({ ...formData, year: '' as any });
-                                    }
-                                }}
-                                onChange={e => {
-                                    const val = e.target.value;
-                                    setFormData({...formData, year: val === '' ? ('' as any) : parseInt(val)})
-                                }} 
+                                onChange={e => handleDateInput(e, v => setFormData({...formData, year: v}), 4, monthRef)}
+                                onKeyDown={e => handleKeyDown(e, formData.year)}
                             />
                             <select className="w-20 border rounded-lg px-1 py-2 bg-white text-center" value={formData.month} onChange={e => setFormData({...formData, month: parseInt(e.target.value)})}>
                                 {Array.from({length:12},(_,i)=>i+1).map(m=><option key={m} value={m}>{m}月</option>)}
@@ -229,7 +244,15 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
                                     </div>
                                     <span className="text-xl font-bold text-slate-300">:</span>
                                     <div className="flex flex-col items-center">
-                                        <input type="number" className="w-24 text-lg font-bold border-2 border-blue-100 rounded-xl px-3 py-2 bg-white outline-none focus:border-blue-500 text-center" placeholder="分" value={formData.minute} onChange={e => setFormData({...formData, minute: parseInt(e.target.value)})} />
+                                        <input 
+                                            ref={minuteRef}
+                                            type="number" 
+                                            className="w-24 text-lg font-bold border-2 border-blue-100 rounded-xl px-3 py-2 bg-white outline-none focus:border-blue-500 text-center" 
+                                            placeholder="分" 
+                                            value={formData.minute} 
+                                            onChange={e => handleDateInput(e, v => setFormData({...formData, minute: v}), 2)} 
+                                            onKeyDown={e => handleKeyDown(e, formData.minute)}
+                                        />
                                     </div>
                                 </div>
                                 <div className="text-center text-xs text-slate-400">
@@ -242,12 +265,8 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
                             <div className="animate-in fade-in zoom-in duration-200">
                                 <div className="grid grid-cols-6 gap-2">
                                     {ZHI.map((z, idx) => {
-                                        // 簡單推算該時辰的一個代表時間 (用於UI顯示)
-                                        const displayHour = idx === 0 ? 0 : idx * 2;
-                                        // 判斷是否選中 (稍微寬鬆，只要在該時辰範圍內)
                                         const currentZhiIdx = Math.floor((formData.hour + 1) / 2) % 12;
                                         const isSelected = currentZhiIdx === idx;
-
                                         return (
                                             <button 
                                                 key={z} 
@@ -293,7 +312,7 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
     // Step 4: Loading (儀式感過場)
     if (step === 4) {
         return (
-            <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in fade-in duration-500 flex flex-col items-center justify-center py-20 px-8 text-center relative">
+            <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in fade-in duration-500 flex flex-col items-center justify-center py-20 px-8 text-center relative text-slate-800">
                 {/* 背景裝飾 */}
                 <div className="absolute inset-0 bg-gradient-to-b from-blue-50/50 to-transparent pointer-events-none" />
                 
@@ -329,7 +348,6 @@ export const Dashboard: React.FC = () => {
   const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false);
   const [isLuckyDivinationOpen, setIsLuckyDivinationOpen] = useState(false);
 
-  // 強制顯示新手引導的開關 (測試用)
   const [forceOnboarding, setForceOnboarding] = useState(false);
 
   const initDashboard = async () => {
@@ -412,41 +430,46 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  // 讀取吉凶占卜權限
   const canLuckyDivination = useMemo(() => getFeaturePermission(userProfile, 'lucky_divination'), [userProfile]);
 
-  if (loading) return <div className="flex h-screen items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-slate-400" /></div>;
+  if (loading) return <div className="flex h-screen items-center justify-center bg-slate-950"><Loader2 className="animate-spin text-slate-500" /></div>;
 
   return (
-    <div className="h-screen w-full bg-slate-50 flex flex-col font-sans overflow-hidden">
+    // [修改] 全局背景改為深色
+    <div className="h-screen w-full bg-slate-950 flex flex-col font-sans overflow-hidden relative text-white">
         
-        <header className="shrink-0 px-6 py-4 flex justify-between items-center bg-white border-b border-slate-100 z-50 shadow-sm">
+        {/* 背景光暈特效 */}
+        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-purple-900/20 rounded-full blur-[100px] pointer-events-none"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-900/10 rounded-full blur-[100px] pointer-events-none"></div>
+
+        {/* Header - [修改] 透明背景，文字改白，加入右側導航按鈕 (電腦版) */}
+        <header className="shrink-0 px-6 py-4 flex justify-between items-center z-50">
             <div className="relative">
+                {/* 漢堡選單：保留給管理功能，但隱藏主要入口 */}
                 <button 
                     onClick={() => setIsMenuOpen(!isMenuOpen)}
-                    className="w-10 h-10 bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors rounded-xl flex items-center justify-center"
+                    className="w-10 h-10 bg-white/10 hover:bg-white/20 text-slate-300 transition-colors rounded-xl flex items-center justify-center backdrop-blur-md"
                 >
                     <Menu size={20} />
                 </button>
                 {isMenuOpen && (
-                    <div className="absolute top-12 left-0 w-60 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
+                    <div className="absolute top-12 left-0 w-60 bg-slate-900/95 rounded-xl shadow-2xl border border-slate-700 overflow-hidden animate-in fade-in slide-in-from-top-2 z-50 backdrop-blur-xl">
                         {userProfile?.role === 'admin' && (
                             <button 
                                 onClick={() => { setIsUserMgmtOpen(true); setIsMenuOpen(false); }}
-                                className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-2 text-gray-700 font-medium"
+                                className="w-full text-left px-4 py-3 hover:bg-white/5 flex items-center gap-2 text-slate-300 font-medium"
                             >
                                 <UserCog size={16} /> 使用者管理
                             </button>
                         )}
 
-                        {/* [新增] 占卜文案矩陣入口 (僅限管理員或特定Email) */}
                         {(userProfile?.role === 'admin' || userProfile?.email === SUPER_ADMIN_EMAIL) && (
                             <button
                                 onClick={() => {
                                     navigate('/admin');
                                     setIsMenuOpen(false);
                                 }}
-                                className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-2 text-gray-700 font-medium"
+                                className="w-full text-left px-4 py-3 hover:bg-white/5 flex items-center gap-2 text-slate-300 font-medium"
                             >
                                 <Database size={16} /> 占卜文案矩陣
                             </button>
@@ -458,7 +481,7 @@ export const Dashboard: React.FC = () => {
                                     setForceOnboarding(true); 
                                     setIsMenuOpen(false); 
                                 }}
-                                className="w-full text-left px-4 py-3 hover:bg-amber-50 flex items-center gap-2 text-amber-700 font-medium border-t border-gray-100"
+                                className="w-full text-left px-4 py-3 hover:bg-amber-500/10 flex items-center gap-2 text-amber-500 font-medium border-t border-slate-800"
                             >
                                 <PlusCircle size={16} /> [測試] 新手引導流程
                             </button>
@@ -466,7 +489,7 @@ export const Dashboard: React.FC = () => {
 
                         <button 
                             onClick={() => supabase.auth.signOut()}
-                            className="w-full text-left px-4 py-3 hover:bg-red-50 flex items-center gap-2 text-red-600 font-medium border-t border-gray-100"
+                            className="w-full text-left px-4 py-3 hover:bg-red-500/10 flex items-center gap-2 text-red-400 font-medium border-t border-slate-800"
                         >
                             <LogOut size={16} /> 登出系統
                         </button>
@@ -475,17 +498,44 @@ export const Dashboard: React.FC = () => {
                 {isMenuOpen && <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)}></div>}
             </div>
 
-            <h1 className="text-lg font-bold text-slate-800">運勢溫度計</h1>
+            <div className="flex items-center gap-4">
+                <h1 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-slate-200 to-slate-400 tracking-widest hidden md:block">
+                    大寶紫微
+                </h1>
+
+                {/* [新增] 電腦版導航按鈕 (Header 右側) */}
+                <div className="hidden md:flex gap-3">
+                    <button 
+                        onClick={() => navigate('/list')}
+                        className="px-4 py-2 bg-slate-800/50 hover:bg-blue-600/30 text-slate-300 hover:text-blue-300 rounded-lg text-sm font-bold flex items-center gap-2 transition-all border border-slate-700/50 hover:border-blue-500/30"
+                    >
+                        <FileText size={16} /> 命盤列表
+                    </button>
+                    <button 
+                        onClick={() => { if (canLuckyDivination === 'enabled') setIsLuckyDivinationOpen(true); }}
+                        disabled={canLuckyDivination === 'disabled'}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all border border-slate-700/50
+                            ${canLuckyDivination === 'enabled' 
+                                ? 'bg-slate-800/50 hover:bg-purple-600/30 text-slate-300 hover:text-purple-300 hover:border-purple-500/30' 
+                                : 'bg-slate-900/50 text-slate-600 cursor-not-allowed'}
+                        `}
+                    >
+                        <Sparkles size={16} /> 吉凶占卜
+                    </button>
+                </div>
+            </div>
             
-            <div className="w-10"></div> 
+            <div className="w-10 md:hidden"></div> 
         </header>
 
-        <main className="flex-1 w-full overflow-y-auto">
-            <div className="max-w-4xl mx-auto p-6 flex flex-col items-center pb-20">
+        <main className="flex-1 w-full overflow-y-auto relative z-10">
+            {/* [修改] 寬度限制放寬至 max-w-7xl，讓左右分欄有空間 */}
+            <div className="max-w-7xl mx-auto p-4 flex flex-col items-center">
                 {meClient && !forceOnboarding ? (
                     <>
+                        {/* 今日運勢 Widget - 包含果凍圖與下方的指引卡片 */}
                         {dailyFortune && (
-                            <div className="w-full animate-in slide-in-from-top-4 duration-500">
+                            <div className="w-full animate-in fade-in duration-700">
                                 <FortuneWidget 
                                     userProfile={userProfile} 
                                     client={meClient} 
@@ -493,63 +543,10 @@ export const Dashboard: React.FC = () => {
                                 />
                             </div>
                         )}
-
-                        <div className="w-full mt-6 flex gap-3 max-w-md">
-                            {/* 命盤列表按鈕 */}
-                            <button
-                                onClick={() => navigate('/list')}
-                                className="flex-1 bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 font-bold py-4 rounded-2xl shadow-sm transition-all flex items-center justify-between px-4 group"
-                            >
-                                <div className="flex flex-col items-start">
-                                    <span className="text-base sm:text-lg text-slate-800 group-hover:text-blue-700 transition-colors">命盤列表</span>
-                                    <span className="text-xs text-slate-400 font-normal">管理客戶</span>
-                                </div>
-                                <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all">
-                                    <ArrowRight size={16} />
-                                </div>
-                            </button>
-
-                            {/* 吉凶占卜按鈕 */}
-                            {canLuckyDivination !== 'hidden' && (
-                                <button
-                                    onClick={() => {
-                                        if (canLuckyDivination === 'enabled') setIsLuckyDivinationOpen(true);
-                                    }}
-                                    disabled={canLuckyDivination === 'disabled'}
-                                    className={`flex-1 border font-bold py-4 rounded-2xl shadow-sm transition-all flex items-center justify-between px-4 group relative overflow-hidden
-                                        ${canLuckyDivination === 'enabled' 
-                                            ? 'bg-slate-900 border-slate-800 text-white hover:bg-slate-800 hover:shadow-lg hover:shadow-purple-500/20' 
-                                            : 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
-                                        }
-                                    `}
-                                >
-                                    <div className="flex flex-col items-start z-10">
-                                        <span className={`text-base sm:text-lg transition-colors ${canLuckyDivination === 'enabled' ? 'text-white group-hover:text-purple-300' : 'text-gray-500'}`}>
-                                            吉凶占卜
-                                        </span>
-                                        <span className="text-xs opacity-60 font-normal">
-                                            {canLuckyDivination === 'enabled' ? '直覺測算' : 'Coming Soon'}
-                                        </span>
-                                    </div>
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all z-10
-                                        ${canLuckyDivination === 'enabled' 
-                                            ? 'bg-white/10 group-hover:bg-purple-600 group-hover:text-white' 
-                                            : 'bg-gray-200 text-gray-400'
-                                        }
-                                    `}>
-                                        <Sparkles size={16} />
-                                    </div>
-                                    
-                                    {canLuckyDivination === 'enabled' && (
-                                        <div className="absolute -right-4 -bottom-4 w-20 h-20 bg-purple-500/20 blur-xl rounded-full group-hover:bg-purple-500/30 transition-all"></div>
-                                    )}
-                                </button>
-                            )}
-                        </div>
                     </>
                 ) : (
                     <div className="mt-6 w-full flex justify-center">
-                        <OnboardingWizard 
+                         <OnboardingWizard 
                             userProfile={userProfile}
                             onComplete={handleWizardComplete}
                             onCancelTest={() => setForceOnboarding(false)}
@@ -560,6 +557,37 @@ export const Dashboard: React.FC = () => {
             </div>
         </main>
         
+        {/* [新增] Bottom Tab Bar (手機版核心導航) - md:hidden */}
+        {/* [修改] justify-around -> justify-evenly 並移除空白 div */}
+        <div className="shrink-0 px-6 py-4 pb-8 bg-[#0f172a]/90 backdrop-blur-xl border-t border-white/5 flex justify-evenly items-center z-50 md:hidden">
+            <button 
+                onClick={() => navigate('/list')}
+                className="flex flex-col items-center gap-1 group w-16"
+            >
+                <div className="w-10 h-10 rounded-2xl bg-slate-800/50 group-hover:bg-blue-600/20 flex items-center justify-center transition-colors">
+                    <FileText size={20} className="text-slate-400 group-hover:text-blue-400 transition-colors" />
+                </div>
+                <span className="text-[10px] text-slate-500 group-hover:text-blue-400 font-bold">命盤列表</span>
+            </button>
+
+            <button 
+                onClick={() => {
+                    if (canLuckyDivination === 'enabled') setIsLuckyDivinationOpen(true);
+                }}
+                disabled={canLuckyDivination === 'disabled'}
+                className="flex flex-col items-center gap-1 group w-16"
+            >
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all mb-[-10px] transform translate-y-[-10px] shadow-lg
+                    ${canLuckyDivination === 'enabled' 
+                        ? 'bg-gradient-to-br from-purple-600 to-indigo-600 text-white shadow-purple-900/50 hover:scale-110' 
+                        : 'bg-slate-800 text-slate-600 cursor-not-allowed'}
+                `}>
+                    <Sparkles size={24} />
+                </div>
+                <span className={`text-[10px] font-bold ${canLuckyDivination === 'enabled' ? 'text-purple-400' : 'text-slate-600'}`}>吉凶占卜</span>
+            </button>
+        </div>
+
         <UserManagementModal 
             isOpen={isUserMgmtOpen} 
             onClose={() => setIsUserMgmtOpen(false)} 
