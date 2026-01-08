@@ -74,7 +74,6 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   let hasExternalLu = false;
   let hasExternalJi = false;
   
-  // 檢查是否有外部傳入的四化 (例如流運飛星)
   if (externalSiHua) {
       [...palace.majorStars, ...palace.minorStars, ...palace.miscStars].forEach(star => {
           const type = externalSiHua[star.name];
@@ -83,10 +82,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
       });
   }
 
-  // [修改] 視覺分流：邊框圖層 (Border Layer)
-  // 化忌優先顯示深灰框，化祿顯示紅框。若同時存在，這裡簡單處理優先顯示忌(警告)，
-  // 或是您可以選擇讓兩者並存 (但 UI 會較雜)，這裡採用「忌 > 祿」的優先級，或者用不同樣式。
-  // 依照您的需求：化忌->深灰框，化祿->紅框
+  // 視覺分流：邊框圖層 (Border Layer)
   let siHuaBorderClass = '';
   if (hasExternalJi) {
       siHuaBorderClass = 'ring-inset ring-2 ring-gray-600'; // 深灰色內縮框
@@ -94,12 +90,8 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
       siHuaBorderClass = 'ring-inset ring-2 ring-red-400'; // 紅色內縮框
   }
 
-  // [修改] 移除所有背景色邏輯 (bgColorClass)，背景完全交給 PalaceGrid 的 Focus Highlight 控制
-  // [修改] 移除 isBenMingMing 的強制紅框，回歸平淡
-  
-  const xiaoXianClass = isXiaoXianMingPalace
-    ? 'shadow-[inset_0_0_15px_rgba(34,197,94,0.6)] border-green-400'
-    : '';
+  // [修正] 徹底移除 xiaoXianClass，避免未選中時出現綠色光暈
+  // const xiaoXianClass = isXiaoXianMingPalace ? 'shadow-[inset...]' : ''; // 已刪除
 
   const allStarsInPalace = [
     ...palace.majorStars,
@@ -176,8 +168,8 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
 
   return (
     <div
-      // [修改] 套用 siHuaBorderClass，並移除所有背景色 class，確保背景透明以顯示下層的高亮
-      className={`w-full h-full flex flex-col p-0.5 box-border relative overflow-visible ${siHuaBorderClass} ${xiaoXianClass} transition-colors duration-300`}
+      // [修正] 移除 xiaoXianClass
+      className={`w-full h-full flex flex-col p-0.5 box-border relative overflow-visible ${siHuaBorderClass} transition-colors duration-300`}
     >
       {renderExternalChips()}
       {renderInteractiveFlyingStars()}
