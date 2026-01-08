@@ -7,15 +7,13 @@ import { ZiWeiEngine } from '../../logic/engine';
 import { GAN, ZHI, PALACE_NAMES, SIHUA_TABLE } from '../../logic/constants';
 import { Loader2, UserPlus, X, ChevronLeft, Camera, Users } from 'lucide-react';
 import { getFeaturePermission, type PermissionState } from '../../logic/permissions';
-import { LunarYear } from 'lunar-typescript';
+import { Lunar, LunarYear } from 'lunar-typescript'; // [修改] 引入 Lunar
 
 interface SingleChartProps {
   client?: Client;
   onBack?: () => void;
   mode?: 'standard' | 'divination';
 }
-
-const HOUR_SEQUENCE = [23, 0, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21];
 
 const getSiHuaMap = (ganIndex: number) => {
     if (ganIndex < 0 || ganIndex > 9) return {};
@@ -151,6 +149,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
           return { liuMonthIdx: -1, liuDayIdx: -1, liuMonthGan: -1, liuDayGan: -1 };
       }
 
+      // 1. 計算宮位位置 (Positioning Logic) - 依據斗數規則，這是正確的
       const yearZhi = (liuNianYear - 4) % 12;
       const douJunPalace = baseChartData.palaces[2];
       const douJunName = douJunPalace.name;
@@ -170,14 +169,23 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
           }
       }
       const flowMonthIdx = (flowMonthAnchor + monthSteps) % 12;
-      const mGan = baseChartData.palaces[flowMonthIdx].ganIndex;
+      
+      // [修改] 2. 計算時間天干 (Time Logic) - 改用農曆真實天干 (Natural Gan)
+      // 使用 lunar-typescript 建立當月物件
+      // 注意：Lunar.fromYmd 接受負數月份代表閏月
+      const effectiveMonth = isLiuMonthLeap ? -Math.abs(liuMonth) : Math.abs(liuMonth);
+      const naturalMonthObj = Lunar.fromYmd(liuNianYear, effectiveMonth, 1);
+      const mGan = naturalMonthObj.getMonthGanIndex(); // 取得自然曆法的月干
 
       if (liuDay === null) {
           return { liuMonthIdx: flowMonthIdx, liuDayIdx: -1, liuMonthGan: mGan, liuDayGan: -1 };
       }
       
       const flowDayIdx = (flowMonthIdx + (liuDay - 1)) % 12;
-      const dGan = baseChartData.palaces[flowDayIdx].ganIndex;
+      
+      // [修改] 同樣取得自然曆法的日干
+      const naturalDayObj = Lunar.fromYmd(liuNianYear, effectiveMonth, liuDay);
+      const dGan = naturalDayObj.getDayGanIndex();
 
       return { 
           liuMonthIdx: flowMonthIdx, 
@@ -296,12 +304,12 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     setSelectedPalace(null); setFlyingPalace(null); setIsReverse(false); setIsTwinMode(false);
   };
   const changeHour = (delta: number) => {
-    const currentIndex = HOUR_SEQUENCE.indexOf(currentHour);
-    if (currentIndex === -1) return; 
-    let nextIndex = currentIndex + delta;
-    if (nextIndex < 0) nextIndex = HOUR_SEQUENCE.length - 1;
-    if (nextIndex >= HOUR_SEQUENCE.length) nextIndex = 0;
-    setCurrentHour(HOUR_SEQUENCE[nextIndex]);
+    const currentZhiIdx = Math.floor((currentHour + 1) / 2) % 12;
+    let nextZhiIdx = currentZhiIdx + delta;
+    if (nextZhiIdx < 0) nextZhiIdx = 11;
+    if (nextZhiIdx > 11) nextZhiIdx = 0;
+    let nextHour = nextZhiIdx === 0 ? 0 : nextZhiIdx * 2;
+    setCurrentHour(nextHour);
     resetAllStates();
   };
   const resetTime = () => { setCurrentHour(client!.birthHour); resetAllStates(); };
@@ -385,6 +393,16 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
       return { daName, liuName, xiaoName, yueName, riName }; 
   };
+  
+  // 計算真實時間
+  const currentRealTime = useMemo(() => {
+      const now = new Date();
+      const year = now.getFullYear();
+      if (!baseChartData || !baseEngine) return undefined;
+      const virtualAge = year - baseChartData.lunarYear + 1;
+      const daSeq = daXianList.findIndex(d => virtualAge >= d.startAge && virtualAge <= d.endAge);
+      return { year, daSeq: daSeq >= 0 ? daSeq : -1 };
+  }, [baseChartData, baseEngine, daXianList]);
 
   if (loading || !client || !baseChartData || !baseEngine || !chartData) {
     return <div className="flex h-[100dvh] w-full items-center justify-center bg-gray-100"><Loader2 className="animate-spin text-gray-500" size={48} /></div>;
@@ -518,6 +536,10 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
             liuMonthGan={liuMonthGan}
             liuDayGan={liuDayGan}
             liuNianYear={liuNianYear}
+            liuMonthIdx={liuMonthIdx}
+            liuDayIdx={liuDayIdx}
+            // [新增] 傳入真實時間
+            currentRealTime={currentRealTime}
         />
       </div>
 
@@ -527,9 +549,12 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
                 <div className="flex w-full overflow-x-auto scrollbar-hide border-b border-gray-300">
                     {daXianList.map((limit) => {
                     const isActive = daXianSeq === limit.seq;
+                    // [新增] 判斷是否為真實大限
+                    const isRealTime = currentRealTime && currentRealTime.daSeq === limit.seq;
                     return (
-                        <button key={limit.seq} onClick={() => handleDaXianClick(limit.seq)} className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs ${isActive ? 'bg-gray-600 text-white font-bold' : 'hover:bg-gray-200 text-gray-700'}`}>
-                        <div>{limit.name} {limit.ganZhi}</div>
+                        <button key={limit.seq} onClick={() => handleDaXianClick(limit.seq)} className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs relative ${isActive ? 'bg-gray-600 text-white font-bold' : 'hover:bg-gray-200 text-gray-700'}`}>
+                            {isRealTime && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
+                            <div>{limit.name} {limit.ganZhi}</div>
                         </button>
                     );
                     })}
@@ -537,8 +562,11 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
                 <div className="flex w-full overflow-x-auto scrollbar-hide">
                     {liuNianList.map((item) => {
                     const isActive = liuNianYear === item.year;
+                    // [新增] 判斷是否為真實流年
+                    const isRealTime = currentRealTime && currentRealTime.year === item.year;
                     return (
-                        <button key={item.year} onClick={() => handleLiuNianClick(item.year)} className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs ${isActive ? 'bg-blue-600 text-white font-bold' : 'hover:bg-blue-100 text-gray-600'}`}>
+                        <button key={item.year} onClick={() => handleLiuNianClick(item.year)} className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs relative ${isActive ? 'bg-blue-600 text-white font-bold' : 'hover:bg-blue-100 text-gray-600'}`}>
+                        {isRealTime && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
                         {item.label}
                         </button>
                     );

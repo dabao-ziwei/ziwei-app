@@ -56,7 +56,6 @@ interface PalaceGridProps {
       twin: PermissionState;
       inverted: PermissionState;
       xiao: PermissionState;
-      // [新增]
       liu_month: PermissionState;
       liu_day: PermissionState;
   };
@@ -69,6 +68,14 @@ interface PalaceGridProps {
   liuMonthGan?: number;
   liuDayGan?: number;
   liuNianYear?: number | null;
+  
+  currentRealTime?: {
+      year: number;     
+      daSeq: number;    
+  };
+  
+  liuMonthIdx?: number;
+  liuDayIdx?: number;
 }
 
 export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
@@ -82,10 +89,54 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
   onHistoryBack, onNavigate, onCompatibility, onChangeHour, onResetTime,
   onToggleTwin, onToggleInverted, onToggleSmallLimit, onPalaceClick, onTriggerClick,
   permissionFlags,
-  liuMonth, isLiuMonthLeap, liuDay, onSetLiuMonth, onSetLiuDay, liuMonthGan, liuDayGan
+  liuMonth, isLiuMonthLeap, liuDay, onSetLiuMonth, onSetLiuDay, liuMonthGan, liuDayGan,
+  currentRealTime,
+  liuMonthIdx = -1, liuDayIdx = -1
 }, ref) => {
 
   const gridLayout = [5, 6, 7, 8, 4, null, null, 9, 3, null, null, 10, 2, 1, 0, 11];
+
+  // [修改] 恢復小限盤的高亮邏輯 (Priority 3)
+  const { highlightIdx, highlightClass } = React.useMemo(() => {
+      const baseClass = "absolute inset-0 z-0 pointer-events-none"; 
+
+      // 1. 流日盤 (最高權重) - 淡紫色呼吸
+      if (liuDay !== null && liuDayIdx >= 0) {
+          return { highlightIdx: liuDayIdx, highlightClass: `${baseClass} bg-purple-100/50 animate-pulse` };
+      }
+      // 2. 流月盤 - 淡琥珀色呼吸
+      if (liuMonth !== null && liuMonthIdx >= 0) {
+          return { highlightIdx: liuMonthIdx, highlightClass: `${baseClass} bg-amber-100/50 animate-pulse` };
+      }
+      
+      // [恢復] 3. 小限盤 - 淡綠色呼吸
+      // 當 showXiaoXian 為 true 時，這裡會觸發，顯示綠色背景
+      if (showXiaoXian && xiaoXianMingIdx >= 0) {
+          return { highlightIdx: xiaoXianMingIdx, highlightClass: `${baseClass} bg-green-100/50 animate-pulse` };
+      }
+      
+      // 4. 流年盤 - 淡藍色呼吸
+      if (liuNianYear !== null) {
+          const liuZhi = (liuNianYear - 4) % 12;
+          const liuMingIdx = chartData.palaces.findIndex(p => p.zhiIndex === liuZhi);
+          if (liuMingIdx >= 0) {
+              return { highlightIdx: liuMingIdx, highlightClass: `${baseClass} bg-blue-100/50 animate-pulse` };
+          }
+      }
+      // 5. 大限盤 - 灰色靜態
+      if (daXianSeq >= 0 && daXianList[daXianSeq]) {
+          return { highlightIdx: daXianList[daXianSeq].palaceIdx, highlightClass: `${baseClass} bg-gray-200/70` };
+      }
+      // 6. 本命盤 (預設) - 淡紅色靜態
+      const benMingIdx = chartData.palaces.findIndex(p => getIsBenMingMing(p.index));
+      if (benMingIdx >= 0) {
+          return { highlightIdx: benMingIdx, highlightClass: `${baseClass} bg-red-50/60` };
+      }
+      
+      return { highlightIdx: -1, highlightClass: '' };
+
+  }, [liuDay, liuDayIdx, liuMonth, liuMonthIdx, showXiaoXian, xiaoXianMingIdx, liuNianYear, daXianSeq, daXianList, chartData, getIsBenMingMing]);
+
 
   return (
     <div ref={ref} className="w-full h-full bg-white border-2 border-gray-800 shadow-xl z-10 grid grid-cols-4 grid-rows-4 relative">
@@ -97,7 +148,7 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
       {gridLayout.map((palaceIdx, gridPos) => {
           if (gridPos === 5) {
               return (
-                  <div key="center-board" className="col-span-2 row-span-2 z-0 relative h-full w-full">
+                  <div key="center-board" className="col-span-2 row-span-2 z-50 relative h-full w-full">
                         <CenterInfoBoard 
                           key="center"
                           client={client}
@@ -155,12 +206,25 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
           const isXiaoXianMingPalace = liuNianYear !== null && palaceIdx === xiaoXianMingIdx;
           
           const isConnected = selectedPalace !== null && Object.values(connections).includes(palaceIdx);
+          
+          // [邏輯確認] 當 showXiaoXian 為 true 時，showXiaoXianSeal 為 false，所以標籤消失
           const showXiaoXianSeal = isXiaoXianMingPalace && !showXiaoXian;
           const isFlyingSource = flyingPalace === palaceIdx;
+          
+          const isHighlight = palaceIdx === highlightIdx;
 
           return (
-              <div key={palaceIdx} onClick={() => onPalaceClick(palaceIdx)} className={`relative cursor-pointer transition-all duration-200 border border-gray-300 box-border overflow-visible ${isConnected ? 'bg-red-50' : 'hover:bg-gray-50'} ${isFlyingSource ? 'ring-4 ring-purple-400 z-50 animate-pulse' : ''}`} style={isFlyingSource ? { animationIterationCount: 3 } : {}}>
+              <div key={palaceIdx} onClick={() => onPalaceClick(palaceIdx)} 
+                   className={`relative cursor-pointer transition-all duration-200 border border-gray-300 box-border overflow-visible 
+                   ${isConnected ? 'bg-red-50' : 'hover:bg-gray-50'} 
+                   ${isFlyingSource ? 'ring-4 ring-purple-400 z-50 animate-pulse' : ''}
+                   `} 
+                   style={isFlyingSource ? { animationIterationCount: 3 } : {}}
+              >
+                  {isHighlight && <div className={highlightClass}></div>}
+                  
                   {isFlyingSource && <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-purple-600 text-white text-[11px] font-bold px-2 py-0.5 rounded-full shadow-lg z-50 whitespace-nowrap tracking-wide border border-white">{GAN[chartData.palaces[palaceIdx].ganIndex]}干飛化</div>}
+                  
                   <PalaceCard
                       palace={chartData.palaces[palaceIdx]}
                       daName={relNames.daName}
@@ -183,7 +247,6 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
                       divinationSiHua={mode === 'divination' ? divSiHuaMap : undefined}
                       externalSiHua={externalSiHuaMap}
                   />
-                  {isDaXianMing && isDaXianActive && <div className="absolute inset-0 border-[3px] border-gray-600 pointer-events-none z-20 opacity-70"></div>}
                   {isConnected && <div className="absolute inset-0 border-2 border-red-500 pointer-events-none z-30"></div>}
               </div>
           );

@@ -7,7 +7,58 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { Environment, ContactShadows, Float, PerspectiveCamera, useGLTF, Center, useProgress, Html } from '@react-three/drei';
 import * as THREE from 'three';
 
-// 常數定義
+// --- [設定區] 字體與全域樣式 ---
+const GlobalStyles = () => (
+    <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700;900&display=swap');
+        
+        .font-serif-tc { font-family: 'Noto Serif TC', serif; }
+        
+        .scrollbar-thin { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.1) transparent; }
+        .scrollbar-thin::-webkit-scrollbar { width: 3px; }
+        .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.2); border-radius: 20px; }
+        
+        /* 背景噪點紋理 - 增加高級紙張感 */
+        .bg-noise {
+            position: relative;
+        }
+        .bg-noise::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
+            opacity: 0.4;
+            pointer-events: none;
+            z-index: 0;
+        }
+        
+        /* 關鍵字微光特效 */
+        .keyword-glow {
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.3), 0 0 40px rgba(255, 215, 0, 0.1);
+        }
+    `}</style>
+);
+
+const SmokeStyles = () => (
+    <style>{`
+        .spotlight { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 120px; height: 100vh; background: radial-gradient(ellipse at top, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.06) 35%, transparent 75%); filter: blur(12px); opacity: 0; transition: opacity 2s ease-in-out; pointer-events: none; z-index: 5; clip-path: polygon(42% 0, 58% 0, 100% 100%, 0% 100%); }
+        .spotlight.active { opacity: 1; }
+        .incense-scene { position: relative; width: 200px; height: 280px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; z-index: 10; }
+        .stick { position: absolute; bottom: 0; width: 3px; height: 70px; background: #5d4037; border-radius: 2px 2px 0 0; opacity: 0; transition: opacity 2s ease; }
+        .stick.visible { opacity: 1; }
+        .tip { position: absolute; top: 0; left: 0; width: 100%; height: 6px; background: #2d2d2d; border-radius: 2px 2px 0 0; transition: background-color 0.5s ease, box-shadow 0.5s ease; }
+        .tip.ignited { background-color: #ff4500; box-shadow: 0 0 4px #fff, 0 0 12px #ff4500, 0 -4px 20px rgba(255, 69, 0, 0.8); animation: ember-glow 2s infinite alternate ease-in-out; }
+        @keyframes ember-glow { 0% { opacity: 0.85; filter: brightness(1); } 100% { opacity: 1; filter: brightness(1.3); } }
+        .smoke-stream-container { position: absolute; bottom: 68px; left: 50%; transform: translateX(-50%); width: 120px; height: 280px; pointer-events: none; opacity: 0; mask-image: linear-gradient(to top, black 0%, black 10%, black 75%, transparent 95%); -webkit-mask-image: linear-gradient(to top, black 0%, black 10%, black 75%, transparent 95%); }
+        .smoke-stream-container.visible { opacity: 1.0; }
+        .smoke-layer-glow { fill: none; stroke: rgba(255, 255, 255, 0.15); stroke-width: 6px; stroke-linecap: round; filter: blur(6px); }
+        .smoke-layer-core { fill: none; stroke: rgba(255, 255, 255, 0.75); stroke-width: 1.5px; stroke-linecap: round; filter: blur(2px); }
+    `}</style>
+);
+
+// --- [資料定義] ---
+
 const ZHI = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
 const GAN = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'];
 
@@ -29,6 +80,42 @@ const CATEGORIES: { id: Category; icon: any; color: string; desc: string }[] = [
     { id: '交友', icon: Users, color: 'text-purple-400', desc: '人際、貴人、小人' },
 ];
 
+// 關鍵字對應表 (25-40歲女性受眾取向)
+const KEYWORDS: Record<Category, { good: string[], bad: string[], normal: string[] }> = {
+    '感情': { good: ['良緣', '花開', '相惜', '破繭'], bad: ['修心', '隨緣', '沉澱', '慎行'], normal: ['靜候', '觀照', '曖昧', '釐清'] },
+    '工作': { good: ['大展', '飛躍', '貴人', '突破'], bad: ['蓄勢', '潛沈', '重整', '避險'], normal: ['守成', '穩健', '磨練', '觀望'] },
+    '理財': { good: ['豐收', '進祿', '聚寶', '盈滿'], bad: ['節流', '止損', '保守', '警惕'], normal: ['佈局', '平衡', '積累', '審視'] },
+    '健康': { good: ['安康', '回春', '充盈', '活力'], bad: ['調養', '休息', '寬心', '慢活'], normal: ['平穩', '規律', '淨化', '養生'] },
+    '交友': { good: ['知音', '結緣', '融洽', '助力'], bad: ['識人', '慎獨', '清理', '邊界'], normal: ['和氣', '互動', '觀察', '隨和'] },
+};
+
+const getKeyword = (cat: Category, luck: string): string => {
+    const target = KEYWORDS[cat];
+    let pool = target.normal;
+    if (luck === '吉') pool = target.good;
+    if (luck === '凶') pool = target.bad;
+    // 隨機取出一個
+    return pool[Math.floor(Math.random() * pool.length)];
+};
+
+// 獲取今日文青日期
+const getArtisticDate = () => {
+    const date = new Date();
+    const map = ['〇', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+    const y = date.getFullYear().toString().split('').map(d => map[parseInt(d)]).join('');
+    const m = (date.getMonth() + 1);
+    const mStr = m <= 10 ? map[m] : `十${map[m % 10 === 0 ? 0 : m % 10]}`.replace('十〇', '十');
+    const d = date.getDate();
+    
+    let dStr = '';
+    if (d <= 10) dStr = map[d];
+    else if (d < 20) dStr = `十${d % 10 === 0 ? '' : map[d % 10]}`;
+    else if (d < 30) dStr = `二十${d % 10 === 0 ? '' : map[d % 10]}`;
+    else dStr = `三十${d % 10 === 0 ? '' : map[d % 10]}`;
+
+    return `${y}年 ‧ ${mStr}月 ‧ ${dStr}日`;
+};
+
 const pStraight = "M50,280 C50,220 50,100 50,0"; 
 const p1 = "M50,280 C50,220 60,100 50,0";
 const p2 = "M50,280 C20,200 45,80 50,0";
@@ -46,32 +133,6 @@ const getRecursiveSum = (n: number): number => {
     return sum;
 };
 const getDivinationStem = (n: number): number => (n - 3 + 10) % 10;
-
-const SacredStyles = () => (
-    <style>{`
-        .scrollbar-thin { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.1) transparent; }
-        .scrollbar-thin::-webkit-scrollbar { width: 3px; }
-        .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
-        .scrollbar-thin::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.2); border-radius: 20px; }
-    `}</style>
-);
-
-const SmokeStyles = () => (
-    <style>{`
-        .spotlight { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 120px; height: 100vh; background: radial-gradient(ellipse at top, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.06) 35%, transparent 75%); filter: blur(12px); opacity: 0; transition: opacity 2s ease-in-out; pointer-events: none; z-index: 5; clip-path: polygon(42% 0, 58% 0, 100% 100%, 0% 100%); }
-        .spotlight.active { opacity: 1; }
-        .incense-scene { position: relative; width: 200px; height: 280px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; z-index: 10; }
-        .stick { position: absolute; bottom: 0; width: 3px; height: 70px; background: #5d4037; border-radius: 2px 2px 0 0; opacity: 0; transition: opacity 2s ease; }
-        .stick.visible { opacity: 1; }
-        .tip { position: absolute; top: 0; left: 0; width: 100%; height: 6px; background: #2d2d2d; border-radius: 2px 2px 0 0; transition: background-color 0.5s ease, box-shadow 0.5s ease; }
-        .tip.ignited { background-color: #ff4500; box-shadow: 0 0 4px #fff, 0 0 12px #ff4500, 0 -4px 20px rgba(255, 69, 0, 0.8); animation: ember-glow 2s infinite alternate ease-in-out; }
-        @keyframes ember-glow { 0% { opacity: 0.85; filter: brightness(1); } 100% { opacity: 1; filter: brightness(1.3); } }
-        .smoke-stream-container { position: absolute; bottom: 68px; left: 50%; transform: translateX(-50%); width: 120px; height: 280px; pointer-events: none; opacity: 0; mask-image: linear-gradient(to top, black 0%, black 10%, black 75%, transparent 95%); -webkit-mask-image: linear-gradient(to top, black 0%, black 10%, black 75%, transparent 95%); }
-        .smoke-stream-container.visible { opacity: 1.0; }
-        .smoke-layer-glow { fill: none; stroke: rgba(255, 255, 255, 0.15); stroke-width: 6px; stroke-linecap: round; filter: blur(6px); }
-        .smoke-layer-core { fill: none; stroke: rgba(255, 255, 255, 0.75); stroke-width: 1.5px; stroke-linecap: round; filter: blur(2px); }
-    `}</style>
-);
 
 function Loader() {
   const { progress } = useProgress()
@@ -123,7 +184,6 @@ const JiaoBlock3D = ({ position, rotation }: { position: [number, number, number
     );
 };
 
-// [安全修正] 暫時移除預先載入，避免檔案問題導致全站當機
 // useGLTF.preload('/jiaobei.glb');
 
 const SacredJiaoScene3D = ({ luck }: { luck: string }) => {
@@ -157,24 +217,18 @@ const SacredJiaoScene3D = ({ luck }: { luck: string }) => {
 
     return (
         <div className="relative w-full h-36">
-            <Canvas shadows dpr={[1, 2]} className="w-full h-full z-20">
-                {/* [安全修正] 移除 onUpdate，改用固定設置，避免可能的循環問題 */}
+            <Canvas 
+                shadows 
+                dpr={[1, 2]} 
+                className="w-full h-full z-20"
+                gl={{ preserveDrawingBuffer: true }} 
+            >
                 <PerspectiveCamera makeDefault position={[0.5, 3, 4]} fov={35} /> 
-                
-                {/* [手動調整視角小技巧] 
-                  如果畫面出來了但沒對準，您可以暫時把下面這行 OrbitControls 打開 (拿掉註解)，
-                  用滑鼠轉到滿意後，告訴我大概的方位，我再幫您鎖定。
-                */}
-                {/* <OrbitControls makeDefault /> */}
-
                 <ambientLight intensity={0.5} color="#ffdad4" />
                 <directionalLight position={[-2, 5, 2]} intensity={2} castShadow color="#fff0e0" />
                 <spotLight position={[5, 8, 5]} angle={0.5} penumbra={1} intensity={3} color="#fff0e0" castShadow />
                 <pointLight position={[-5, -5, 5]} intensity={0.5} color="#d32f2f" />
-
-                {/* 增加 onLookAt 確保相機看向中心 */}
                 <CameraRig />
-
                 <Suspense fallback={<Loader />}>
                     <Environment preset="sunset" blur={0.8} background={false} />
                     <group position={[0, 0, 0]}>
@@ -188,18 +242,30 @@ const SacredJiaoScene3D = ({ luck }: { luck: string }) => {
                     <ContactShadows position={[0, -1.5, 0]} opacity={0.5} scale={12} blur={2} far={4} color="#1a0505" />
                 </Suspense>
             </Canvas>
-             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-red-600/20 rounded-full blur-[80px] z-10 pointer-events-none"></div>
+             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-amber-500/10 rounded-full blur-[60px] z-10 pointer-events-none"></div>
         </div>
     );
 };
 
-// 新增一個簡單的組件來處理相機目標
 function CameraRig() {
     useFrame((state) => {
         state.camera.lookAt(0, 0, 0);
     });
     return null;
 }
+
+// [再次修正] 儀式感印章組件 - 直接控制圖片標籤，確保絕對是正方形
+const Seal = () => (
+    <img
+        // 請確保 public 資料夾裡的這張圖本身是正方形的，效果最好
+        src="/image_1bd31c.png"
+        alt="大寶印章"
+        // w-8 h-8: 強制設定寬高為 32px
+        // object-cover: 關鍵屬性，讓圖片等比例填滿方框，多餘部分裁切，絕不變形
+        // flex-shrink-0: 防止被其他元素擠壓
+        className="w-8 h-8 rounded-md shadow-[0_2px_10px_rgba(185,28,28,0.4)] border border-red-900/20 object-cover flex-shrink-0 block"
+    />
+);
 
 export const LuckyDivinationModal: React.FC<Props> = ({ isOpen, onClose }) => {
     const [step, setStep] = useState<Step>('CATEGORY');
@@ -213,6 +279,7 @@ export const LuckyDivinationModal: React.FC<Props> = ({ isOpen, onClose }) => {
     const [bubbles, setBubbles] = useState<{val: number, x: number, y: number, scale: number, delay: number}[]>([]);
     const [finalContent, setFinalContent] = useState<string>('');
     const [finalLuck, setFinalLuck] = useState<string>('平');
+    const [finalKeyword, setFinalKeyword] = useState<string>('');
     const [isGeneratingImg, setIsGeneratingImg] = useState(false);
     const [isLoadingResult, setIsLoadingResult] = useState(false);
     const resultRef = useRef<HTMLDivElement>(null);
@@ -257,13 +324,29 @@ export const LuckyDivinationModal: React.FC<Props> = ({ isOpen, onClose }) => {
         if (step === 'RESULT' && result && selectedCat) {
             const fetchData = async () => {
                 setIsLoadingResult(true);
-                try { const data = await getDivinationResult(selectedCat, result.mingZhi, result.sihuaGan); if (data) { setFinalContent(data.content); setFinalLuck(data.luck); } else { setFinalContent("星象混沌，天機未顯。此時心緒尚不穩，建議靜待時機，改日誠心再占。"); setFinalLuck('無結果'); } } catch (e) { console.error("Fetch Error:", e); setFinalContent("連線異常，無法讀取星象資料。"); setFinalLuck('無結果'); } finally { setIsLoadingResult(false); }
+                try { 
+                    const data = await getDivinationResult(selectedCat, result.mingZhi, result.sihuaGan); 
+                    if (data) { 
+                        setFinalContent(data.content); 
+                        setFinalLuck(data.luck); 
+                        setFinalKeyword(getKeyword(selectedCat, data.luck));
+                    } else { 
+                        setFinalContent("星象混沌，天機未顯。此時心緒尚不穩，建議靜待時機，改日誠心再占。"); 
+                        setFinalLuck('無結果'); 
+                        setFinalKeyword('混沌');
+                    } 
+                } catch (e) { 
+                    console.error("Fetch Error:", e); 
+                    setFinalContent("連線異常，無法讀取星象資料。"); 
+                    setFinalLuck('無結果');
+                    setFinalKeyword('異常'); 
+                } finally { setIsLoadingResult(false); }
             };
             fetchData();
         }
     }, [step, result, selectedCat]);
 
-    const handleShare = async () => { if (!resultRef.current) return; setIsGeneratingImg(true); try { const blob = await toBlob(resultRef.current, { pixelRatio: 3, backgroundColor: '#09090b', width: 360, style: { height: 'auto', minHeight: '640px' } }); if (blob) { const link = document.createElement('a'); link.download = `紫微占卜-${selectedCat}-${new Date().getTime()}.png`; link.href = URL.createObjectURL(blob); link.click(); } } catch (e) { console.error(e); alert('圖片生成失敗，請稍後再試'); } finally { setIsGeneratingImg(false); } };
+    const handleShare = async () => { if (!resultRef.current) return; setIsGeneratingImg(true); try { const blob = await toBlob(resultRef.current, { pixelRatio: 3, backgroundColor: '#09090b', width: 380 }); if (blob) { const link = document.createElement('a'); link.download = `紫微占卜-${selectedCat}-${new Date().getTime()}.png`; link.href = URL.createObjectURL(blob); link.click(); } } catch (e) { console.error(e); alert('圖片生成失敗，請稍後再試'); } finally { setIsGeneratingImg(false); } };
 
     if (!isOpen) return null;
 
@@ -278,7 +361,7 @@ export const LuckyDivinationModal: React.FC<Props> = ({ isOpen, onClose }) => {
     return (
         <div className="fixed inset-0 z-[100] bg-slate-950 flex flex-col overflow-hidden text-white font-sans animate-in fade-in duration-300 h-[100dvh] touch-none pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
             <SmokeStyles />
-            <SacredStyles />
+            <GlobalStyles />
             
             {step !== 'BREATHING' && step !== 'RESULT' && (
                 <div className="p-4 flex justify-between items-center z-50 shrink-0">
@@ -343,33 +426,51 @@ export const LuckyDivinationModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 )}
                 
                 {step === 'RESULT' && result && (
-                    <div className="w-full h-full flex flex-col items-center animate-in fade-in duration-1000 relative p-2 pt-[calc(env(safe-area-inset-top)+0.5rem)] max-h-[92dvh]">
-                        <div ref={resultRef} className="flex-1 bg-[#09090b] w-full max-w-sm mx-auto rounded-2xl border border-white/10 p-5 flex flex-col items-center relative overflow-hidden shadow-2xl h-auto max-h-[92dvh]">
-                            <div className="absolute top-[-50px] left-[-50px] w-[200px] h-[200px] bg-purple-900/20 rounded-full blur-[80px]"></div>
-                            <div className="absolute bottom-[-50px] right-[-50px] w-[200px] h-[200px] bg-blue-900/20 rounded-full blur-[80px]"></div>
+                    <div className="w-full h-full flex flex-col items-center animate-in fade-in duration-1000 relative pt-[calc(env(safe-area-inset-top)+0.5rem)]">
+                        <div ref={resultRef} className="bg-[#09090b] bg-noise w-full max-w-sm mx-auto rounded-xl border border-white/20 flex flex-col items-center relative overflow-hidden shadow-2xl shrink-0" style={{aspectRatio: '9/16', maxHeight: '75vh'}}>
                             
-                            <div className="flex flex-col items-center mt-4 mb-2 relative z-10 shrink-0">
-                                <h2 className="text-2xl font-bold text-slate-300 tracking-widest flex items-center gap-2"><Sparkles size={20} className="text-amber-400" />{selectedCat}運勢<Sparkles size={20} className="text-amber-400" /></h2>
-                            </div>
-
-                            <div className="relative z-10 flex flex-col items-center shrink-0 w-full"><SacredJiaoScene3D luck={finalLuck} /></div>
+                            <div className="absolute top-[-50px] left-[-50px] w-[180px] h-[180px] bg-purple-900/30 rounded-full blur-[60px]"></div>
+                            <div className="absolute bottom-[-50px] right-[-50px] w-[180px] h-[180px] bg-blue-900/30 rounded-full blur-[60px]"></div>
                             
-                            <div className="flex-1 w-full px-5 pb-3 relative z-10 min-h-0 overflow-hidden flex flex-col">
-                                <div className="flex-1 bg-gradient-to-b from-white/5 to-transparent backdrop-blur-sm rounded-xl overflow-hidden flex flex-col">
-                                    <div className="flex-1 p-5 text-slate-300 text-sm leading-relaxed text-justify font-medium tracking-wide overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
-                                        {isLoadingResult ? <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-slate-500" /></div> : (finalContent || <span className="text-slate-500 italic flex items-center justify-center h-full">(暫無詳細說明文案)</span>)}
-                                    </div>
+                            <div className="flex flex-col items-center mt-6 z-10 w-full px-4">
+                                <div className="text-[10px] text-amber-500/70 font-serif-tc tracking-[0.2em] mb-1">{getArtisticDate()}</div>
+                                <div className="flex items-center gap-3">
+                                    <div className="h-[1px] w-8 bg-gradient-to-r from-transparent to-amber-500/50"></div>
+                                    <h2 className="text-xl font-bold text-slate-200 font-serif-tc tracking-widest">{selectedCat}運勢</h2>
+                                    <div className="h-[1px] w-8 bg-gradient-to-l from-transparent to-amber-500/50"></div>
                                 </div>
                             </div>
-                        </div>
-                        
-                        <div className="mt-2 shrink-0 px-1">
-                            <div className="flex items-start gap-2 text-[10px] text-slate-500 w-full justify-center"><AlertCircle size={12} className="shrink-0 mt-0.5" /><p>占卜結果僅供參考，若需準確分析請預約大寶老師諮詢。</p></div>
+
+                            <div className="relative z-10 w-full h-32 shrink-0 -my-2"><SacredJiaoScene3D luck={finalLuck} /></div>
+                            
+                            <div className="z-10 flex flex-col items-center justify-center shrink-0 mb-3">
+                                <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.5, duration: 0.8 }} className="text-4xl font-black text-white font-serif-tc keyword-glow tracking-[0.2em] ml-2">
+                                    {finalKeyword}
+                                </motion.div>
+                            </div>
+
+                            <div className="flex-1 w-full px-8 relative z-10 flex flex-col items-center">
+                                <div className="w-full text-slate-300 text-sm leading-7 text-justify font-serif-tc tracking-wide opacity-90 line-clamp-[8]">
+                                    {isLoadingResult ? <div className="flex justify-center py-4"><Loader2 className="animate-spin" /></div> : (finalContent || "暫無說明")}
+                                </div>
+                            </div>
+
+                            <div className="w-full px-6 py-5 z-10 flex items-end justify-between mt-auto">
+                                <div className="text-[10px] text-slate-600 font-serif-tc tracking-widest">zeweiapp.dabao.life</div>
+                                {/* 使用修改後的圖片印章 */}
+                                <Seal />
+                            </div>
                         </div>
 
-                        <div className="mt-2 flex flex-row w-full max-w-sm mx-auto gap-3 shrink-0 pb-1">
-                            <button onClick={handleShare} disabled={isGeneratingImg} className="flex-1 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-purple-900/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-70">{isGeneratingImg ? <Loader2 className="animate-spin" size={20}/> : <Share2 size={20} />}分享</button>
-                            <button onClick={reset} className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl font-bold hover:bg-slate-700 transition-all flex items-center justify-center gap-2"><X size={20} />關閉</button>
+                        <div className="flex-1 w-full max-w-sm mx-auto flex flex-col justify-end pb-safe px-4 gap-3 mt-4">
+                            <div className="flex gap-3 w-full">
+                                <button onClick={handleShare} disabled={isGeneratingImg} className="flex-1 py-3 bg-gradient-to-r from-purple-700 to-indigo-700 text-white rounded-full font-bold shadow-lg shadow-purple-900/30 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 font-serif-tc tracking-widest border border-white/10">{isGeneratingImg ? <Loader2 className="animate-spin" size={18}/> : <Share2 size={18} />} 結緣分享</button>
+                                <button onClick={reset} className="w-14 h-full bg-white/10 text-slate-300 rounded-full hover:bg-white/20 flex items-center justify-center border border-white/10"><X size={20} /></button>
+                            </div>
+                            <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-500 mb-2">
+                                <AlertCircle size={10} />
+                                <span>結果僅供參考，詳批請洽大寶老師</span>
+                            </div>
                         </div>
                     </div>
                 )}

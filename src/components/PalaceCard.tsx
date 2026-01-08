@@ -33,6 +33,18 @@ interface PalaceCardProps {
   divinationSiHua?: Record<string, '祿' | '權' | '科' | '忌'>;
 }
 
+// 輔助函式：取得顛倒宮位名稱
+const getReversedName = (name: string): string | null => {
+    if (!name) return null;
+    const lastChar = name.slice(-1);
+    const fullKey = Object.keys(PALACE_REVERSE_MAP).find(k => k.includes(lastChar));
+    if (!fullKey) return null;
+    const reversedFull = PALACE_REVERSE_MAP[fullKey];
+    const reversedSuffix = reversedFull.substring(0, 1);
+    const prefix = name.substring(0, name.length - 1);
+    return `${prefix}${reversedSuffix}`;
+};
+
 export const PalaceCard: React.FC<PalaceCardProps> = ({
   palace,
   daName,
@@ -50,7 +62,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   flyingStars,
   isTwinMode,
   isReverse,
-  reverseDaName,
+  reverseDaName, 
   reverseLiuName,
   divinationName, 
   externalSiHua,
@@ -62,6 +74,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   let hasExternalLu = false;
   let hasExternalJi = false;
   
+  // 檢查是否有外部傳入的四化 (例如流運飛星)
   if (externalSiHua) {
       [...palace.majorStars, ...palace.minorStars, ...palace.miscStars].forEach(star => {
           const type = externalSiHua[star.name];
@@ -70,16 +83,20 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
       });
   }
 
-  let bgColorClass = '';
+  // [修改] 視覺分流：邊框圖層 (Border Layer)
+  // 化忌優先顯示深灰框，化祿顯示紅框。若同時存在，這裡簡單處理優先顯示忌(警告)，
+  // 或是您可以選擇讓兩者並存 (但 UI 會較雜)，這裡採用「忌 > 祿」的優先級，或者用不同樣式。
+  // 依照您的需求：化忌->深灰框，化祿->紅框
+  let siHuaBorderClass = '';
   if (hasExternalJi) {
-      bgColorClass = 'bg-gray-200 ring-inset ring-2 ring-gray-400'; 
+      siHuaBorderClass = 'ring-inset ring-2 ring-gray-600'; // 深灰色內縮框
   } else if (hasExternalLu) {
-      bgColorClass = 'bg-red-50 ring-inset ring-2 ring-pink-300'; 
-  } else if (isLiuNianMing) {
-      bgColorClass = 'bg-blue-50';
+      siHuaBorderClass = 'ring-inset ring-2 ring-red-400'; // 紅色內縮框
   }
 
-  const borderClass = isBenMingMing ? 'border-2 border-red-600' : '';
+  // [修改] 移除所有背景色邏輯 (bgColorClass)，背景完全交給 PalaceGrid 的 Focus Highlight 控制
+  // [修改] 移除 isBenMingMing 的強制紅框，回歸平淡
+  
   const xiaoXianClass = isXiaoXianMingPalace
     ? 'shadow-[inset_0_0_15px_rgba(34,197,94,0.6)] border-green-400'
     : '';
@@ -98,7 +115,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
       baseName = PALACE_REVERSE_MAP[palace.name];
   }
 
-  const reverseBaseName = isReverse ? PALACE_REVERSE_MAP[baseName] : null;
+  const displayReverseBaseName = isReverse ? PALACE_REVERSE_MAP[baseName] : null;
 
   const renderExternalChips = () => {
     if (!externalSiHua) return null;
@@ -159,7 +176,8 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
 
   return (
     <div
-      className={`w-full h-full flex flex-col p-0.5 box-border relative overflow-visible ${bgColorClass} ${borderClass} ${xiaoXianClass} transition-colors duration-300`}
+      // [修改] 套用 siHuaBorderClass，並移除所有背景色 class，確保背景透明以顯示下層的高亮
+      className={`w-full h-full flex flex-col p-0.5 box-border relative overflow-visible ${siHuaBorderClass} ${xiaoXianClass} transition-colors duration-300`}
     >
       {renderExternalChips()}
       {renderInteractiveFlyingStars()}
@@ -229,19 +247,35 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
         title="點擊查看此宮位之飛化 (四化)"
       >
         <div className="flex flex-col-reverse items-end leading-tight pointer-events-none">
-          {/* [修正 2] 增加 pr-0.5 以對齊上方有 padding 的月/日標籤 */}
           <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right pr-0.5">
-              {reverseBaseName && <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none">{reverseBaseName}</span>}
+              {displayReverseBaseName && <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none">{displayReverseBaseName}</span>}
               <span className="text-[13px] font-bold text-red-600 whitespace-nowrap leading-none">{baseName}</span>
           </div>
-          {/* [修正 2] 增加 pr-0.5 */}
-          {daName && <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right pr-0.5">{isReverse && reverseDaName && <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none mb-[1px]">{reverseDaName}</span>}<span className="text-[13px] font-bold text-gray-500 whitespace-nowrap leading-none mb-[1px]">{daName}</span></div>}
-          {liuName && <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right pr-0.5">{isReverse && reverseLiuName && <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none mb-[1px]">{reverseLiuName}</span>}<span className="text-[13px] font-bold text-blue-600 whitespace-nowrap leading-none mb-[1px]">{liuName}</span></div>}
-          {xiaoName && <span className="text-[13px] font-bold text-green-600 whitespace-nowrap leading-none mb-[1px] pr-0.5">{xiaoName}</span>}
           
-          {/* [修正 1] 調整順序：先渲染 yueName (視覺在下)，再渲染 riName (視覺在上/最頂) */}
-          {yueName && <span className="text-[13px] font-bold text-amber-600 whitespace-nowrap leading-none mb-[1px] bg-white/80 px-0.5 rounded shadow-sm border border-amber-100">{yueName}</span>}
-          {riName && <span className="text-[13px] font-bold text-green-700 whitespace-nowrap leading-none mb-[1px] bg-white/80 px-0.5 rounded shadow-sm border border-green-100">{riName}</span>}
+          {daName && (
+              <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right pr-0.5">
+                  {isReverse && <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none mb-[1px]">{getReversedName(daName)}</span>}
+                  <span className="text-[13px] font-bold text-gray-500 whitespace-nowrap leading-none mb-[1px]">{daName}</span>
+              </div>
+          )}
+          
+          {liuName && (
+              <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right pr-0.5">
+                  {isReverse && <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none mb-[1px]">{getReversedName(liuName)}</span>}
+                  <span className="text-[13px] font-bold text-blue-600 whitespace-nowrap leading-none mb-[1px]">{liuName}</span>
+              </div>
+          )}
+          
+          {xiaoName && (
+              <span className="text-[13px] font-bold text-green-600 whitespace-nowrap leading-none mb-[1px] pr-0.5">{xiaoName}</span>
+          )}
+          
+          {yueName && (
+              <span className="text-[13px] font-bold text-amber-600 whitespace-nowrap leading-none mb-[1px] bg-white/80 px-0.5 rounded shadow-sm border border-amber-100">{yueName}</span>
+          )}
+          {riName && (
+              <span className="text-[13px] font-bold text-green-700 whitespace-nowrap leading-none mb-[1px] bg-white/80 px-0.5 rounded shadow-sm border border-green-100">{riName}</span>
+          )}
         
         </div>
         <div className="flex flex-col leading-none text-[15px] font-bold text-black mb-[2px] ml-1 pointer-events-none">
