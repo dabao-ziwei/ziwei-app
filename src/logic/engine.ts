@@ -318,6 +318,21 @@ export class ZiWeiEngine {
 
     this.addStar((11 - h + 12) % 12, '地空', 'minor');
     this.addStar((11 + h) % 12, '地劫', 'minor');
+
+    // [新增] 天馬 (依生月)
+    // 規則：
+    // 寅(1)、午(5)、戌(9) 月 -> 馬在申(8)
+    // 申(7)、子(11)、辰(3) 月 -> 馬在寅(2)
+    // 巳(4)、酉(8)、丑(12) 月 -> 馬在亥(11)
+    // 亥(10)、卯(2)、未(6) 月 -> 馬在巳(5)
+    let tianMaPos = 0;
+    const rem = m % 4; // 用月份除以 4 的餘數來分組
+    if (rem === 1) tianMaPos = 8; // 1, 5, 9 -> 申
+    else if (rem === 2) tianMaPos = 5; // 2, 6, 10 -> 巳
+    else if (rem === 3) tianMaPos = 2; // 3, 7, 11 -> 寅
+    else tianMaPos = 11; // 4, 8, 12 (餘0) -> 亥
+
+    this.addStar(tianMaPos, '天馬', 'minor');
   }
 
   private placeMiscStars() {

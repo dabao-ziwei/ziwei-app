@@ -65,6 +65,15 @@ const getCurrentDaLimitIndex = (chartData: any, engine: ZiWeiEngine) => {
     return 0; // 找不到則預設第一大限
 };
 
+// [新增] 獨立的時辰計算 helper
+const calcNextHour = (currentHour: number, delta: number) => {
+    const currentZhiIdx = Math.floor((currentHour + 1) / 2) % 12;
+    let nextZhiIdx = currentZhiIdx + delta;
+    if (nextZhiIdx < 0) nextZhiIdx = 11;
+    if (nextZhiIdx > 11) nextZhiIdx = 0;
+    return nextZhiIdx === 0 ? 0 : nextZhiIdx * 2;
+};
+
 export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -243,6 +252,24 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       }
   };
 
+  // [新增] 處理左側 (Client A) 時辰切換
+  const handleChangeHourA = (delta: number) => {
+      const newHour = calcNextHour(hourA, delta);
+      setHourA(newHour);
+      // 重置相關狀態
+      setDaSeqA(-1); setLiuYearA(null); setShowXiaoA(false);
+      setFlyingPalace(null); setActiveSide(null);
+  };
+
+  // [新增] 處理右側 (Client B) 時辰切換
+  const handleChangeHourB = (delta: number) => {
+      const newHour = calcNextHour(hourB, delta);
+      setHourB(newHour);
+      // 重置相關狀態
+      setDaSeqB(-1); setLiuYearB(null); setShowXiaoB(false);
+      setFlyingPalace(null); setActiveSide(null);
+  };
+
   const flyMapAtoB = useMemo(() => {
       if (activeSide !== 'A' || flyingPalace === null || !chartA) return undefined;
       const gan = chartA.palaces[flyingPalace].ganIndex;
@@ -254,6 +281,26 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       const gan = chartB.palaces[flyingPalace].ganIndex;
       return getSiHuaMap(gan);
   }, [activeSide, flyingPalace, chartB]);
+  
+  // [新增] 計算雙方真實時間 (Highlighter)
+  const currentRealTimeA = useMemo(() => {
+      const now = new Date();
+      const year = now.getFullYear();
+      if (!chartA) return undefined;
+      const virtualAge = year - chartA.lunarYear + 1;
+      const daSeq = daListA.findIndex(d => virtualAge >= d.startAge && virtualAge <= d.endAge);
+      return { year, daSeq: daSeq >= 0 ? daSeq : -1 };
+  }, [chartA, daListA]);
+
+  const currentRealTimeB = useMemo(() => {
+      const now = new Date();
+      const year = now.getFullYear();
+      if (!chartB) return undefined;
+      const virtualAge = year - chartB.lunarYear + 1;
+      const daSeq = daListB.findIndex(d => virtualAge >= d.startAge && virtualAge <= d.endAge);
+      return { year, daSeq: daSeq >= 0 ? daSeq : -1 };
+  }, [chartB, daListB]);
+
 
   if (!clientA || !clientB || !chartA || !chartB) {
       return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin"/></div>;
@@ -273,7 +320,8 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       engine: ZiWeiEngine,
       chart: any,
       liuYear: number | null,
-      source: 'A' | 'B'
+      source: 'A' | 'B',
+      realTime: { year: number; daSeq: number } | undefined
   ) => (
       <>
         <div className="h-12 bg-white border-t border-gray-200 flex overflow-x-auto scrollbar-hide shrink-0">
@@ -285,8 +333,9 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                             setLiuYear(null); 
                             if(isLocked) targetLiuYearSetter(null); 
                         }}
-                        className={`px-1 py-1 text-[10px] border-r border-gray-100 whitespace-nowrap flex-1 min-w-[50px] flex flex-col items-center justify-center ${daSeq === limit.seq ? 'bg-gray-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+                        className={`px-1 py-1 text-[10px] border-r border-gray-100 whitespace-nowrap flex-1 min-w-[50px] flex flex-col items-center justify-center relative ${daSeq === limit.seq ? 'bg-gray-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
                     >
+                        {realTime && realTime.daSeq === limit.seq && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
                         <span>{limit.name}</span>
                         <span className="text-[9px] opacity-80 scale-90">{limit.label}</span>
                     </button>
@@ -303,8 +352,9 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                             setLiuYear(newYear);
                             syncTime(source, newYear);
                         }}
-                        className={`px-1 text-[11px] font-medium border-r border-blue-200 whitespace-nowrap flex-1 min-w-[40px] ${liuYear === item.year ? 'bg-blue-600 text-white' : 'text-blue-600 hover:bg-blue-100'}`}
+                        className={`px-1 text-[11px] font-medium border-r border-blue-200 whitespace-nowrap flex-1 min-w-[40px] relative ${liuYear === item.year ? 'bg-blue-600 text-white' : 'text-blue-600 hover:bg-blue-100'}`}
                     >
+                        {realTime && realTime.year === item.year && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
                         {item.label}
                     </button>
                 ))}
@@ -374,16 +424,18 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         onHistoryBack={dummyNav}
                         onNavigate={dummyNav}
                         onCompatibility={dummyNav}
-                        onChangeHour={() => {}}
-                        onResetTime={() => {}}
+                        // [修改] 綁定 A 的切換函式
+                        onChangeHour={handleChangeHourA}
+                        onResetTime={() => setHourA(clientA.birthHour)}
                         onToggleTwin={() => setIsTwinA(!isTwinA)}
                         onToggleInverted={() => setIsRevA(!isRevA)}
                         onToggleSmallLimit={() => setShowXiaoA(!showXiaoA)}
                         onPalaceClick={(idx) => handlePalaceClick('A', idx)}
                         onTriggerClick={() => {}}
+                        currentRealTime={currentRealTimeA}
                     />
                 </div>
-                {renderControlBar(daListA, daSeqA, setDaSeqA, setLiuYearA, setLiuYearB, engineA!, chartA, liuYearA, 'A')}
+                {renderControlBar(daListA, daSeqA, setDaSeqA, setLiuYearA, setLiuYearB, engineA!, chartA, liuYearA, 'A', currentRealTimeA)}
             </div>
 
             {/* Right Chart (B) */}
@@ -420,16 +472,18 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         onHistoryBack={dummyNav}
                         onNavigate={dummyNav}
                         onCompatibility={dummyNav}
-                        onChangeHour={() => {}}
-                        onResetTime={() => {}}
+                        // [修改] 綁定 B 的切換函式
+                        onChangeHour={handleChangeHourB}
+                        onResetTime={() => setHourB(clientB.birthHour)}
                         onToggleTwin={() => setIsTwinB(!isTwinB)}
                         onToggleInverted={() => setIsRevB(!isRevB)}
                         onToggleSmallLimit={() => setShowXiaoB(!showXiaoB)}
                         onPalaceClick={(idx) => handlePalaceClick('B', idx)}
                         onTriggerClick={() => {}}
+                        currentRealTime={currentRealTimeB}
                     />
                 </div>
-                {renderControlBar(daListB, daSeqB, setDaSeqB, setLiuYearB, setLiuYearA, engineB!, chartB, liuYearB, 'B')}
+                {renderControlBar(daListB, daSeqB, setDaSeqB, setLiuYearB, setLiuYearA, engineB!, chartB, liuYearB, 'B', currentRealTimeB)}
             </div>
 
         </div>

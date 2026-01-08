@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Users, Repeat, Clock, ArrowLeft, ChevronRight, Eye, RefreshCw, X, Calendar, Sun, Lock } from 'lucide-react';
+import { Users, Repeat, Clock, ArrowLeft, ChevronRight, Eye, RefreshCw, X, Calendar, Sun, Lock, ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import type { Client, Relationship } from '../db';
@@ -63,7 +63,6 @@ interface CenterInfoBoardProps {
       twin: PermissionState;
       inverted: PermissionState;
       xiao: PermissionState;
-      // [新增]
       liu_month: PermissionState;
       liu_day: PermissionState;
   };
@@ -133,6 +132,57 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
         if (!liuNianYear) return 0;
         return LunarYear.fromYear(liuNianYear).getLeapMonth();
     }, [liuNianYear]);
+
+    const handlePrevMonth = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!onSetLiuMonth || permissionFlags?.liu_month === 'disabled') return;
+        
+        if (liuMonth === null || liuMonth === undefined) {
+            onSetLiuMonth(1, false);
+            return;
+        }
+
+        let nextM = liuMonth;
+        let nextLeap = isLiuMonthLeap || false;
+
+        if (nextLeap) {
+            nextLeap = false;
+        } else {
+            let prevNum = nextM - 1;
+            if (prevNum <= 0) prevNum = 12;
+
+            if (leapMonthOfLiuNian === prevNum) {
+                nextM = prevNum;
+                nextLeap = true;
+            } else {
+                nextM = prevNum;
+                nextLeap = false;
+            }
+        }
+        onSetLiuMonth(nextM, nextLeap);
+    };
+
+    const handleNextMonth = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!onSetLiuMonth || permissionFlags?.liu_month === 'disabled') return;
+
+        if (liuMonth === null || liuMonth === undefined) {
+            onSetLiuMonth(1, false);
+            return;
+        }
+
+        let nextM = liuMonth;
+        let nextLeap = isLiuMonthLeap || false;
+
+        if (!nextLeap && leapMonthOfLiuNian === nextM) {
+            nextLeap = true;
+        } else {
+            nextM = nextM + 1;
+            nextLeap = false;
+            if (nextM > 12) nextM = 1;
+        }
+        onSetLiuMonth(nextM, nextLeap);
+    };
 
     const { nodes, lines } = useMemo(() => {
         if (!hasRelations) return { nodes: [], lines: [] };
@@ -230,7 +280,8 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
         <div className="col-span-2 row-span-2 flex z-10 relative overflow-hidden p-0.5 h-full w-full" onClick={closePickers}>
             <div className={`flex w-full h-full bg-white`}>
                 
-                <div className={`h-full flex flex-col p-1 border-r border-gray-100 bg-white z-20 relative transition-all duration-300 ${hasRelations ? 'basis-[35%] shrink-0' : 'w-full'}`}>
+                {/* [修正] 左側面板：使用 z-50 確保在最上層，且 relative */}
+                <div className={`h-full flex flex-col p-1 border-r border-gray-100 bg-white z-[100] relative transition-all duration-300 ${hasRelations ? 'basis-[35%] shrink-0' : 'w-full'}`}>
                     {historyStack.length > 0 && (
                           <div className="absolute top-0 left-0 w-full px-2 py-1 z-50 bg-white/90 backdrop-blur-sm border-b border-gray-100 flex items-center gap-1 overflow-hidden">
                             <button onClick={onHistoryBack} className="flex items-center text-gray-500 hover:text-blue-600 transition-colors shrink-0"><ArrowLeft size={14} /></button>
@@ -245,10 +296,13 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                     
                     <div className={`${historyStack.length > 0 ? 'mt-6' : 'mt-1'}`}></div>
 
-                    <div className="flex justify-between items-center px-1 mt-1 shrink-0">
-                        <button onClick={() => onChangeHour(-1)} className="text-gray-400 hover:text-gray-800 font-bold text-base select-none p-1">&lt;</button>
-                        <div onClick={isTimeModified ? onResetTime : undefined} className={`text-sm font-bold select-none cursor-pointer ${isTimeModified ? 'text-blue-600 underline' : 'text-gray-700'}`}>{currentHourZhi}時</div>
-                        <button onClick={() => onChangeHour(1)} className="text-gray-400 hover:text-gray-800 font-bold text-base select-none p-1">&gt;</button>
+                    {/* [修正] 時間控制區：z-[200] 確保在面板內也是最上層 */}
+                    <div className="flex justify-between items-center px-1 mt-1 shrink-0 relative z-[200]">
+                        <button onClick={(e) => { e.stopPropagation(); onChangeHour(-1); }} className="text-gray-400 hover:text-gray-800 font-bold text-base select-none p-1 cursor-pointer bg-transparent">&lt;</button>
+                        
+                        <div onClick={(e) => { e.stopPropagation(); if(isTimeModified) onResetTime(); }} className={`text-sm font-bold select-none cursor-pointer ${isTimeModified ? 'text-blue-600 underline' : 'text-gray-700'}`}>{currentHourZhi}時</div>
+                        
+                        <button onClick={(e) => { e.stopPropagation(); onChangeHour(1); }} className="text-gray-400 hover:text-gray-800 font-bold text-base select-none p-1 cursor-pointer bg-transparent">&gt;</button>
                     </div>
 
                     <div className="flex-1 flex flex-col items-center justify-start pt-2 text-center gap-0.5 min-h-0 overflow-hidden">
@@ -292,7 +346,8 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                     </>
                                 )}
                                 
-                                {permissionFlags?.inverted !== 'hidden' && (
+                                {/* [修改] 顛倒盤按鈕邏輯：小限開啟或有流月時不顯示 */}
+                                {permissionFlags?.inverted !== 'hidden' && !showSmallLimit && liuMonth === null && (
                                     <button 
                                         onClick={onToggleInverted} 
                                         disabled={permissionFlags?.inverted === 'disabled'}
@@ -320,32 +375,56 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                 )}
                             </div>
 
-                            {/* 第二列：時間導航 (流月、流日) - 依權限控制 */}
+                            {/* 第二列：時間導航 (流月、流日) */}
                             {isLiuNian && (
                                 <div className="hidden md:flex justify-center gap-1 w-full border-t border-gray-200 pt-1">
                                     
-                                    {/* 流月按鈕 */}
+                                    {/* 流月按鈕組 */}
                                     {permissionFlags?.liu_month !== 'hidden' && (
                                         <div className="relative flex-1">
-                                            <button 
-                                                onClick={(e) => { 
-                                                    e.stopPropagation(); 
-                                                    if (permissionFlags?.liu_month !== 'disabled') {
-                                                        closePickers(); 
-                                                        setIsMonthPickerOpen(!isMonthPickerOpen); 
-                                                    }
-                                                }}
-                                                disabled={permissionFlags?.liu_month === 'disabled'}
-                                                className={`w-full py-1 text-[10px] font-bold rounded transition-colors flex items-center justify-center gap-1 
-                                                    ${liuMonth !== null ? 'bg-amber-500 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}
-                                                    ${permissionFlags?.liu_month === 'disabled' ? 'opacity-50 cursor-not-allowed' : ''}
-                                                `}
-                                                title={permissionFlags?.liu_month === 'disabled' ? '權限已到期' : ''}
-                                            >
-                                                {permissionFlags?.liu_month === 'disabled' ? <Lock size={12} /> : <Calendar size={12} />}
-                                                {liuMonth !== null ? `${NUM_CN[liuMonth-1]}月 ${isLiuMonthLeap ? '(閏)' : ''}` : '流月'}
-                                                {liuMonth !== null && liuMonthGan !== undefined && <span className="text-[9px] opacity-90 scale-90 ml-0.5 font-mono">({GAN[liuMonthGan]})</span>}
-                                            </button>
+                                            <div className={`flex items-center rounded overflow-hidden shadow-sm transition-colors
+                                                ${liuMonth !== null ? 'bg-amber-500' : 'bg-white border border-gray-200'}
+                                                ${permissionFlags?.liu_month === 'disabled' ? 'opacity-50 cursor-not-allowed' : ''}
+                                            `}>
+                                                <button 
+                                                    onClick={handlePrevMonth}
+                                                    disabled={permissionFlags?.liu_month === 'disabled'}
+                                                    className={`px-1 py-1 h-full flex items-center justify-center hover:bg-black/10 active:bg-black/20 transition-colors cursor-pointer
+                                                        ${liuMonth !== null ? 'text-white' : 'text-gray-400'}
+                                                    `}
+                                                >
+                                                    <ChevronLeftIcon size={12} />
+                                                </button>
+
+                                                <button 
+                                                    onClick={(e) => { 
+                                                        e.stopPropagation(); 
+                                                        if (permissionFlags?.liu_month !== 'disabled') {
+                                                            closePickers(); 
+                                                            setIsMonthPickerOpen(!isMonthPickerOpen); 
+                                                        }
+                                                    }}
+                                                    disabled={permissionFlags?.liu_month === 'disabled'}
+                                                    className={`flex-1 py-1 text-[10px] font-bold flex items-center justify-center gap-1 h-full hover:bg-black/5 transition-colors
+                                                        ${liuMonth !== null ? 'text-white' : 'text-gray-500'}
+                                                    `}
+                                                    title={permissionFlags?.liu_month === 'disabled' ? '權限已到期' : ''}
+                                                >
+                                                    {permissionFlags?.liu_month === 'disabled' ? <Lock size={12} /> : <Calendar size={12} />}
+                                                    {liuMonth !== null ? `${NUM_CN[liuMonth-1]}月 ${isLiuMonthLeap ? '(閏)' : ''}` : '流月'}
+                                                    {liuMonth !== null && liuMonthGan !== undefined && <span className="text-[9px] opacity-90 scale-90 ml-0.5 font-mono">({GAN[liuMonthGan]})</span>}
+                                                </button>
+
+                                                <button 
+                                                    onClick={handleNextMonth}
+                                                    disabled={permissionFlags?.liu_month === 'disabled'}
+                                                    className={`px-1 py-1 h-full flex items-center justify-center hover:bg-black/10 active:bg-black/20 transition-colors cursor-pointer
+                                                        ${liuMonth !== null ? 'text-white' : 'text-gray-400'}
+                                                    `}
+                                                >
+                                                    <ChevronRightIcon size={12} />
+                                                </button>
+                                            </div>
 
                                             {isMonthPickerOpen && onSetLiuMonth && (
                                                 <div className="absolute bottom-full left-0 mb-2 w-48 bg-white border border-amber-200 rounded-lg shadow-xl p-2 z-[60] grid grid-cols-3 gap-1 animate-in slide-in-from-bottom-2 fade-in duration-200" onClick={e => e.stopPropagation()}>
@@ -438,7 +517,7 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                 </div> 
 
                 {hasRelations && (
-                    <div className="hidden md:block flex-1 h-full relative bg-white border-l border-gray-100 overflow-hidden cursor-grab active:cursor-grabbing" onClick={() => setSelectedNodeId(null)}>
+                    <div className="hidden md:block flex-1 h-full relative bg-white border-l border-gray-100 overflow-hidden cursor-grab active:cursor-grabbing z-0" onClick={() => setSelectedNodeId(null)}>
                           <div className="absolute bottom-2 right-2 text-[10px] text-gray-400 pointer-events-none select-none z-0">可拖曳移動畫布</div>
                           <motion.div drag className="relative w-full h-full flex items-center justify-center">
                             <motion.div className="relative" style={{ x: 0, y: 0 }}>
