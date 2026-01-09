@@ -13,7 +13,7 @@ import { getFeaturePermission } from '../logic/permissions';
 
 const SUPER_ADMIN_EMAIL = 'stephenwu.0926@gmail.com';
 
-// --- 新手引導精靈元件 (Wizard) - [完整程式碼] ---
+// --- 新手引導精靈元件 (Wizard) ---
 interface WizardProps {
     userProfile: UserProfile | null;
     onComplete: (data: any) => Promise<void>;
@@ -115,7 +115,6 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, currentVal: any, prevRef?: React.RefObject<HTMLInputElement>) => {
          if (e.key === 'Backspace' && (currentVal === '' || currentVal === 0) && prevRef?.current) {
-             // e.preventDefault(); // 有時候會阻擋正常刪除，視情況開啟
              prevRef.current.focus();
          }
     };
@@ -444,66 +443,70 @@ export const Dashboard: React.FC = () => {
 
         {/* Header - [修改] 透明背景，文字改白，加入右側導航按鈕 (電腦版) */}
         <header className="shrink-0 px-6 py-4 flex justify-between items-center z-50">
-            <div className="relative">
-                {/* 漢堡選單：保留給管理功能，但隱藏主要入口 */}
-                <button 
-                    onClick={() => setIsMenuOpen(!isMenuOpen)}
-                    className="w-10 h-10 bg-white/10 hover:bg-white/20 text-slate-300 transition-colors rounded-xl flex items-center justify-center backdrop-blur-md"
-                >
-                    <Menu size={20} />
-                </button>
-                {isMenuOpen && (
-                    <div className="absolute top-12 left-0 w-60 bg-slate-900/95 rounded-xl shadow-2xl border border-slate-700 overflow-hidden animate-in fade-in slide-in-from-top-2 z-50 backdrop-blur-xl">
-                        {userProfile?.role === 'admin' && (
+            {/* 左側容器：包含漢堡選單 與 標題 */}
+            <div className="flex items-center gap-4">
+                <div className="relative">
+                    {/* 漢堡選單：保留給管理功能，但隱藏主要入口 */}
+                    <button 
+                        onClick={() => setIsMenuOpen(!isMenuOpen)}
+                        className="w-10 h-10 bg-white/10 hover:bg-white/20 text-slate-300 transition-colors rounded-xl flex items-center justify-center backdrop-blur-md"
+                    >
+                        <Menu size={20} />
+                    </button>
+                    {isMenuOpen && (
+                        <div className="absolute top-12 left-0 w-60 bg-slate-900/95 rounded-xl shadow-2xl border border-slate-700 overflow-hidden animate-in fade-in slide-in-from-top-2 z-50 backdrop-blur-xl">
+                            {userProfile?.role === 'admin' && (
+                                <button 
+                                    onClick={() => { setIsUserMgmtOpen(true); setIsMenuOpen(false); }}
+                                    className="w-full text-left px-4 py-3 hover:bg-white/5 flex items-center gap-2 text-slate-300 font-medium"
+                                >
+                                    <UserCog size={16} /> 使用者管理
+                                </button>
+                            )}
+
+                            {(userProfile?.role === 'admin' || userProfile?.email === SUPER_ADMIN_EMAIL) && (
+                                <button
+                                    onClick={() => {
+                                        navigate('/admin');
+                                        setIsMenuOpen(false);
+                                    }}
+                                    className="w-full text-left px-4 py-3 hover:bg-white/5 flex items-center gap-2 text-slate-300 font-medium"
+                                >
+                                    <Database size={16} /> 占卜文案矩陣
+                                </button>
+                            )}
+
+                            {userProfile?.email === SUPER_ADMIN_EMAIL && (
+                                <button 
+                                    onClick={() => { 
+                                        setForceOnboarding(true); 
+                                        setIsMenuOpen(false); 
+                                    }}
+                                    className="w-full text-left px-4 py-3 hover:bg-amber-500/10 flex items-center gap-2 text-amber-500 font-medium border-t border-slate-800"
+                                >
+                                    <PlusCircle size={16} /> [測試] 新手引導流程
+                                </button>
+                            )}
+
                             <button 
-                                onClick={() => { setIsUserMgmtOpen(true); setIsMenuOpen(false); }}
-                                className="w-full text-left px-4 py-3 hover:bg-white/5 flex items-center gap-2 text-slate-300 font-medium"
+                                onClick={() => supabase.auth.signOut()}
+                                className="w-full text-left px-4 py-3 hover:bg-red-500/10 flex items-center gap-2 text-red-400 font-medium border-t border-slate-800"
                             >
-                                <UserCog size={16} /> 使用者管理
+                                <LogOut size={16} /> 登出系統
                             </button>
-                        )}
+                        </div>
+                    )}
+                    {isMenuOpen && <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)}></div>}
+                </div>
 
-                        {(userProfile?.role === 'admin' || userProfile?.email === SUPER_ADMIN_EMAIL) && (
-                            <button
-                                onClick={() => {
-                                    navigate('/admin');
-                                    setIsMenuOpen(false);
-                                }}
-                                className="w-full text-left px-4 py-3 hover:bg-white/5 flex items-center gap-2 text-slate-300 font-medium"
-                            >
-                                <Database size={16} /> 占卜文案矩陣
-                            </button>
-                        )}
-
-                        {userProfile?.email === SUPER_ADMIN_EMAIL && (
-                            <button 
-                                onClick={() => { 
-                                    setForceOnboarding(true); 
-                                    setIsMenuOpen(false); 
-                                }}
-                                className="w-full text-left px-4 py-3 hover:bg-amber-500/10 flex items-center gap-2 text-amber-500 font-medium border-t border-slate-800"
-                            >
-                                <PlusCircle size={16} /> [測試] 新手引導流程
-                            </button>
-                        )}
-
-                        <button 
-                            onClick={() => supabase.auth.signOut()}
-                            className="w-full text-left px-4 py-3 hover:bg-red-500/10 flex items-center gap-2 text-red-400 font-medium border-t border-slate-800"
-                        >
-                            <LogOut size={16} /> 登出系統
-                        </button>
-                    </div>
-                )}
-                {isMenuOpen && <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)}></div>}
+                {/* 標題 - 在手機與電腦版皆顯示，並位於漢堡選單右側 */}
+                <h1 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-slate-200 to-slate-400 tracking-widest">
+                    大寶 | 紫微斗數
+                </h1>
             </div>
 
+            {/* 右側容器：電腦版導航按鈕 */}
             <div className="flex items-center gap-4">
-                <h1 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-slate-200 to-slate-400 tracking-widest hidden md:block">
-                    大寶紫微
-                </h1>
-
-                {/* [新增] 電腦版導航按鈕 (Header 右側) */}
                 <div className="hidden md:flex gap-3">
                     <button 
                         onClick={() => navigate('/list')}
@@ -524,8 +527,6 @@ export const Dashboard: React.FC = () => {
                     </button>
                 </div>
             </div>
-            
-            <div className="w-10 md:hidden"></div> 
         </header>
 
         <main className="flex-1 w-full overflow-y-auto relative z-10">
