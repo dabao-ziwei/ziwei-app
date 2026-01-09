@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom'; // [新增] 引入 createPortal
 import { toBlob } from 'html-to-image';
 import { type Client, type UserProfile } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
@@ -189,11 +190,13 @@ const JellyBarChart = ({ data, baseScore, isShareMode, containerRef }: { data: a
     );
 };
 
-// 分享 Modal
+// 分享 Modal - [修正] 改用 createPortal 渲染到 body 層級，解決 z-index 被蓋住的問題
 interface SharePreviewModalProps { isOpen: boolean; onClose: () => void; imageUrl: string | null; onDownload: () => void; onSystemShare: () => void; }
 const SharePreviewModal: React.FC<SharePreviewModalProps> = ({ isOpen, onClose, imageUrl, onDownload, onSystemShare }) => {
     if (!isOpen || !imageUrl) return null;
-    return (
+    
+    // 使用 Portal 將 Modal 渲染到 document.body
+    return createPortal(
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
             <div className="bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col relative border border-slate-700">
                 <div className="flex justify-between items-center p-4 border-b border-slate-700">
@@ -206,7 +209,8 @@ const SharePreviewModal: React.FC<SharePreviewModalProps> = ({ isOpen, onClose, 
                     {navigator.share && (<button onClick={onSystemShare} className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold flex items-center justify-center gap-2 transition-all border border-slate-700"><Smartphone size={18} /> 呼叫系統分享 (手機用)</button>)}
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body // 指定掛載點
     );
 };
 
@@ -760,7 +764,7 @@ export const FortuneWidget: React.FC<FortuneWidgetProps> = ({ userProfile, clien
 
                     <div className={`relative flex-1 w-full flex flex-col z-10`}>
                         
-                        {/* 手機版：果凍圖 - [修正] 分享模式下強制顯示果凍圖 */}
+                        {/* 手機版：果凍圖 */}
                         <div className="w-full flex flex-col items-center mb-4">
                              {/* 若在生成分享圖，不管 mode 為何，都強制渲染 JellyChart (避免一週運勢模式下分享時圖表空白) */}
                              {(mode === 'daily' || isGeneratingShare) ? (
@@ -776,7 +780,6 @@ export const FortuneWidget: React.FC<FortuneWidgetProps> = ({ userProfile, clien
                         {isGeneratingShare && (
                             <div className="w-full mt-4 space-y-2">
                                 <div className="text-center text-xs text-slate-400 mb-2 font-mono">BASE ENERGY: {baseScore}</div>
-                                {/* [已移除] luckyTips 文字行 */}
                                 <div className="mt-4 flex items-center justify-center gap-2 text-[10px] text-amber-200/30 font-mono tracking-[0.2em] uppercase">
                                     <Sparkles size={8} className="text-amber-500/40" />
                                     <span>{WEBSITE_URL}</span>
@@ -798,8 +801,31 @@ export const FortuneWidget: React.FC<FortuneWidgetProps> = ({ userProfile, clien
 
             <SharePreviewModal isOpen={!!shareImageUrl} onClose={() => { setShareImageUrl(null); setShareBlob(null); }} imageUrl={shareImageUrl} onDownload={handleDownloadImage} onSystemShare={handleSystemShare} />
             
+            {/* [補回] Debug Console */}
             {showDebug && isSuperAdmin && (
-                <div className="mt-10 p-4 bg-black text-green-500 font-mono text-xs w-full overflow-x-auto">Debug Mode Active</div>
+                <div className="relative mt-4 z-50 bg-[#020617]/95 border border-green-500/30 backdrop-blur-md rounded-xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-4 w-full max-w-4xl">
+                    <div className="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-700">
+                        <div className="flex items-center gap-2 text-green-400"><Terminal size={14} /><span className="text-xs font-mono font-bold">DEV_CONSOLE</span></div>
+                        <button onClick={() => setShowDebug(false)} className="text-slate-400 hover:text-white"><X size={14} /></button>
+                    </div>
+                    <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+                         <div className="flex flex-col gap-4">
+                            <DebugLogBlock title="Time Params" score={0} logs={[dailyFortune.devInfo.lunarDateStr, `流年:${dailyFortune.devInfo.flowYearZhi}`, `流月:${dailyFortune.devInfo.flowMonthZhi}`, `流日:${dailyFortune.devInfo.flowDayZhi}`]} />
+                            <DebugLogBlock title="Base Score" score={dailyFortune.devInfo.baseScore} logs={dailyFortune.devInfo.formulas.base} />
+                        </div>
+                        <div className="flex flex-col gap-4">
+                            <DebugLogBlock title="Work" score={dailyFortune.scores.self} logs={dailyFortune.devInfo.formulas.self} />
+                            <DebugLogBlock title="Wealth" score={dailyFortune.scores.wealth} logs={dailyFortune.devInfo.formulas.wealth} />
+                        </div>
+                        <div className="flex flex-col gap-4">
+                            <DebugLogBlock title="Social" score={dailyFortune.scores.social} logs={dailyFortune.devInfo.formulas.social} />
+                            <DebugLogBlock title="Travel" score={dailyFortune.scores.travel} logs={dailyFortune.devInfo.formulas.travel} />
+                        </div>
+                        <div className="flex flex-col gap-4">
+                            <DebugLogBlock title="Love" score={dailyFortune.scores.love} logs={dailyFortune.devInfo.formulas.love} />
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );
