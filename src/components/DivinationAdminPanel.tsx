@@ -125,12 +125,7 @@ export const DivinationAdminPanel: React.FC = () => {
         await deleteDivinationContent(cat, zhi, gan);
     };
 
-    // ESC 關閉
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setEditingKey(null); };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, []);
+    // [已移除] ESC 關閉視窗的 useEffect 監聽器
 
     const progress = useMemo(() => {
         const total = ZHI.length * GAN.length;
@@ -261,7 +256,7 @@ export const DivinationAdminPanel: React.FC = () => {
                         <div className="flex justify-between items-center shrink-0 pt-4 border-t border-gray-100">
                             {db[editingKey] ? (<button onClick={handleDelete} className="flex items-center gap-2 text-red-500 hover:text-red-700 hover:bg-red-50 px-4 py-2 rounded-lg transition-colors text-sm font-bold"><Trash2 size={18} /> 刪除</button>) : (<div></div>)}
                             <div className="flex gap-3">
-                                <button onClick={() => setEditingKey(null)} className="px-6 py-2.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors font-medium">取消 (Esc)</button>
+                                <button onClick={() => setEditingKey(null)} className="px-6 py-2.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors font-medium">取消</button>
                                 <button onClick={handleSave} className="px-8 py-2.5 rounded-lg bg-purple-600 text-white font-bold hover:bg-purple-700 hover:shadow-lg hover:shadow-purple-200 transition-all flex items-center gap-2"><Save size={18} /> 儲存文案</button>
                             </div>
                         </div>
