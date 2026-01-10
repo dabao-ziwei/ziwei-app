@@ -125,8 +125,6 @@ export const DivinationAdminPanel: React.FC = () => {
         await deleteDivinationContent(cat, zhi, gan);
     };
 
-    // [已移除] ESC 關閉視窗的 useEffect 監聽器
-
     const progress = useMemo(() => {
         const total = ZHI.length * GAN.length;
         const currentCount = Object.keys(db).filter(k => k.startsWith(activeCat)).length;
@@ -203,22 +201,22 @@ export const DivinationAdminPanel: React.FC = () => {
                                 </div>
                                 {ZHI.map(zhi => (
                                     <div key={zhi} className="grid grid-cols-[80px_repeat(10,1fr)] gap-3 mb-3">
-                                        <div className="sticky left-0 z-20 flex items-center justify-center bg-gray-100 rounded-lg text-gray-600 font-bold border border-gray-200 h-20 shadow-sm">{zhi}</div>
-                                        {GAN.map(gan => {
-                                            const key = `${activeCat}-${zhi}-${gan}`;
-                                            const item = db[key];
-                                            const hasContent = !!item;
-                                            return (
-                                                <button key={key} onClick={() => handleCellClick(zhi, gan)} className={`relative group h-20 rounded-xl border-2 transition-all duration-200 flex flex-col items-center justify-center p-2 ${hasContent ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-400 hover:shadow-md hover:-translate-y-1' : 'bg-white border-dashed border-gray-200 hover:border-purple-300 hover:bg-purple-50/10'}`}>
-                                                    {hasContent ? (
-                                                        <div className="text-emerald-500 icon-glow relative">
-                                                            <CheckCircle size={28} strokeWidth={2.5} />
-                                                            <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${getLuckColor(item.luck)}`} title={item.luck}></div>
-                                                        </div>
-                                                    ) : (<div className="text-gray-200 group-hover:text-purple-400 transition-colors"><Plus size={24} /></div>)}
-                                                </button>
-                                            );
-                                        })}
+                                            <div className="sticky left-0 z-20 flex items-center justify-center bg-gray-100 rounded-lg text-gray-600 font-bold border border-gray-200 h-20 shadow-sm">{zhi}</div>
+                                            {GAN.map(gan => {
+                                                const key = `${activeCat}-${zhi}-${gan}`;
+                                                const item = db[key];
+                                                const hasContent = !!item;
+                                                return (
+                                                    <button key={key} onClick={() => handleCellClick(zhi, gan)} className={`relative group h-20 rounded-xl border-2 transition-all duration-200 flex flex-col items-center justify-center p-2 ${hasContent ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-400 hover:shadow-md hover:-translate-y-1' : 'bg-white border-dashed border-gray-200 hover:border-purple-300 hover:bg-purple-50/10'}`}>
+                                                        {hasContent ? (
+                                                            <div className="text-emerald-500 icon-glow relative">
+                                                                <CheckCircle size={28} strokeWidth={2.5} />
+                                                                <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${getLuckColor(item.luck)}`} title={item.luck}></div>
+                                                            </div>
+                                                        ) : (<div className="text-gray-200 group-hover:text-purple-400 transition-colors"><Plus size={24} /></div>)}
+                                                    </button>
+                                                );
+                                            })}
                                     </div>
                                 ))}
                             </div>
