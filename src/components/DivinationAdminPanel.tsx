@@ -125,12 +125,7 @@ export const DivinationAdminPanel: React.FC = () => {
         await deleteDivinationContent(cat, zhi, gan);
     };
 
-    // ESC 關閉
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setEditingKey(null); };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, []);
+    // [已修正] 移除 ESC 關閉視窗的監聽器
 
     const progress = useMemo(() => {
         const total = ZHI.length * GAN.length;
@@ -208,22 +203,22 @@ export const DivinationAdminPanel: React.FC = () => {
                                 </div>
                                 {ZHI.map(zhi => (
                                     <div key={zhi} className="grid grid-cols-[80px_repeat(10,1fr)] gap-3 mb-3">
-                                        <div className="sticky left-0 z-20 flex items-center justify-center bg-gray-100 rounded-lg text-gray-600 font-bold border border-gray-200 h-20 shadow-sm">{zhi}</div>
-                                        {GAN.map(gan => {
-                                            const key = `${activeCat}-${zhi}-${gan}`;
-                                            const item = db[key];
-                                            const hasContent = !!item;
-                                            return (
-                                                <button key={key} onClick={() => handleCellClick(zhi, gan)} className={`relative group h-20 rounded-xl border-2 transition-all duration-200 flex flex-col items-center justify-center p-2 ${hasContent ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-400 hover:shadow-md hover:-translate-y-1' : 'bg-white border-dashed border-gray-200 hover:border-purple-300 hover:bg-purple-50/10'}`}>
-                                                    {hasContent ? (
-                                                        <div className="text-emerald-500 icon-glow relative">
-                                                            <CheckCircle size={28} strokeWidth={2.5} />
-                                                            <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${getLuckColor(item.luck)}`} title={item.luck}></div>
-                                                        </div>
-                                                    ) : (<div className="text-gray-200 group-hover:text-purple-400 transition-colors"><Plus size={24} /></div>)}
-                                                </button>
-                                            );
-                                        })}
+                                            <div className="sticky left-0 z-20 flex items-center justify-center bg-gray-100 rounded-lg text-gray-600 font-bold border border-gray-200 h-20 shadow-sm">{zhi}</div>
+                                            {GAN.map(gan => {
+                                                const key = `${activeCat}-${zhi}-${gan}`;
+                                                const item = db[key];
+                                                const hasContent = !!item;
+                                                return (
+                                                    <button key={key} onClick={() => handleCellClick(zhi, gan)} className={`relative group h-20 rounded-xl border-2 transition-all duration-200 flex flex-col items-center justify-center p-2 ${hasContent ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-400 hover:shadow-md hover:-translate-y-1' : 'bg-white border-dashed border-gray-200 hover:border-purple-300 hover:bg-purple-50/10'}`}>
+                                                        {hasContent ? (
+                                                            <div className="text-emerald-500 icon-glow relative">
+                                                                <CheckCircle size={28} strokeWidth={2.5} />
+                                                                <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${getLuckColor(item.luck)}`} title={item.luck}></div>
+                                                            </div>
+                                                        ) : (<div className="text-gray-200 group-hover:text-purple-400 transition-colors"><Plus size={24} /></div>)}
+                                                    </button>
+                                                );
+                                            })}
                                     </div>
                                 ))}
                             </div>
@@ -261,7 +256,7 @@ export const DivinationAdminPanel: React.FC = () => {
                         <div className="flex justify-between items-center shrink-0 pt-4 border-t border-gray-100">
                             {db[editingKey] ? (<button onClick={handleDelete} className="flex items-center gap-2 text-red-500 hover:text-red-700 hover:bg-red-50 px-4 py-2 rounded-lg transition-colors text-sm font-bold"><Trash2 size={18} /> 刪除</button>) : (<div></div>)}
                             <div className="flex gap-3">
-                                <button onClick={() => setEditingKey(null)} className="px-6 py-2.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors font-medium">取消 (Esc)</button>
+                                <button onClick={() => setEditingKey(null)} className="px-6 py-2.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors font-medium">取消</button>
                                 <button onClick={handleSave} className="px-8 py-2.5 rounded-lg bg-purple-600 text-white font-bold hover:bg-purple-700 hover:shadow-lg hover:shadow-purple-200 transition-all flex items-center gap-2"><Save size={18} /> 儲存文案</button>
                             </div>
                         </div>
