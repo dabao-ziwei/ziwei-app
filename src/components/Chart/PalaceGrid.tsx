@@ -70,8 +70,8 @@ interface PalaceGridProps {
   liuNianYear?: number | null;
   
   currentRealTime?: {
-      year: number;     
-      daSeq: number;    
+      year: number;      
+      daSeq: number;     
   };
   
   liuMonthIdx?: number;
@@ -141,7 +141,8 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
   return (
     <div ref={ref} className="w-full h-full bg-white border-2 border-gray-800 shadow-xl z-10 grid grid-cols-4 grid-rows-4 relative">
             
-      <svg className="absolute inset-0 w-full h-full pointer-events-none z-40">
+      {/* [修正] 將 z-40 提升至 z-[200]，確保線條覆蓋在 CenterInfoBoard (z-[100]+) 之上 */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none z-[200]">
           {selectedPalace !== null && (() => { const pSelf = getAnchorCoord(connections.self); const pTri1 = getAnchorCoord(connections.tri1); const pTri2 = getAnchorCoord(connections.tri2); const pOpp = getAnchorCoord(connections.opp); return ( <> <line x1={`${pSelf.x}%`} y1={`${pSelf.y}%`} x2={`${pTri1.x}%`} y2={`${pTri1.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> <line x1={`${pTri1.x}%`} y1={`${pTri1.y}%`} x2={`${pTri2.x}%`} y2={`${pTri2.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> <line x1={`${pTri2.x}%`} y1={`${pTri2.y}%`} x2={`${pSelf.x}%`} y2={`${pSelf.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> <line x1={`${pSelf.x}%`} y1={`${pSelf.y}%`} x2={`${pOpp.x}%`} y2={`${pOpp.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> </> ); })()}
       </svg>
 
