@@ -25,13 +25,13 @@ interface Props {
   data: WeeklyData[];
 }
 
-// 定義五大面向設定
+// [修正] 簡化標籤名稱，避免手機版換行，並配合字體放大
 const categories = [
-  { key: 'self', label: '工作運勢', icon: Briefcase, color: '#f59e0b' }, // Amber
-  { key: 'wealth', label: '財運走勢', icon: Wallet, color: '#fbbf24' },   // Yellow
-  { key: 'social', label: '交友關係', icon: Users, color: '#a3e635' },    // Lime
-  { key: 'travel', label: '外出運勢', icon: Plane, color: '#22d3ee' },    // Cyan
-  { key: 'love', label: '感情溫度', icon: Heart, color: '#f472b6' },      // Pink
+  { key: 'self', label: '工作', icon: Briefcase, color: '#f59e0b' }, // Amber
+  { key: 'wealth', label: '理財', icon: Wallet, color: '#fbbf24' },   // Yellow
+  { key: 'social', label: '交友', icon: Users, color: '#a3e635' },    // Lime
+  { key: 'travel', label: '外出', icon: Plane, color: '#22d3ee' },    // Cyan
+  { key: 'love', label: '感情', icon: Heart, color: '#f472b6' },      // Pink
 ] as const;
 
 type CategoryKey = typeof categories[number]['key'];
@@ -123,6 +123,7 @@ export const FocusTrendChart: React.FC<Props> = ({ data }) => {
     <div className="w-full h-full flex flex-col items-center">
       
       {/* 1. 切換器 */}
+      {/* [修正] 調整 gap 讓按鈕排列更緊湊但有呼吸空間 */}
       <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mb-4 sm:mb-6 px-1">
         {categories.map((cat) => {
           const isActive = activeCategory === cat.key;
@@ -131,8 +132,11 @@ export const FocusTrendChart: React.FC<Props> = ({ data }) => {
             <button
               key={cat.key}
               onClick={() => setActiveCategory(cat.key)}
+              // [修正] 
+              // 1. 將 text-[10px] 改為 text-xs (甚至 sm:text-sm) 以配合上方 Tab 大小
+              // 2. 移除 min-w 設定，改由 padding 撐開
               className={`
-                relative flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-[10px] sm:text-xs font-bold tracking-wider transition-all duration-300
+                relative flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs sm:text-sm font-bold tracking-wider transition-all duration-300
                 ${isActive 
                   ? 'text-white shadow-lg scale-105' 
                   : 'text-slate-500 bg-slate-900/50 border border-slate-800 hover:bg-slate-800 hover:text-slate-300'
@@ -145,7 +149,7 @@ export const FocusTrendChart: React.FC<Props> = ({ data }) => {
                 borderWidth: isActive ? '1px' : '1px'
               }}
             >
-              <Icon size={12} className={`sm:w-[14px] sm:h-[14px] ${isActive ? 'animate-pulse' : ''}`} style={{ color: isActive ? cat.color : 'inherit' }} />
+              <Icon size={14} className={`sm:w-[16px] sm:h-[16px] ${isActive ? 'animate-pulse' : ''}`} style={{ color: isActive ? cat.color : 'inherit' }} />
               {cat.label}
               {isActive && (
                 <span className="absolute bottom-0 left-1/4 w-1/2 h-[2px] rounded-full blur-[1px]" style={{ backgroundColor: cat.color }} />
@@ -160,7 +164,6 @@ export const FocusTrendChart: React.FC<Props> = ({ data }) => {
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart 
             data={data} 
-            // [修正] 增加 Margin 並設定 overflow visible 讓發光效果不被切斷
             margin={{ top: 10, right: 10, left: 10, bottom: 0 }} 
             style={{ overflow: 'visible' }}
           >
@@ -185,13 +188,12 @@ export const FocusTrendChart: React.FC<Props> = ({ data }) => {
               axisLine={false}
               tickLine={false}
               tick={{ fill: '#94a3b8', fontSize: 11, dy: 10 }}
-              interval="preserveStartEnd" // 確保首尾標籤顯示
+              interval="preserveStartEnd"
             />
             <YAxis 
               axisLine={false}
               tickLine={false}
               tick={{ fill: '#64748b', fontSize: 10 }}
-              // [修正] 設定 padding 讓曲線不會頂到天花板或地板
               padding={{ top: 20, bottom: 20 }}
               domain={[0, 100]} 
               hide 
