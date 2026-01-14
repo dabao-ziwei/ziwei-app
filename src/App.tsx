@@ -6,13 +6,14 @@ import { Auth } from './components/Auth';
 import { UpdatePassword } from './components/UpdatePassword';
 import { ClientList } from './pages/ClientList'; 
 import { Dashboard } from './pages/Dashboard';
-import { DivinationAdminPanel } from './components/DivinationAdminPanel'; // [新增]
+import { DivinationAdminPanel } from './components/DivinationAdminPanel';
 import { saveClient, type Client } from './db';
 import { supabase } from './supabase';
 import { Loader2 } from 'lucide-react';
 
 import { DualChart } from './components/Chart/DualChart';
 import { CompatibilitySetup } from './pages/CompatibilitySetup';
+import { LuckyPage } from './pages/LuckyPage'; // [新增] 引入 LuckyPage
 
 function App() {
   const [session, setSession] = useState<any>(null);
@@ -94,6 +95,9 @@ function App() {
     <Routes>
       <Route path="/login" element={!session ? <Auth /> : <Navigate to="/" replace />} />
       
+      {/* [新增] 公開占卜頁面 - 放在 ProtectedLayout 之外 */}
+      <Route path="/lucky" element={<LuckyPage />} />
+      
       <Route element={<ProtectedLayout />}>
         <Route path="/" element={<Dashboard />} />
         
@@ -120,7 +124,6 @@ function App() {
 
         <Route path="/divination" element={<ChartBoard mode="divination" />} />
         
-        {/* [新增] 占卜文案管理後台 */}
         <Route path="/admin" element={<DivinationAdminPanel />} />
       </Route>
 

@@ -1,13 +1,5 @@
 import { Solar, Lunar } from 'lunar-typescript';
-import type {
-  ChartData,
-  Palace,
-  Star,
-  StarLevel,
-  SiHuaType,
-  Scope,
-  Brightness,
-} from './types';
+import type { ChartData, Palace, Star, StarLevel, Scope, SiHua, SiHuaType, Brightness } from './types';
 import { GAN, ZHI, PALACE_NAMES, SIHUA_TABLE, BUREAU_TABLE } from './constants';
 
 const STAR_BRIGHTNESS_TABLE: Record<string, string> = {
@@ -52,7 +44,7 @@ const MING_ZHU_TABLE = [
   '祿存',
   '巨門',
 ];
-// 身主 (依生年地支) - 子(0)、午(6) 為「鈴星」
+
 const SHEN_ZHU_TABLE = [
   '鈴星',
   '天相',
@@ -72,6 +64,7 @@ export class ZiWeiEngine {
   private solar: Solar;
   private lunar: Lunar;
   private gender: '男' | '女';
+  private inputYear: number;
 
   private lunarYearGanIdx: number = 0;
   private lunarYearZhiIdx: number = 0;
@@ -95,9 +88,12 @@ export class ZiWeiEngine {
     gender: '男' | '女'
   ) {
     this.gender = gender;
+    this.inputYear = year;
+    
+    // 使用 Solar 初始化
     this.solar = Solar.fromYmdHms(year, month, day, hour, minute, 0);
     
-    // 【修正重點 1】夜子時（23:00-24:00）強制算作隔日
+    // 夜子時處理
     let tempLunar = this.solar.getLunar();
     if (hour === 23) {
       tempLunar = tempLunar.next(1);
@@ -107,11 +103,9 @@ export class ZiWeiEngine {
     this.lunarYearGanIdx = this.lunar.getYearGanIndex();
     this.lunarYearZhiIdx = this.lunar.getYearZhiIndex();
     
-    // 取絕對值防呆
     this.lunarMonth = Math.abs(this.lunar.getMonth());
     this.lunarDay = this.lunar.getDay();
     
-    // 時辰計算：23:00 仍算子時 (Index 0)
     this.timeZhiIdx = Math.floor((hour + 1) / 2) % 12;
 
     const isYangYear = this.lunarYearGanIdx % 2 === 0;
@@ -144,11 +138,9 @@ export class ZiWeiEngine {
       });
     }
 
-    // 計算命宮位置 (確保餘數為正)
     const rawMingPos = (2 + (this.lunarMonth - 1) - this.timeZhiIdx);
     this.mingPos = ((rawMingPos % 12) + 12) % 12;
     
-    // 計算身宮位置
     const rawShenPos = (2 + (this.lunarMonth - 1) + this.timeZhiIdx);
     this.shenPos = ((rawShenPos % 12) + 12) % 12;
     
@@ -193,10 +185,7 @@ export class ZiWeiEngine {
     this.placeShenSha();
   }
 
-  private getBrightness(
-    starName: string,
-    zhiIdx: number
-  ): Brightness | undefined {
+  private getBrightness(starName: string, zhiIdx: number): Brightness | undefined {
     const table = STAR_BRIGHTNESS_TABLE[starName];
     if (!table) return undefined;
     const char = table[zhiIdx];
@@ -319,18 +308,18 @@ export class ZiWeiEngine {
     this.addStar((11 - h + 12) % 12, '地空', 'minor');
     this.addStar((11 + h) % 12, '地劫', 'minor');
 
-    // [新增] 天馬 (依生月)
-    // 規則：
-    // 寅(1)、午(5)、戌(9) 月 -> 馬在申(8)
-    // 申(7)、子(11)、辰(3) 月 -> 馬在寅(2)
-    // 巳(4)、酉(8)、丑(12) 月 -> 馬在亥(11)
-    // 亥(10)、卯(2)、未(6) 月 -> 馬在巳(5)
+    // [修正] 天馬：依「節氣月份 (Month Zhi)」安星 (月馬)
+    // 解決 1991/4/11 (辰月) 天馬在寅的需求
+    // 申子辰(8,0,4) -> 寅(2)
+    // 寅午戌(2,6,10) -> 申(8)
+    // 亥卯未(11,3,7) -> 巳(5)
+    // 巳酉丑(5,9,1) -> 亥(11)
+    const mz = this.lunar.getMonthZhiIndex(); // 取得節氣月支
     let tianMaPos = 0;
-    const rem = m % 4; // 用月份除以 4 的餘數來分組
-    if (rem === 1) tianMaPos = 8; // 1, 5, 9 -> 申
-    else if (rem === 2) tianMaPos = 5; // 2, 6, 10 -> 巳
-    else if (rem === 3) tianMaPos = 2; // 3, 7, 11 -> 寅
-    else tianMaPos = 11; // 4, 8, 12 (餘0) -> 亥
+    if ([8, 0, 4].includes(mz)) tianMaPos = 2;
+    else if ([2, 6, 10].includes(mz)) tianMaPos = 8;
+    else if ([11, 3, 7].includes(mz)) tianMaPos = 5;
+    else tianMaPos = 11;
 
     this.addStar(tianMaPos, '天馬', 'minor');
   }
@@ -353,8 +342,12 @@ export class ZiWeiEngine {
     this.addStar((zf + d - 1) % 12, '三台', 'misc');
     this.addStar((yb - d + 1 + 24) % 12, '八座', 'misc');
 
-    const jkBase = (8 - (yg % 5) * 2 + 12) % 12;
-    const jkFinal = yg % 2 === 0 ? jkBase : jkBase + 1;
+    const jkMap: Record<number, number> = {
+        0: 8, 1: 7, 2: 4, 3: 3, 4: 0, 5: 9, 
+        6: 7, 
+        7: 5, 8: 2, 9: 1,
+    };
+    const jkFinal = jkMap[yg] !== undefined ? jkMap[yg] : 0;
     this.addStar(jkFinal, '截空', 'misc');
 
     const xb = (yz - yg + 12) % 12;
@@ -375,7 +368,13 @@ export class ZiWeiEngine {
       11: 9,
     };
     this.addStar(psMap[yz], '破碎', 'misc');
-    this.addStar((yz + 8) % 12, '蜚廉', 'misc');
+    
+    // [保留修正] 蜚廉
+    let feiLianOffset = 2;
+    if ([0, 1, 2, 6, 7, 8].includes(yz)) {
+        feiLianOffset = 8;
+    }
+    this.addStar((yz + feiLianOffset) % 12, '蜚廉', 'misc');
 
     this.addStar((6 + yz) % 12, '天虛', 'misc');
     this.addStar((6 - yz + 12) % 12, '天哭', 'misc');
@@ -437,7 +436,9 @@ export class ZiWeiEngine {
     this.addStar(tw, '天巫', 'misc');
     const js = [8, 8, 10, 10, 0, 0, 2, 2, 4, 4, 6, 6];
     this.addStar(js[m - 1], '解神', 'misc');
-    this.addStar((5 + m - 1) % 12, '月德', 'misc');
+    
+    // [保留修正] 月德
+    this.addStar((yz + 5) % 12, '月德', 'misc');
 
     this.addStar((6 + h) % 12, '臺輔', 'misc');
     this.addStar((2 + h) % 12, '封誥', 'misc');
@@ -446,6 +447,8 @@ export class ZiWeiEngine {
     const diseasePos = this.palaces.findIndex((p) => p.name === '疾厄');
     if (servantPos >= 0) this.addStar(servantPos, '天傷', 'misc');
     if (diseasePos >= 0) this.addStar(diseasePos, '天使', 'misc');
+    
+    // [移除] 這裡移除重複安的天馬，統一在 placeMinorStars 處理
   }
 
   private placeShenSha() {
@@ -488,7 +491,10 @@ export class ZiWeiEngine {
           n)
     );
 
-    const ss = this.lunarYearZhiIdx;
+    // [保留修正] 歲建與將前：依 Solar Year Zhi
+    const solarZhi = (this.inputYear - 4) % 12;
+
+    const ss = solarZhi;
     [
       '歲建',
       '晦氣',
@@ -517,7 +523,7 @@ export class ZiWeiEngine {
       11: 3,
       3: 3,
       7: 3,
-    }[this.lunarYearZhiIdx]!;
+    }[solarZhi]!;
     [
       '將星',
       '攀鞍',
@@ -624,11 +630,8 @@ export class ZiWeiEngine {
     const shenZhu = SHEN_ZHU_TABLE[this.lunarYearZhiIdx];
     const minuteStr = this.solar.getMinute().toString().padStart(2, '0');
 
-    // 【修正重點 2】顯示「早子」與「晚子」
-    // timeZhiIdx 為 0 代表是子時
     let timeZhiStr = ZHI[this.timeZhiIdx];
     if (this.timeZhiIdx === 0) {
-        // solar.getHour() 回傳的是 24 小時制的 0~23
         if (this.solar.getHour() === 23) {
             timeZhiStr = '晚子';
         } else {

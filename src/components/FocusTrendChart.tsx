@@ -72,7 +72,7 @@ const CustomTooltip = ({ active, payload, activeCategory }: any) => {
     const category = categories.find(c => c.key === activeCategory)!;
 
     return (
-      <div className="bg-slate-900/95 border border-slate-700 p-3 rounded-xl shadow-[0_0_20px_rgba(0,0,0,0.6)] backdrop-blur-xl">
+      <div className="bg-slate-900/95 border border-slate-700 p-3 rounded-xl shadow-[0_0_20px_rgba(0,0,0,0.6)] backdrop-blur-xl z-50">
         <p className="text-xs text-slate-400 mb-2 font-mono border-b border-slate-800 pb-1">{data.dateStr}</p>
         <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
@@ -123,7 +123,7 @@ export const FocusTrendChart: React.FC<Props> = ({ data }) => {
     <div className="w-full h-full flex flex-col items-center">
       
       {/* 1. 切換器 */}
-      <div className="flex flex-wrap items-center justify-center gap-3 mb-6 px-4">
+      <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mb-4 sm:mb-6 px-1">
         {categories.map((cat) => {
           const isActive = activeCategory === cat.key;
           const Icon = cat.icon;
@@ -132,7 +132,7 @@ export const FocusTrendChart: React.FC<Props> = ({ data }) => {
               key={cat.key}
               onClick={() => setActiveCategory(cat.key)}
               className={`
-                relative flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold tracking-wider transition-all duration-300
+                relative flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-[10px] sm:text-xs font-bold tracking-wider transition-all duration-300
                 ${isActive 
                   ? 'text-white shadow-lg scale-105' 
                   : 'text-slate-500 bg-slate-900/50 border border-slate-800 hover:bg-slate-800 hover:text-slate-300'
@@ -145,7 +145,7 @@ export const FocusTrendChart: React.FC<Props> = ({ data }) => {
                 borderWidth: isActive ? '1px' : '1px'
               }}
             >
-              <Icon size={14} className={isActive ? 'animate-pulse' : ''} style={{ color: isActive ? cat.color : 'inherit' }} />
+              <Icon size={12} className={`sm:w-[14px] sm:h-[14px] ${isActive ? 'animate-pulse' : ''}`} style={{ color: isActive ? cat.color : 'inherit' }} />
               {cat.label}
               {isActive && (
                 <span className="absolute bottom-0 left-1/4 w-1/2 h-[2px] rounded-full blur-[1px]" style={{ backgroundColor: cat.color }} />
@@ -156,22 +156,18 @@ export const FocusTrendChart: React.FC<Props> = ({ data }) => {
       </div>
 
       {/* 2. 分裂填充圖表 */}
-      <div className="w-full h-[350px] relative px-2">
+      <div className="w-full flex-1 min-h-0 relative px-2">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
+          <AreaChart 
+            data={data} 
+            // [修正] 增加 Margin 並設定 overflow visible 讓發光效果不被切斷
+            margin={{ top: 10, right: 10, left: 10, bottom: 0 }} 
+            style={{ overflow: 'visible' }}
+          >
             <defs>
               <linearGradient id="splitColor" x1="0" y1="0" x2="0" y2="1">
-                {/* 上半部 (能量區) 
-                    - 結束透明度提升到 0.5，確保與下方接壤處顏色夠深
-                */}
                 <stop offset={0} stopColor={currentCategory.color} stopOpacity={0.7} />
                 <stop offset={gradientOffset} stopColor={currentCategory.color} stopOpacity={0.5} />
-                
-                {/* 下半部 (冰凍區) 
-                    - 起始透明度大幅提升到 0.9 (接近實心)，製造強烈的「冰面反光」效果
-                    - 顏色使用極亮的 #ecfeff (幾乎是白色)
-                    - 這樣在深色背景下，基準線下方會立刻出現一道亮光，消除空白感
-                */}
                 <stop offset={gradientOffset} stopColor="#ecfeff" stopOpacity={0.9} />
                 <stop offset={1} stopColor="#22d3ee" stopOpacity={0.2} />
               </linearGradient>
@@ -189,12 +185,15 @@ export const FocusTrendChart: React.FC<Props> = ({ data }) => {
               axisLine={false}
               tickLine={false}
               tick={{ fill: '#94a3b8', fontSize: 11, dy: 10 }}
+              interval="preserveStartEnd" // 確保首尾標籤顯示
             />
             <YAxis 
               axisLine={false}
               tickLine={false}
               tick={{ fill: '#64748b', fontSize: 10 }}
-              domain={['auto', 'auto']} 
+              // [修正] 設定 padding 讓曲線不會頂到天花板或地板
+              padding={{ top: 20, bottom: 20 }}
+              domain={[0, 100]} 
               hide 
             />
             
