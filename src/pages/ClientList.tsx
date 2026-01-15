@@ -1,16 +1,18 @@
-import React, { useEffect, useState } from 'react';
-import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, UserCog, LogOut, User, Sparkles, Network, ArrowLeft, Wrench } from 'lucide-react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, UserCog, LogOut, User, Sparkles, Network, ArrowLeft, Wrench, Filter, X } from 'lucide-react';
 import { loadClients, deleteClient, getMyProfile, getUsedChartCount, type Client, type UserProfile } from '../db';
 import { supabase } from '../supabase';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { ZHI } from '../logic/constants';
 import { UserManagementModal } from '../components/UserManagementModal'; 
 import { DivinationSetupModal } from '../components/DivinationSetupModal';
 import { RelationshipModal } from '../components/RelationshipModal';
 import { AddChartModal } from '../components/AddChartModal'; 
-import { ZiWeiEngine } from '../logic/engine'; // [新增] 引入引擎用於修復計算
+import { ZiWeiEngine } from '../logic/engine';
 
-const CATEGORIES = ["我", "家人", "朋友", "客戶", "名人", "其他"];
+const CATEGORIES = ["我", "家人", "朋友", "客戶", "名人", "其他", "紫占"];
+const MAJOR_STARS = ['紫微', '天機', '太陽', '武曲', '天同', '廉貞', '天府', '太陰', '貪狼', '巨門', '天相', '天梁', '七殺', '破軍'];
+
 const STORAGE_KEY_CATS = 'ziwei_expanded_cats';
 const STORAGE_KEY_FILTER = 'ziwei_filter_only_mine';
 const SUPER_ADMIN_EMAIL = 'stephenwu.0926@gmail.com';
@@ -21,8 +23,51 @@ interface ClientListProps {
 }
 
 export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // --- 1. 狀態管理 ---
+  const initialQ = searchParams.get('q') || '';
+  const initialG = (searchParams.get('g') as 'all' | '男' | '女') || 'all';
+  const initialStar = searchParams.get('star') || null;
+
+  // [修正] 分離「輸入狀態」與「搜尋狀態」
+  const [inputValue, setInputValue] = useState(initialQ); // 控制輸入框顯示
+  const [searchTerm, setSearchTerm] = useState(initialQ); // 控制實際搜尋邏輯
+  
+  const [filterGender, setFilterGender] = useState<'all'|'男'|'女'>(initialG);
+  const [filterStar, setFilterStar] = useState<string | null>(initialStar);
+
+  // [修正] URL 同步邏輯：移除 Debounce，改為依賴 searchTerm 的變更
+  useEffect(() => {
+      const newParams = new URLSearchParams();
+      
+      // 這裡使用的是 searchTerm (已確認的關鍵字)，而不是 inputValue
+      if (searchTerm) newParams.set('q', searchTerm);
+      if (filterGender !== 'all') newParams.set('g', filterGender);
+      if (filterStar) newParams.set('star', filterStar);
+
+      // 防呆檢查：避免無限迴圈
+      if (searchParams.toString() !== newParams.toString()) {
+          setSearchParams(newParams, { replace: true });
+      }
+  }, [searchTerm, filterGender, filterStar, searchParams, setSearchParams]);
+
+  // 手動觸發搜尋
+  const handleSearchTrigger = () => {
+      setSearchTerm(inputValue);
+  };
+
+  // 鍵盤事件：按下 Enter 才搜尋
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+          handleSearchTrigger();
+      }
+  };
+
+  // --- 2. 資料載入與其他狀態 ---
   const [clients, setClients] = useState<Client[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
   
   const [expandedCats, setExpandedCats] = useState<string[]>(() => {
     try {
@@ -48,11 +93,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false); 
   const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false); 
   const [isDivinationModalOpen, setIsDivinationModalOpen] = useState(false);
-  
   const [relationClient, setRelationClient] = useState<Client | null>(null);
-
-  const navigate = useNavigate();
-  const location = useLocation();
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_CATS, JSON.stringify(expandedCats));
@@ -102,12 +143,11 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   useEffect(() => {
       if (location.state && (location.state as any).openDivination) {
           setIsDivinationModalOpen(true);
-          // 清除 state 避免重新整理又跳出來
           window.history.replaceState({}, document.title);
       }
   }, [location]);
 
-  // [新增] 資料修復功能
+  // 資料修復功能
   const handleDataRepair = async () => {
       if (!confirm("確定要掃描並修復所有缺失「主星」的命盤資料嗎？\n這將會重新計算並寫入資料庫。")) return;
       
@@ -115,7 +155,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
       let fixedCount = 0;
       
       try {
-          // 1. 找出有問題的資料 (majorStars 為 null 或 空字串)
           const invalidClients = clients.filter(c => !c.majorStars || c.majorStars === '' || c.majorStars === '无主星');
           
           if (invalidClients.length === 0) {
@@ -124,7 +163,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
               return;
           }
 
-          // 2. 逐筆修復
           for (const c of invalidClients) {
               try {
                   const engine = new ZiWeiEngine(c.birthYear, c.birthMonth, c.birthDay, c.birthHour, c.birthMinute, c.gender);
@@ -133,7 +171,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                   const mingPalace = chart.palaces[mingPos];
                   const majorStarNames = mingPalace.majorStars.map(s => s.name).join('') || '無主星';
 
-                  // 寫入資料庫 (使用 snake_case 對應 DB)
                   await supabase.from('clients').update({ major_stars: majorStarNames }).eq('id', c.id);
                   fixedCount++;
               } catch (err) {
@@ -164,33 +201,54 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     return `${hour}:${minuteStr}(${zhiStr}時)`;
   };
 
-  const filtered = clients.filter(c => {
-    const term = searchTerm.toLowerCase();
-    const nameMatch = (c.name || '').toLowerCase().includes(term);
-    const yearMatch = (c.birthYear || 0).toString().includes(term);
-    const starMatch = (c.majorStars || '').includes(term);
-    const creatorMatch = (c.creatorEmail || '').toLowerCase().includes(term);
-    const isSearchMatch = nameMatch || yearMatch || starMatch || creatorMatch;
+  // --- 3. 過濾與分組邏輯 ---
+  const filtered = useMemo(() => {
+      return clients.filter(c => {
+        // A. 關鍵字模糊搜尋 (姓名, 年份, Email) -> 使用 searchTerm
+        const term = searchTerm.toLowerCase();
+        const nameMatch = (c.name || '').toLowerCase().includes(term);
+        const yearMatch = (c.birthYear || 0).toString().includes(term);
+        const creatorMatch = (c.creatorEmail || '').toLowerCase().includes(term);
+        const keywordMatch = !term || nameMatch || yearMatch || creatorMatch;
 
-    let isOwnerMatch = true;
-    if (userProfile?.email === SUPER_ADMIN_EMAIL && showOnlyMine) {
-        isOwnerMatch = c.user_id === userProfile.id;
-    }
+        // B. 性別精確篩選
+        const genderMatch = filterGender === 'all' || c.gender === filterGender;
 
-    return isSearchMatch && isOwnerMatch;
-  });
+        // C. 主星精確篩選
+        const starMatch = !filterStar || (c.majorStars || '').includes(filterStar);
 
-  const grouped: Record<string, Client[]> = {};
-  CATEGORIES.forEach(c => grouped[c] = []);
-  
-  const hasDivination = filtered.some(c => c.type === '紫占');
-  if (hasDivination) grouped['紫占'] = [];
+        // D. 擁有者權限篩選
+        let isOwnerMatch = true;
+        if (userProfile?.email === SUPER_ADMIN_EMAIL && showOnlyMine) {
+            isOwnerMatch = c.user_id === userProfile.id;
+        }
 
-  filtered.forEach(c => {
-    const cat = c.type === '紫占' ? '紫占' : (c.type || "其他");
-    if (!grouped[cat]) grouped[cat] = [];
-    grouped[cat].push(c);
-  });
+        return keywordMatch && genderMatch && starMatch && isOwnerMatch;
+      });
+  }, [clients, searchTerm, filterGender, filterStar, showOnlyMine, userProfile]);
+
+  // 動態分組：只包含有資料的類別
+  const groupedData = useMemo(() => {
+      const groups: Record<string, Client[]> = {};
+      
+      filtered.forEach(c => {
+          const rawCat = c.type || "其他";
+          const cat = rawCat === '紫占' ? '紫占' : rawCat;
+          
+          if (!groups[cat]) groups[cat] = [];
+          groups[cat].push(c);
+      });
+
+      const sortedKeys = CATEGORIES.filter(cat => groups[cat] && groups[cat].length > 0);
+      
+      Object.keys(groups).forEach(key => {
+          if (!CATEGORIES.includes(key) && !sortedKeys.includes(key)) {
+              sortedKeys.push(key);
+          }
+      });
+
+      return { groups, sortedKeys };
+  }, [filtered]);
 
   const toggleCat = (cat: string) => {
     setExpandedCats(prev => 
@@ -232,7 +290,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
       <header className="flex justify-between px-6 py-4 bg-white border-b border-slate-100 shrink-0 items-center relative z-20">
         <div className="flex items-center gap-4">
           
-          {/* 回到首頁按鈕 */}
           <button 
              onClick={() => navigate('/')}
              className="w-10 h-10 bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors rounded-xl flex items-center justify-center mr-2"
@@ -242,13 +299,12 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
 
           <div>
             <h1 className="text-xl font-bold text-slate-800 tracking-tight">命盤列表</h1>
-            <p className="text-xs text-slate-400 font-medium">總計 {clients.length} 筆資料</p>
+            <p className="text-xs text-slate-400 font-medium">總計 {filtered.length} 筆資料</p>
           </div>
         </div>
 
         <div className="flex gap-4 items-center">
             
-            {/* 權限控制：只看我的 */}
             {isSuperAdmin && (
                 <div 
                     className="hidden sm:flex items-center gap-2 cursor-pointer select-none bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-200 transition-colors"
@@ -262,7 +318,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                 </div>
             )}
 
-            {/* [新增] 資料修復按鈕 (僅 Super Admin 可見，或所有人都可見視需求而定，目前設為 Super Admin) */}
             {isSuperAdmin && (
                 <button
                     onClick={handleDataRepair}
@@ -295,64 +350,118 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         </div>
       </header>
 
-      {/* 搜尋與 Menu 按鈕 */}
-      <div className="p-4 bg-white/50 backdrop-blur-sm border-b border-slate-100 shrink-0 sticky top-0 z-10 flex gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
-          <input 
-            type="text" 
-            placeholder="搜尋..." 
-            className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all text-slate-700 shadow-sm" 
-            value={searchTerm} 
-            onChange={e=>setSearchTerm(e.target.value)} 
-          />
+      {/* 搜尋與篩選區域 */}
+      <div className="p-4 bg-white/50 backdrop-blur-sm border-b border-slate-100 shrink-0 sticky top-0 z-10 flex flex-col gap-3">
+        {/* 第一層：搜尋框與 Menu */}
+        <div className="flex gap-2">
+            <div className="relative flex-1">
+                {/* [修正] 搜尋圖示改為按鈕，點擊觸發搜尋 */}
+                <button 
+                    className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full hover:bg-slate-100 text-slate-400 hover:text-blue-500 transition-colors"
+                    onClick={handleSearchTrigger}
+                >
+                    <Search size={18}/>
+                </button>
+                <input 
+                    type="text" 
+                    placeholder="輸入後按 Enter 搜尋..." 
+                    className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all text-slate-700 shadow-sm" 
+                    value={inputValue} 
+                    onChange={e=>setInputValue(e.target.value)}
+                    onKeyDown={handleKeyDown} 
+                />
+            </div>
+             <div className="relative">
+                <button 
+                    onClick={() => setIsMenuOpen(!isMenuOpen)}
+                    className="w-12 h-full bg-white border border-slate-200 hover:bg-slate-50 transition-colors rounded-xl flex items-center justify-center text-slate-600 shadow-sm"
+                >
+                    <Menu size={20} />
+                </button>
+                {isMenuOpen && (
+                    <div className="absolute top-14 right-0 w-52 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
+                        {userProfile?.can_use_divination && (
+                            <button 
+                                onClick={() => { setIsDivinationModalOpen(true); setIsMenuOpen(false); }} 
+                                className="w-full text-left px-4 py-3 hover:bg-purple-50 flex items-center gap-2 text-purple-700 font-bold border-b border-gray-50"
+                            >
+                                <Sparkles size={18} /> 紫微占卜
+                            </button>
+                        )}
+                        {userProfile?.role === 'admin' && (
+                            <button 
+                                onClick={() => { setIsUserMgmtOpen(true); setIsMenuOpen(false); }}
+                                className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-2 text-gray-700 font-medium"
+                            >
+                                <UserCog size={16} /> 使用者管理
+                            </button>
+                        )}
+                          <button 
+                            onClick={() => supabase.auth.signOut()}
+                            className="w-full text-left px-4 py-3 hover:bg-red-50 flex items-center gap-2 text-red-600 font-medium border-t border-gray-100"
+                        >
+                            <LogOut size={16} /> 登出系統
+                        </button>
+                    </div>
+                )}
+                {isMenuOpen && <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)}></div>}
+              </div>
         </div>
-         <div className="relative">
-            <button 
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="w-12 h-full bg-white border border-slate-200 hover:bg-slate-50 transition-colors rounded-xl flex items-center justify-center text-slate-600 shadow-sm"
-            >
-                <Menu size={20} />
-            </button>
-            {isMenuOpen && (
-                <div className="absolute top-14 right-0 w-52 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
-                    {userProfile?.can_use_divination && (
-                        <button 
-                            onClick={() => { setIsDivinationModalOpen(true); setIsMenuOpen(false); }} 
-                            className="w-full text-left px-4 py-3 hover:bg-purple-50 flex items-center gap-2 text-purple-700 font-bold border-b border-gray-50"
-                        >
-                            <Sparkles size={18} /> 紫微占卜
-                        </button>
-                    )}
-                    {userProfile?.role === 'admin' && (
-                        <button 
-                            onClick={() => { setIsUserMgmtOpen(true); setIsMenuOpen(false); }}
-                            className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-2 text-gray-700 font-medium"
-                        >
-                            <UserCog size={16} /> 使用者管理
-                        </button>
-                    )}
-                      <button 
-                        onClick={() => supabase.auth.signOut()}
-                        className="w-full text-left px-4 py-3 hover:bg-red-50 flex items-center gap-2 text-red-600 font-medium border-t border-gray-100"
-                    >
-                        <LogOut size={16} /> 登出系統
+
+        {/* 第二層：性別快篩 (分段切換) */}
+        <div className="flex gap-2 items-center">
+             <div className="bg-slate-100 p-1 rounded-lg flex items-center shrink-0">
+                  <button onClick={() => setFilterGender('all')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${filterGender === 'all' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>全部</button>
+                  <button onClick={() => setFilterGender('女')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1 ${filterGender === '女' ? 'bg-pink-500 text-white shadow-sm' : 'text-slate-400 hover:text-pink-500'}`}>女</button>
+                  <button onClick={() => setFilterGender('男')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1 ${filterGender === '男' ? 'bg-blue-500 text-white shadow-sm' : 'text-slate-400 hover:text-blue-500'}`}>男</button>
+             </div>
+             
+             {/* 第三層：主星快篩 (橫向捲動 Chips) */}
+             <div className="flex-1 overflow-x-auto no-scrollbar flex items-center gap-2 mask-linear-fade">
+                {filterStar && (
+                    <button onClick={() => setFilterStar(null)} className="shrink-0 p-1.5 rounded-full bg-slate-200 text-slate-500 hover:bg-slate-300">
+                        <X size={14} />
                     </button>
-                </div>
-            )}
-            {isMenuOpen && <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)}></div>}
-          </div>
+                )}
+
+                {MAJOR_STARS.map(star => {
+                    const isActive = filterStar === star;
+                    return (
+                        <button 
+                            key={star}
+                            onClick={() => setFilterStar(isActive ? null : star)}
+                            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold border transition-all whitespace-nowrap
+                                ${isActive 
+                                    ? 'bg-purple-600 text-white border-purple-600 shadow-md shadow-purple-200' 
+                                    : 'bg-white text-slate-600 border-slate-200 hover:border-purple-300 hover:text-purple-600'
+                                }
+                            `}
+                        >
+                            {star}
+                        </button>
+                    )
+                })}
+             </div>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         
         {loading ? (
           <div className="flex justify-center py-10 text-slate-400 animate-pulse">載入中...</div>
+        ) : filtered.length === 0 ? (
+          // 查無資料 Empty State
+          <div className="flex flex-col items-center justify-center py-20 opacity-50">
+              <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                  <Search size={32} className="text-slate-400" />
+              </div>
+              <p className="text-slate-500 font-bold">沒有找到符合條件的命盤</p>
+              <p className="text-xs text-slate-400 mt-1">請嘗試減少篩選條件</p>
+          </div>
         ) : (
-          Object.entries(grouped).map(([cat, items]) => {
-            if (items.length === 0 && !CATEGORIES.includes(cat) && cat !== '紫占' && searchTerm) return null;
-            if (items.length === 0 && cat === '紫占') return null;
-
+          // 渲染分組列表 (只顯示有資料的組別)
+          groupedData.sortedKeys.map(cat => {
+            const items = groupedData.groups[cat];
             const isOpen = expandedCats.includes(cat);
             const isDivinationCat = cat === '紫占';
             
@@ -375,10 +484,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
 
                 {isOpen && (
                   <div className="divide-y divide-slate-50">
-                    {items.length === 0 ? (
-                      <div className="p-8 text-center text-slate-400 text-sm italic">此分類尚無資料</div>
-                    ) : (
-                      items.map(c => {
+                    {items.map(c => {
                         const isMine = c.user_id === userProfile?.id;
                         const isZiZhan = c.type === '紫占';
                         
@@ -422,7 +528,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                               </div>
                             </div>
 
-                            {/* 操作按鈕區 */}
                             <div className="flex items-center gap-2 shrink-0">
                                 
                                 {!isMine && c.creatorEmail && (
@@ -475,7 +580,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                           </div>
                         );
                       })
-                    )}
+                    }
                   </div>
                 )}
               </div>
