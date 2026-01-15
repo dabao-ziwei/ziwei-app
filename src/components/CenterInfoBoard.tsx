@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import type { Client, Relationship } from '../db';
 import type { ChartData } from '../logic/types';
 import type { PermissionState } from '../logic/permissions';
-import { LunarYear, Solar } from 'lunar-typescript';
+import { LunarYear, Solar, Lunar } from 'lunar-typescript'; // [修正] 引入 Lunar 用於計算天數
 import { GAN } from '../logic/constants';
 
 const ArrowHead = ({ x, y, rotation }: { x: number, y: number, rotation: number }) => (
@@ -139,6 +139,19 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
         return LunarYear.fromYear(liuNianYear).getLeapMonth();
     }, [liuNianYear]);
 
+    // [新增] 計算當前流月的最大天數 (大小月)
+    const maxDaysInLiuMonth = useMemo(() => {
+        if (!liuNianYear || liuMonth === null || liuMonth === undefined) return 30;
+        try {
+            // lunar-typescript: 負數月份代表閏月
+            const m = isLiuMonthLeap ? -Math.abs(liuMonth) : Math.abs(liuMonth);
+            const l = Lunar.fromYmd(liuNianYear, m, 1);
+            return l.getDaysInMonth();
+        } catch (e) {
+            return 30;
+        }
+    }, [liuNianYear, liuMonth, isLiuMonthLeap]);
+
     const handlePrevMonth = (e: React.MouseEvent) => {
         e.stopPropagation();
         if (!onSetLiuMonth || permissionFlags?.liu_month === 'disabled') return;
@@ -188,6 +201,36 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
             if (nextM > 12) nextM = 1;
         }
         onSetLiuMonth(nextM, nextLeap);
+    };
+
+    // [新增] 流日切換 Handler (上一日)
+    const handlePrevDay = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!onSetLiuDay || permissionFlags?.liu_day === 'disabled') return;
+
+        if (liuDay === null || liuDay === undefined) {
+            onSetLiuDay(1);
+            return;
+        }
+
+        let nextD = liuDay - 1;
+        if (nextD < 1) nextD = maxDaysInLiuMonth; // 循環到月底
+        onSetLiuDay(nextD);
+    };
+
+    // [新增] 流日切換 Handler (下一日)
+    const handleNextDay = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!onSetLiuDay || permissionFlags?.liu_day === 'disabled') return;
+
+        if (liuDay === null || liuDay === undefined) {
+            onSetLiuDay(1);
+            return;
+        }
+
+        let nextD = liuDay + 1;
+        if (nextD > maxDaysInLiuMonth) nextD = 1; // 循環到月初
+        onSetLiuDay(nextD);
     };
 
     const { nodes, lines } = useMemo(() => {
@@ -352,7 +395,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                     </>
                                 )}
                                 
-                                {/* [修改] 移除 liuMonth === null 判斷，允許在流月/流日開啟顛倒盤 */}
                                 {permissionFlags?.inverted !== 'hidden' && !showSmallLimit && (
                                     <button 
                                         onClick={onToggleInverted} 
@@ -467,32 +509,57 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                         </div>
                                     )}
 
-                                    {/* 流日按鈕 (只在選中流月且有權限時顯示) */}
+                                    {/* [修改] 流日按鈕 (改為左右按鈕控制，並動態計算天數) */}
                                     {liuMonth !== null && permissionFlags?.liu_day !== 'hidden' && (
                                         <div className="relative flex-1">
-                                            <button 
-                                                onClick={(e) => { 
-                                                    e.stopPropagation(); 
-                                                    if (permissionFlags?.liu_day !== 'disabled') {
-                                                        closePickers(); 
-                                                        setIsDayPickerOpen(!isDayPickerOpen); 
-                                                    }
-                                                }}
-                                                disabled={permissionFlags?.liu_day === 'disabled'}
-                                                className={`w-full py-1 text-[10px] font-bold rounded transition-colors flex items-center justify-center gap-1 
-                                                    ${liuDay !== null ? 'bg-green-600 text-white shadow-sm' : 'text-gray-500 hover:bg-white'}
-                                                    ${permissionFlags?.liu_day === 'disabled' ? 'opacity-50 cursor-not-allowed' : ''}
-                                                `}
-                                                title={permissionFlags?.liu_day === 'disabled' ? '權限已到期' : ''}
-                                            >
-                                                {permissionFlags?.liu_day === 'disabled' ? <Lock size={12} /> : <Sun size={12} />}
-                                                {liuDay !== null ? `${liuDay}日` : '流日'}
-                                                {liuDay !== null && liuDayGan !== undefined && <span className="text-[9px] opacity-90 scale-90 ml-0.5 font-mono">({GAN[liuDayGan]})</span>}
-                                            </button>
+                                            <div className={`flex items-center rounded overflow-hidden shadow-sm transition-colors
+                                                ${liuDay !== null ? 'bg-green-600' : 'bg-white border border-gray-200'}
+                                                ${permissionFlags?.liu_day === 'disabled' ? 'opacity-50 cursor-not-allowed' : ''}
+                                            `}>
+                                                <button 
+                                                    onClick={handlePrevDay}
+                                                    disabled={permissionFlags?.liu_day === 'disabled'}
+                                                    className={`px-1 py-1 h-full flex items-center justify-center hover:bg-black/10 active:bg-black/20 transition-colors cursor-pointer
+                                                        ${liuDay !== null ? 'text-white' : 'text-gray-400'}
+                                                    `}
+                                                >
+                                                    <ChevronLeftIcon size={12} />
+                                                </button>
+
+                                                <button 
+                                                    onClick={(e) => { 
+                                                        e.stopPropagation(); 
+                                                        if (permissionFlags?.liu_day !== 'disabled') {
+                                                            closePickers(); 
+                                                            setIsDayPickerOpen(!isDayPickerOpen); 
+                                                        }
+                                                    }}
+                                                    disabled={permissionFlags?.liu_day === 'disabled'}
+                                                    className={`flex-1 py-1 text-[10px] font-bold flex items-center justify-center gap-1 h-full hover:bg-black/5 transition-colors
+                                                        ${liuDay !== null ? 'text-white' : 'text-gray-500'}
+                                                    `}
+                                                    title={permissionFlags?.liu_day === 'disabled' ? '權限已到期' : ''}
+                                                >
+                                                    {permissionFlags?.liu_day === 'disabled' ? <Lock size={12} /> : <Sun size={12} />}
+                                                    {liuDay !== null ? `${liuDay}日` : '流日'}
+                                                    {liuDay !== null && liuDayGan !== undefined && <span className="text-[9px] opacity-90 scale-90 ml-0.5 font-mono">({GAN[liuDayGan]})</span>}
+                                                </button>
+
+                                                <button 
+                                                    onClick={handleNextDay}
+                                                    disabled={permissionFlags?.liu_day === 'disabled'}
+                                                    className={`px-1 py-1 h-full flex items-center justify-center hover:bg-black/10 active:bg-black/20 transition-colors cursor-pointer
+                                                        ${liuDay !== null ? 'text-white' : 'text-gray-400'}
+                                                    `}
+                                                >
+                                                    <ChevronRightIcon size={12} />
+                                                </button>
+                                            </div>
 
                                             {isDayPickerOpen && onSetLiuDay && (
                                                 <div className="absolute bottom-full left-[-50px] mb-2 w-64 bg-white border border-green-200 rounded-lg shadow-xl p-2 z-[60] grid grid-cols-5 gap-1 animate-in slide-in-from-bottom-2 fade-in duration-200" onClick={e => e.stopPropagation()}>
-                                                    {Array.from({length: 30}, (_, i) => i + 1).map(d => {
+                                                    {/* [修改] 使用 maxDaysInLiuMonth 動態生成日期按鈕 */}
+                                                    {Array.from({length: maxDaysInLiuMonth}, (_, i) => i + 1).map(d => {
                                                         const isRealDay = isCurrentYear && 
                                                                           realLunarMonth === liuMonth && 
                                                                           realIsLeap === !!isLiuMonthLeap && 
