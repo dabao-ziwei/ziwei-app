@@ -206,7 +206,10 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
     const [breathingText, setBreathingText] = useState('');
     const [canProceed, setCanProceed] = useState(false);
     const [sceneState, setSceneState] = useState<CeremonyState>('black');
-    const [skipAnimation, setSkipAnimation] = useState(true);
+    
+    // [修正] 預設為 false，只有管理員可開啟速測
+    const [skipAnimation, setSkipAnimation] = useState(false);
+    
     const [round, setRound] = useState(0); 
     const [selections, setSelections] = useState<number[]>([]);
     const [bubbles, setBubbles] = useState<{val: number, x: number, y: number, scale: number, delay: number}[]>([]);
