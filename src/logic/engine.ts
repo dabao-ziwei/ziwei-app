@@ -64,6 +64,8 @@ export class ZiWeiEngine {
   private solar: Solar;
   private lunar: Lunar;
   private gender: '男' | '女';
+  
+  // 記錄原始輸入年份 (用於特定雜曜，如歲建/將前，依國曆年生肖排)
   private inputYear: number;
 
   private lunarYearGanIdx: number = 0;
@@ -103,9 +105,22 @@ export class ZiWeiEngine {
     this.lunarYearGanIdx = this.lunar.getYearGanIndex();
     this.lunarYearZhiIdx = this.lunar.getYearZhiIndex();
     
-    this.lunarMonth = Math.abs(this.lunar.getMonth());
-    this.lunarDay = this.lunar.getDay();
+    // 【修正重點】閏月分半法
+    // lunar-typescript 若回傳負數月份代表閏月 (如 -6 代表閏六月)
+    const rawMonth = this.lunar.getMonth();
+    const rawDay = this.lunar.getDay();
+
+    if (rawMonth < 0 && rawDay > 15) {
+        // 閏月且日期 > 15，視為下個月
+        this.lunarMonth = Math.abs(rawMonth) + 1;
+    } else {
+        // 非閏月，或閏月上半月，視為本月
+        this.lunarMonth = Math.abs(rawMonth);
+    }
+
+    this.lunarDay = rawDay;
     
+    // 時辰計算
     this.timeZhiIdx = Math.floor((hour + 1) / 2) % 12;
 
     const isYangYear = this.lunarYearGanIdx % 2 === 0;
@@ -308,13 +323,8 @@ export class ZiWeiEngine {
     this.addStar((11 - h + 12) % 12, '地空', 'minor');
     this.addStar((11 + h) % 12, '地劫', 'minor');
 
-    // [修正] 天馬：依「節氣月份 (Month Zhi)」安星 (月馬)
-    // 解決 1991/4/11 (辰月) 天馬在寅的需求
-    // 申子辰(8,0,4) -> 寅(2)
-    // 寅午戌(2,6,10) -> 申(8)
-    // 亥卯未(11,3,7) -> 巳(5)
-    // 巳酉丑(5,9,1) -> 亥(11)
-    const mz = this.lunar.getMonthZhiIndex(); // 取得節氣月支
+    // 天馬 (月馬，依節氣月)
+    const mz = this.lunar.getMonthZhiIndex();
     let tianMaPos = 0;
     if ([8, 0, 4].includes(mz)) tianMaPos = 2;
     else if ([2, 6, 10].includes(mz)) tianMaPos = 8;
@@ -342,6 +352,7 @@ export class ZiWeiEngine {
     this.addStar((zf + d - 1) % 12, '三台', 'misc');
     this.addStar((yb - d + 1 + 24) % 12, '八座', 'misc');
 
+    // 截空 (庚在未)
     const jkMap: Record<number, number> = {
         0: 8, 1: 7, 2: 4, 3: 3, 4: 0, 5: 9, 
         6: 7, 
@@ -369,7 +380,7 @@ export class ZiWeiEngine {
     };
     this.addStar(psMap[yz], '破碎', 'misc');
     
-    // [保留修正] 蜚廉
+    // 蜚廉 (年支順2)
     let feiLianOffset = 2;
     if ([0, 1, 2, 6, 7, 8].includes(yz)) {
         feiLianOffset = 8;
@@ -437,7 +448,7 @@ export class ZiWeiEngine {
     const js = [8, 8, 10, 10, 0, 0, 2, 2, 4, 4, 6, 6];
     this.addStar(js[m - 1], '解神', 'misc');
     
-    // [保留修正] 月德
+    // 月德 (年支順5)
     this.addStar((yz + 5) % 12, '月德', 'misc');
 
     this.addStar((6 + h) % 12, '臺輔', 'misc');
@@ -447,8 +458,6 @@ export class ZiWeiEngine {
     const diseasePos = this.palaces.findIndex((p) => p.name === '疾厄');
     if (servantPos >= 0) this.addStar(servantPos, '天傷', 'misc');
     if (diseasePos >= 0) this.addStar(diseasePos, '天使', 'misc');
-    
-    // [移除] 這裡移除重複安的天馬，統一在 placeMinorStars 處理
   }
 
   private placeShenSha() {
@@ -491,7 +500,7 @@ export class ZiWeiEngine {
           n)
     );
 
-    // [保留修正] 歲建與將前：依 Solar Year Zhi
+    // 歲建/將前：依 Solar Year Zhi
     const solarZhi = (this.inputYear - 4) % 12;
 
     const ss = solarZhi;
