@@ -139,7 +139,8 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
 
 
   return (
-    <div ref={ref} className="w-full h-full bg-white border-2 border-gray-800 shadow-xl z-10 grid grid-cols-4 grid-rows-4 relative">
+    // [修改] 增加 pt-3 (約12px) 的頂部內距，創造安全緩衝區，防止飛化標籤被 Header 遮擋
+    <div ref={ref} className="w-full h-full bg-white border-2 border-gray-800 shadow-xl z-10 grid grid-cols-4 grid-rows-4 relative pt-2">
             
       {/* [修正] 將 z-40 提升至 z-[200]，確保線條覆蓋在 CenterInfoBoard (z-[100]+) 之上 */}
       <svg className="absolute inset-0 w-full h-full pointer-events-none z-[200]">
