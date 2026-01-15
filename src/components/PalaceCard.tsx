@@ -22,7 +22,15 @@ interface PalaceCardProps {
   flyingStars?: Record<string, SiHuaType>;
   
   isTwinMode?: boolean; 
-  isReverse?: boolean;
+  isReverse?: boolean; // 這裡保留是為了相容，但實際渲染改用下面的 flags
+  
+  // [新增] 接收細分狀態
+  reverseFlags?: {
+      da: boolean;
+      liu: boolean;
+      yue: boolean;
+      ri: boolean;
+  };
   
   divinationName?: string;
 
@@ -59,21 +67,13 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   flyingStars,
   isTwinMode,
   isReverse,
+  reverseFlags, // 解構出來
   divinationName, 
   externalSiHua,
   divinationSiHua
 }) => {
   const palaceGanZhi = `${GAN[palace.ganIndex]}${ZHI[palace.zhiIndex]}`;
   const isBenMing = !daName && !liuName && !xiaoName;
-
-  // --- 判斷當前最高層級 (Active Layer) ---
-  // [修改] 擴充判斷：加入流月(yue)與流日(ri)
-  let activeLayer: 'ben' | 'da' | 'liu' | 'yue' | 'ri' = 'ben';
-  if (riName) activeLayer = 'ri';
-  else if (yueName) activeLayer = 'yue';
-  else if (liuName) activeLayer = 'liu';
-  else if (daName) activeLayer = 'da';
-  else activeLayer = 'ben';
 
   let hasExternalLu = false;
   let hasExternalJi = false;
@@ -86,7 +86,6 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
       });
   }
 
-  // 視覺分流：邊框圖層 (Border Layer)
   let siHuaBorderClass = '';
   if (hasExternalJi) {
       siHuaBorderClass = 'ring-inset ring-2 ring-gray-600'; 
@@ -101,7 +100,6 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
     ...palace.limitStars,
   ];
 
-  // 基礎宮位名稱 (本命或占卜)
   let baseName = palace.name;
   if (divinationName) {
       baseName = divinationName;
@@ -109,7 +107,6 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
       baseName = PALACE_REVERSE_MAP[palace.name];
   }
 
-  // 渲染外部飛化 Chips
   const renderExternalChips = () => {
     if (!externalSiHua) return null;
     const chips: React.ReactNode[] = [];
@@ -136,7 +133,6 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
     return <div className="absolute top-0.5 right-0.5 flex flex-col gap-0.5 items-end z-30 pointer-events-none">{chips}</div>;
   };
 
-  // 渲染互動飛化 Chips
   const renderInteractiveFlyingStars = () => {
     if (!flyingStars) return null;
     const chips: React.ReactNode[] = [];
@@ -168,11 +164,22 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
     );
   };
 
-  // 通用標籤渲染函式 (含顛倒盤邏輯)
+  // [修改] 通用標籤渲染函式：依據 reverseFlags 決定是否顯示對宮
   const renderLabel = (name: string, colorClass: string, targetLayer: 'ben' | 'da' | 'liu' | 'yue' | 'ri') => {
-      // 邏輯核心：只有當 "開啟顛倒盤" 且 "目標層級等於當前最高層級" 時，才顯示顛倒名稱
-      const shouldReverse = isReverse && activeLayer === targetLayer;
-      const reversedName = shouldReverse ? getReversedName(name) : null;
+      // 根據層級去查表
+      let isReversed = false;
+      if (reverseFlags) {
+          if (targetLayer === 'da') isReversed = reverseFlags.da;
+          if (targetLayer === 'liu') isReversed = reverseFlags.liu;
+          if (targetLayer === 'yue') isReversed = reverseFlags.yue;
+          if (targetLayer === 'ri') isReversed = reverseFlags.ri;
+      } else {
+          // Fallback: 如果沒有傳 reverseFlags，就用舊邏輯
+          // 但這裡為了簡化，我們假設都會傳
+          isReversed = isReverse; 
+      }
+
+      const reversedName = isReversed ? getReversedName(name) : null;
 
       return (
         <div className="flex items-center justify-end gap-1 group-hover:scale-105 transition-transform origin-bottom-right pr-0.5">
@@ -259,50 +266,18 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
         onClick={(e) => { e.stopPropagation(); onTriggerClick && onTriggerClick(); }}
         title="點擊查看此宮位之飛化 (四化)"
       >
-        {/* 宮位名稱堆疊區 (Stacking) 
-            使用 flex-col-reverse，第一個 child 在最下面
-            順序：本命(底) -> 大限 -> 流年 -> 流月 -> 流日 -> 小限(頂)
-        */}
         <div className="flex flex-col-reverse items-end leading-tight pointer-events-none">
           
-          {/* 1. 本命 (最底層) */}
           {renderLabel(baseName, 'text-red-600', 'ben')}
           
-          {/* 2. 大限 */}
           {daName && renderLabel(daName, 'text-gray-500', 'da')}
           
-          {/* 3. 流年 */}
           {liuName && renderLabel(liuName, 'text-blue-600', 'liu')}
           
-          {/* 4. 流月 (加入顛倒功能) */}
-          {yueName && (
-             <div className="flex items-center justify-end gap-1 mb-[1px] origin-bottom-right">
-                {(isReverse && activeLayer === 'yue') && (
-                    <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none bg-white/90 px-0.5 rounded shadow-sm border border-purple-200">
-                        {getReversedName(yueName)}
-                    </span>
-                )}
-                <span className="text-[13px] font-bold text-amber-600 whitespace-nowrap leading-none bg-white/80 px-0.5 rounded shadow-sm border border-amber-100">
-                    {yueName}
-                </span>
-             </div>
-          )}
+          {yueName && renderLabel(yueName, 'text-amber-600', 'yue')}
 
-          {/* 5. 流日 (加入顛倒功能) */}
-          {riName && (
-             <div className="flex items-center justify-end gap-1 mb-[1px] origin-bottom-right">
-                {(isReverse && activeLayer === 'ri') && (
-                    <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none bg-white/90 px-0.5 rounded shadow-sm border border-purple-200">
-                        {getReversedName(riName)}
-                    </span>
-                )}
-                <span className="text-[13px] font-bold text-green-700 whitespace-nowrap leading-none bg-white/80 px-0.5 rounded shadow-sm border border-green-100">
-                    {riName}
-                </span>
-             </div>
-          )}
+          {riName && renderLabel(riName, 'text-green-700', 'ri')}
 
-          {/* 6. 小限 (最頂層，無顛倒功能) */}
           {xiaoName && (
               <span className="text-[13px] font-bold text-green-600 whitespace-nowrap leading-none mb-[1px] pr-0.5">
                   {xiaoName}
@@ -311,7 +286,6 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
         
         </div>
         
-        {/* 天干地支 (顯示在最右下角) */}
         <div className="flex flex-col leading-none text-[15px] font-bold text-black mb-[2px] ml-1 pointer-events-none">
           <span className="group-hover:text-purple-600 transition-colors">{palaceGanZhi[0]}</span>
           <span>{palaceGanZhi[1]}</span>

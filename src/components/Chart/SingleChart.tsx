@@ -7,7 +7,7 @@ import { ZiWeiEngine } from '../../logic/engine';
 import { GAN, ZHI, PALACE_NAMES, SIHUA_TABLE } from '../../logic/constants';
 import { Loader2, UserPlus, X, ChevronLeft, Camera, Users } from 'lucide-react';
 import { getFeaturePermission, type PermissionState } from '../../logic/permissions';
-import { Lunar, LunarYear } from 'lunar-typescript'; // [修改] 引入 Lunar
+import { Lunar, LunarYear } from 'lunar-typescript';
 
 interface SingleChartProps {
   client?: Client;
@@ -69,8 +69,10 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const [daXianSeq, setDaXianSeq] = useState<number>(-1);
   const [liuNianYear, setLiuNianYear] = useState<number | null>(null);
   const [showXiaoXian, setShowXiaoXian] = useState<boolean>(false);
-  const [isReverse, setIsReverse] = useState<boolean>(false);
   const [isTwinMode, setIsTwinMode] = useState<boolean>(false);
+
+  // [重點] 狀態持久化：使用 Map 記錄狀態，不隨便清空
+  const [reverseMap, setReverseMap] = useState<Record<string, boolean>>({});
 
   // 流月流日狀態
   const [liuMonth, setLiuMonth] = useState<number | null>(null); // 1-12
@@ -125,7 +127,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     fetchData();
   }, [id, client, navigate, mode]);
 
-  // [新增] 讀取流月流日權限
   const canTwin = useMemo(() => getFeaturePermission(userProfile, 'twin'), [userProfile]);
   const canInvert = useMemo(() => getFeaturePermission(userProfile, 'inverted'), [userProfile]);
   const canScreenshot = useMemo(() => getFeaturePermission(userProfile, 'screenshot'), [userProfile]);
@@ -149,7 +150,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
           return { liuMonthIdx: -1, liuDayIdx: -1, liuMonthGan: -1, liuDayGan: -1 };
       }
 
-      // 1. 計算宮位位置 (Positioning Logic) - 依據斗數規則，這是正確的
       const yearZhi = (liuNianYear - 4) % 12;
       const douJunPalace = baseChartData.palaces[2];
       const douJunName = douJunPalace.name;
@@ -170,12 +170,9 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       }
       const flowMonthIdx = (flowMonthAnchor + monthSteps) % 12;
       
-      // [修改] 2. 計算時間天干 (Time Logic) - 改用農曆真實天干 (Natural Gan)
-      // 使用 lunar-typescript 建立當月物件
-      // 注意：Lunar.fromYmd 接受負數月份代表閏月
       const effectiveMonth = isLiuMonthLeap ? -Math.abs(liuMonth) : Math.abs(liuMonth);
       const naturalMonthObj = Lunar.fromYmd(liuNianYear, effectiveMonth, 1);
-      const mGan = naturalMonthObj.getMonthGanIndex(); // 取得自然曆法的月干
+      const mGan = naturalMonthObj.getMonthGanIndex();
 
       if (liuDay === null) {
           return { liuMonthIdx: flowMonthIdx, liuDayIdx: -1, liuMonthGan: mGan, liuDayGan: -1 };
@@ -183,7 +180,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       
       const flowDayIdx = (flowMonthIdx + (liuDay - 1)) % 12;
       
-      // [修改] 同樣取得自然曆法的日干
       const naturalDayObj = Lunar.fromYmd(liuNianYear, effectiveMonth, liuDay);
       const dGan = naturalDayObj.getDayGanIndex();
 
@@ -301,8 +297,10 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const resetAllStates = () => {
     setDaXianSeq(-1); setLiuNianYear(null); setShowXiaoXian(false);
     setLiuMonth(null); setIsLiuMonthLeap(false); setLiuDay(null);
-    setSelectedPalace(null); setFlyingPalace(null); setIsReverse(false); setIsTwinMode(false);
+    setSelectedPalace(null); setFlyingPalace(null); setIsTwinMode(false);
+    setReverseMap({}); // 只有在換人或重置時間時，才清空狀態
   };
+  
   const changeHour = (delta: number) => {
     const currentZhiIdx = Math.floor((currentHour + 1) / 2) % 12;
     let nextZhiIdx = currentZhiIdx + delta;
@@ -321,18 +319,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const isBenMingState = daXianSeq === -1 && liuNianYear === null;
   const isCleanState = isBenMingState && flyingPalace === null && selectedPalace === null && externalGan === null && mode !== 'divination';
 
-  const handleDownload = async () => { 
-      if (!chartRef.current) return; 
-      try { 
-          const dataUrl = await toPng(chartRef.current, { cacheBust: true, backgroundColor: '#ffffff', filter: (node) => !(node.classList?.contains('no-screenshot')) }); 
-          const link = document.createElement('a'); 
-          const suffix = mode === 'divination' ? '_紫占' : (isTwinMode ? '_雙胞胎' : (isReverse ? '_顛倒盤' : '_本命盤')); 
-          link.download = `${client!.name}${suffix}.png`; 
-          link.href = dataUrl; 
-          link.click(); 
-      } catch (err) { console.error('Download failed:', err); } 
-  };
-
   const isTimeModified = currentHour !== client?.birthHour;
   let currentHourZhi = ZHI[Math.floor((currentHour + 1) / 2) % 12];
   if (Math.floor((currentHour + 1) / 2) % 12 === 0) { currentHourZhi = currentHour === 23 ? '晚子' : '早子'; }
@@ -350,16 +336,58 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       return palaceIdx === benMingPos;
   }
 
+  // 顛倒盤切換邏輯
+  const handleToggleReverse = () => {
+    if (canInvert === 'hidden' || canInvert === 'disabled') return;
+    
+    let key = '';
+    // 優先級：日 > 月 > 年 > 大限
+    if (liuDay !== null && liuMonth !== null && liuNianYear !== null) {
+        key = `ri-${liuNianYear}-${liuMonth}-${liuDay}`;
+    } else if (liuMonth !== null && liuNianYear !== null) {
+        key = `yue-${liuNianYear}-${liuMonth}`;
+    } else if (liuNianYear !== null) {
+        key = `liu-${liuNianYear}`;
+    } else if (daXianSeq >= 0) {
+        key = `da-${daXianSeq}`;
+    } else {
+        return;
+    }
+
+    setReverseMap(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  // 計算各層級旗標
+  const isDaRev = daXianSeq >= 0 ? !!reverseMap[`da-${daXianSeq}`] : false;
+  const isLiuRev = liuNianYear ? !!reverseMap[`liu-${liuNianYear}`] : false;
+  const isYueRev = (liuNianYear && liuMonth) ? !!reverseMap[`yue-${liuNianYear}-${liuMonth}`] : false;
+  const isRiRev = (liuNianYear && liuMonth && liuDay) ? !!reverseMap[`ri-${liuNianYear}-${liuMonth}-${liuDay}`] : false;
+
+  const reverseFlags = {
+      da: isDaRev,
+      liu: isLiuRev,
+      yue: isYueRev,
+      ri: isRiRev
+  };
+
+  // 計算按鈕亮燈狀態
+  let isCurrentReverseOn = false;
+  if (liuDay !== null) isCurrentReverseOn = isRiRev;
+  else if (liuMonth !== null) isCurrentReverseOn = isYueRev;
+  else if (liuNianYear !== null) isCurrentReverseOn = isLiuRev;
+  else if (daXianSeq >= 0) isCurrentReverseOn = isDaRev;
+
+  // [重點修正] 切換大限與流年時，不呼叫 resetAllStates，也不清空 reverseMap
   const handleDaXianClick = (seq: number) => { 
       setDaXianSeq(daXianSeq === seq ? -1 : seq); 
       setLiuNianYear(null); 
       setLiuMonth(null); setLiuDay(null);
-      setShowXiaoXian(false); setFlyingPalace(null); setSelectedPalace(null); setIsReverse(false); 
+      setShowXiaoXian(false); setFlyingPalace(null); setSelectedPalace(null); 
   };
   const handleLiuNianClick = (year: number) => { 
       setLiuNianYear(liuNianYear === year ? null : year); 
       setLiuMonth(null); setLiuDay(null);
-      setShowXiaoXian(false); setFlyingPalace(null); setSelectedPalace(null); setIsReverse(false); 
+      setShowXiaoXian(false); setFlyingPalace(null); setSelectedPalace(null); 
   };
   const toggleXiaoXian = () => { setShowXiaoXian(!showXiaoXian); setFlyingPalace(null); setSelectedPalace(null); };
   const handlePalaceClick = (palaceIdx: number) => { setSelectedPalace(selectedPalace === palaceIdx ? null : palaceIdx); };
@@ -394,7 +422,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       return { daName, liuName, xiaoName, yueName, riName }; 
   };
   
-  // 計算真實時間
   const currentRealTime = useMemo(() => {
       const now = new Date();
       const year = now.getFullYear();
@@ -404,12 +431,25 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       return { year, daSeq: daSeq >= 0 ? daSeq : -1 };
   }, [baseChartData, baseEngine, daXianList]);
 
+  const handleDownload = async () => { 
+      if (!chartRef.current) return; 
+      try { 
+          const dataUrl = await toPng(chartRef.current, { cacheBust: true, backgroundColor: '#ffffff', filter: (node) => !(node.classList?.contains('no-screenshot')) }); 
+          const link = document.createElement('a'); 
+          let suffix = mode === 'divination' ? '_紫占' : '_本命盤';
+          if (isCurrentReverseOn) suffix += '_顛倒'; 
+          link.download = `${client!.name}${suffix}.png`; 
+          link.href = dataUrl; 
+          link.click(); 
+      } catch (err) { console.error('Download failed:', err); } 
+  };
+
   if (loading || !client || !baseChartData || !baseEngine || !chartData) {
     return <div className="flex h-[100dvh] w-full items-center justify-center bg-gray-100"><Loader2 className="animate-spin text-gray-500" size={48} /></div>;
   }
 
   return (
-    <div className="flex flex-col h-[100dvh] w-full bg-white relative overflow-hidden">
+    <div className="flex flex-col h-screen w-full bg-slate-100 overflow-hidden">
       <div className="flex justify-between items-center px-4 py-2 bg-white border-b border-gray-200 shadow-sm shrink-0 z-50 h-[56px]">
         <button onClick={handleBack} className="bg-white text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm">
             <ChevronLeft size={16} /> 列表
@@ -492,8 +532,14 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
             flyingPalace={flyingPalace}
             daXianSeq={daXianSeq}
             showXiaoXian={showXiaoXian}
-            isReverse={isReverse}
+            
+            isReverse={isCurrentReverseOn}
+            reverseFlags={reverseFlags}
+            onToggleInverted={handleToggleReverse}
+
             isTwinMode={isTwinMode}
+            onToggleTwin={() => canTwin !== 'hidden' && canTwin !== 'disabled' && setIsTwinMode(!isTwinMode)}
+
             divNum={divNum}
             isDivinationReady={isDivinationReady}
             divSiHuaMap={divSiHuaMap}
@@ -513,9 +559,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
             onCompatibility={handleCompatibility}
             onChangeHour={changeHour}
             onResetTime={resetTime}
-            // [修改] 傳遞完整權限
-            onToggleTwin={() => canTwin !== 'hidden' && canTwin !== 'disabled' && setIsTwinMode(!isTwinMode)}
-            onToggleInverted={() => canInvert !== 'hidden' && canInvert !== 'disabled' && setIsReverse(!isReverse)}
+            
             onToggleSmallLimit={toggleXiaoXian}
             onPalaceClick={handlePalaceClick}
             onTriggerClick={handleTriggerClick}
@@ -538,7 +582,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
             liuNianYear={liuNianYear}
             liuMonthIdx={liuMonthIdx}
             liuDayIdx={liuDayIdx}
-            // [新增] 傳入真實時間
             currentRealTime={currentRealTime}
         />
       </div>
@@ -549,7 +592,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
                 <div className="flex w-full overflow-x-auto scrollbar-hide border-b border-gray-300">
                     {daXianList.map((limit) => {
                     const isActive = daXianSeq === limit.seq;
-                    // [新增] 判斷是否為真實大限
                     const isRealTime = currentRealTime && currentRealTime.daSeq === limit.seq;
                     return (
                         <button key={limit.seq} onClick={() => handleDaXianClick(limit.seq)} className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs relative ${isActive ? 'bg-gray-600 text-white font-bold' : 'hover:bg-gray-200 text-gray-700'}`}>
@@ -562,7 +604,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
                 <div className="flex w-full overflow-x-auto scrollbar-hide">
                     {liuNianList.map((item) => {
                     const isActive = liuNianYear === item.year;
-                    // [新增] 判斷是否為真實流年
                     const isRealTime = currentRealTime && currentRealTime.year === item.year;
                     return (
                         <button key={item.year} onClick={() => handleLiuNianClick(item.year)} className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs relative ${isActive ? 'bg-blue-600 text-white font-bold' : 'hover:bg-blue-100 text-gray-600'}`}>

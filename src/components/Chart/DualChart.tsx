@@ -4,7 +4,7 @@ import { PalaceGrid } from './PalaceGrid';
 import { ZiWeiEngine } from '../../logic/engine';
 import { GAN, SIHUA_TABLE } from '../../logic/constants';
 import { Loader2, ChevronLeft, Lock, Unlock, ArrowRightLeft } from 'lucide-react';
-import { Solar } from 'lunar-typescript'; // [新增] 引入 Solar 用於精確計算農曆年
+import { Solar } from 'lunar-typescript';
 import type { Client } from '../../db';
 
 interface DualChartProps {
@@ -36,14 +36,10 @@ const getLiuNianList = (engine: ZiWeiEngine, chartData: any, daXianSeq: number) 
     
     if (!palace) return [];
     
-    // [邏輯確認] 依照您的需求，顯示區間為 2017~2026 (即 生年 + 歲數)
-    // 1994 + 23 = 2017
     const startYear = chartData.lunarYear + palace.ages[0];
     const list = [];
     for (let i = 0; i < 10; i++) {
         const year = startYear + i;
-        const age = palace.ages[0] + i;
-        // 為了節省空間，只顯示西元年
         list.push({ year, label: `${year}` });
     }
     return list;
@@ -53,14 +49,10 @@ const getLiuNianList = (engine: ZiWeiEngine, chartData: any, daXianSeq: number) 
 const getCurrentDaLimitIndex = (chartData: any, engine: ZiWeiEngine) => {
     if (!chartData || !engine) return 0;
     
-    // [關鍵修正] 使用「農曆年」來計算當前虛歲
-    // 即使現在是 2026/1/10，lunarYear 仍會回傳 2025
     const now = new Date();
     const solar = Solar.fromYmd(now.getFullYear(), now.getMonth() + 1, now.getDate());
     const currentLunarYear = solar.getLunar().getYear(); 
     
-    // 虛歲 = 當前農曆年 - 生年 + 1
-    // Ex: 2025 - 1994 + 1 = 32 歲 (第三大限)
     const virtualAge = currentLunarYear - chartData.lunarYear + 1;
 
     const startPos = engine.getMingPos();
@@ -69,15 +61,13 @@ const getCurrentDaLimitIndex = (chartData: any, engine: ZiWeiEngine) => {
     for (let i = 0; i < 10; i++) {
         const idx = (startPos + i * direction + 120) % 12;
         const p = chartData.palaces[idx];
-        // 比對虛歲是否落在該大限區間
         if (virtualAge >= p.ages[0] && virtualAge <= p.ages[1]) {
             return i;
         }
     }
-    return 0; // 找不到則預設第一大限
+    return 0;
 };
 
-// 獨立的時辰計算 helper
 const calcNextHour = (currentHour: number, delta: number) => {
     const currentZhiIdx = Math.floor((currentHour + 1) / 2) % 12;
     let nextZhiIdx = currentZhiIdx + delta;
@@ -108,22 +98,24 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   const [daSeqA, setDaSeqA] = useState(-1);
   const [liuYearA, setLiuYearA] = useState<number | null>(null);
   const [showXiaoA, setShowXiaoA] = useState(false);
-  const [isRevA, setIsRevA] = useState(false);
   const [isTwinA, setIsTwinA] = useState(false);
+  // [新增] A 的顛倒盤狀態
+  const [reverseMapA, setReverseMapA] = useState<Record<string, boolean>>({});
 
   // Client B State
   const [hourB, setHourB] = useState(clientB?.birthHour || 0);
   const [daSeqB, setDaSeqB] = useState(-1);
   const [liuYearB, setLiuYearB] = useState<number | null>(null);
   const [showXiaoB, setShowXiaoB] = useState(false);
-  const [isRevB, setIsRevB] = useState(false);
   const [isTwinB, setIsTwinB] = useState(false);
+  // [新增] B 的顛倒盤狀態
+  const [reverseMapB, setReverseMapB] = useState<Record<string, boolean>>({});
+
 
   // --- Engines & Charts ---
   const engineA = useMemo(() => clientA ? new ZiWeiEngine(clientA.birthYear, clientA.birthMonth, clientA.birthDay, hourA, clientA.birthMinute, clientA.gender) : null, [clientA, hourA]);
   const engineB = useMemo(() => clientB ? new ZiWeiEngine(clientB.birthYear, clientB.birthMonth, clientB.birthDay, hourB, clientB.birthMinute, clientB.gender) : null, [clientB, hourB]);
 
-  // 初始化：當 Engine 準備好後，自動設定為當前大限
   useEffect(() => {
       if (engineA) {
           const chart = engineA.getChartData();
@@ -197,7 +189,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       for (let i=0; i<10; i++) {
           const idx = (startPos + i*dir + 120) % 12;
           const p = chartA.palaces[idx];
-          // [維持原邏輯] 2017~2026
           const startYear = chartA.lunarYear + p.ages[0];
           const endYear = chartA.lunarYear + p.ages[1];
           list.push({ 
@@ -238,6 +229,35 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       return list;
   }, [chartB, engineB]);
 
+  // --- Toggle Handlers ---
+  const handleToggleReverseA = () => {
+    let key = '';
+    if (liuYearA !== null) key = `liu-${liuYearA}`;
+    else if (daSeqA >= 0) key = `da-${daSeqA}`;
+    else return;
+    setReverseMapA(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleToggleReverseB = () => {
+    let key = '';
+    if (liuYearB !== null) key = `liu-${liuYearB}`;
+    else if (daSeqB >= 0) key = `da-${daSeqB}`;
+    else return;
+    setReverseMapB(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  // --- Derived Flags ---
+  const isDaRevA = daSeqA >= 0 ? !!reverseMapA[`da-${daSeqA}`] : false;
+  const isLiuRevA = liuYearA ? !!reverseMapA[`liu-${liuYearA}`] : false;
+  const isCurrentRevA = liuYearA !== null ? isLiuRevA : (daSeqA >= 0 ? isDaRevA : false);
+  const reverseFlagsA = { da: isDaRevA, liu: isLiuRevA, yue: false, ri: false };
+
+  const isDaRevB = daSeqB >= 0 ? !!reverseMapB[`da-${daSeqB}`] : false;
+  const isLiuRevB = liuYearB ? !!reverseMapB[`liu-${liuYearB}`] : false;
+  const isCurrentRevB = liuYearB !== null ? isLiuRevB : (daSeqB >= 0 ? isDaRevB : false);
+  const reverseFlagsB = { da: isDaRevB, liu: isLiuRevB, yue: false, ri: false };
+
+
   // --- Interaction Logic ---
   const syncTime = (source: 'A' | 'B', year: number | null) => {
       if (!isLocked) return; 
@@ -276,6 +296,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       setHourA(newHour);
       setDaSeqA(-1); setLiuYearA(null); setShowXiaoA(false);
       setFlyingPalace(null); setActiveSide(null);
+      setReverseMapA({});
   };
 
   const handleChangeHourB = (delta: number) => {
@@ -283,6 +304,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       setHourB(newHour);
       setDaSeqB(-1); setLiuYearB(null); setShowXiaoB(false);
       setFlyingPalace(null); setActiveSide(null);
+      setReverseMapB({});
   };
 
   const flyMapAtoB = useMemo(() => {
@@ -297,24 +319,15 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       return getSiHuaMap(gan);
   }, [activeSide, flyingPalace, chartB]);
   
-  // [關鍵修正] 計算真實時間 (Highlighter Logic)
-  // 目的：讓橘色小點正確停在「目前農曆虛歲」對應的大限與流年上
   const currentRealTimeA = useMemo(() => {
       const now = new Date();
-      // 1. 取得當前農曆年 (ex: 2026/1/10 => 農曆 2025)
       const solar = Solar.fromYmd(now.getFullYear(), now.getMonth() + 1, now.getDate());
       const currentLunarYear = solar.getLunar().getYear();
 
       if (!chartA) return undefined;
-      // 2. 計算正確虛歲 (ex: 2025 - 1994 + 1 = 32歲)
       const virtualAge = currentLunarYear - chartA.lunarYear + 1;
       
-      // 3. 找出對應大限 (32歲 -> 23-32限 -> 第三限)
       const daSeq = daListA.findIndex(d => virtualAge >= d.startAge && virtualAge <= d.endAge);
-      
-      // 4. 計算對應的顯示年份 (Display Year)
-      // 在您的列表邏輯中，年份標籤 = 生年 + 虛歲 (1994 + 32 = 2026)
-      // 所以雖然農曆是 2025，但我們亮燈要亮在標示為 "2026" 的那格
       const displayYear = chartA.lunarYear + virtualAge; 
 
       return { year: displayYear, daSeq: daSeq >= 0 ? daSeq : -1 };
@@ -386,7 +399,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         }}
                         className={`px-1 text-[11px] font-medium border-r border-blue-200 whitespace-nowrap flex-1 min-w-[40px] relative ${liuYear === item.year ? 'bg-blue-600 text-white' : 'text-blue-600 hover:bg-blue-100'}`}
                     >
-                        {/* 比對 realTime.year (2026) 與 item.year (2026) */}
                         {realTime && realTime.year === item.year && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
                         {item.label}
                     </button>
@@ -437,7 +449,11 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         daXianSeq={daSeqA}
                         liuNianYear={liuYearA}
                         showXiaoXian={showXiaoA}
-                        isReverse={isRevA}
+                        
+                        isReverse={isCurrentRevA}
+                        reverseFlags={reverseFlagsA}
+                        onToggleInverted={handleToggleReverseA}
+                        
                         isTwinMode={isTwinA}
                         externalGan={null}
                         flyingStarsLookup={flyMapBtoA}
@@ -460,7 +476,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         onChangeHour={handleChangeHourA}
                         onResetTime={() => setHourA(clientA.birthHour)}
                         onToggleTwin={() => setIsTwinA(!isTwinA)}
-                        onToggleInverted={() => setIsRevA(!isRevA)}
                         onToggleSmallLimit={() => setShowXiaoA(!showXiaoA)}
                         onPalaceClick={(idx) => handlePalaceClick('A', idx)}
                         onTriggerClick={() => {}}
@@ -484,7 +499,11 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         daXianSeq={daSeqB}
                         liuNianYear={liuYearB}
                         showXiaoXian={showXiaoB}
-                        isReverse={isRevB}
+                        
+                        isReverse={isCurrentRevB}
+                        reverseFlags={reverseFlagsB}
+                        onToggleInverted={handleToggleReverseB}
+
                         isTwinMode={isTwinB}
                         externalGan={null}
                         flyingStarsLookup={flyMapAtoB}
@@ -507,7 +526,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         onChangeHour={handleChangeHourB}
                         onResetTime={() => setHourB(clientB.birthHour)}
                         onToggleTwin={() => setIsTwinB(!isTwinB)}
-                        onToggleInverted={() => setIsRevB(!isRevB)}
                         onToggleSmallLimit={() => setShowXiaoB(!showXiaoB)}
                         onPalaceClick={(idx) => handlePalaceClick('B', idx)}
                         onTriggerClick={() => {}}

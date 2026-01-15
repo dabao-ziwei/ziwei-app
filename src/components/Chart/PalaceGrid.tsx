@@ -21,6 +21,15 @@ interface PalaceGridProps {
   isReverse: boolean;
   isTwinMode: boolean;
   
+  // [新增] 傳入顛倒盤旗標物件與切換函式
+  reverseFlags?: {
+      da: boolean;
+      liu: boolean;
+      yue: boolean;
+      ri: boolean;
+  };
+  onToggleInverted?: () => void;
+
   divNum?: string[];
   isDivinationReady?: boolean;
   divSiHuaMap?: Record<string, '祿' | '權' | '科' | '忌'>;
@@ -47,7 +56,6 @@ interface PalaceGridProps {
   onChangeHour: (delta: number) => void;
   onResetTime: () => void;
   onToggleTwin: () => void;
-  onToggleInverted: () => void;
   onToggleSmallLimit: () => void;
   onPalaceClick: (idx: number) => void;
   onTriggerClick: (idx: number) => void;
@@ -81,13 +89,14 @@ interface PalaceGridProps {
 export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
   client, chartData, relationships, historyStack,
   mode, selectedPalace, flyingPalace, daXianSeq, liuNianYear, showXiaoXian, isReverse, isTwinMode,
+  reverseFlags, onToggleInverted,
   divNum, isDivinationReady, divSiHuaMap,
   externalGan, externalSiHuaMap,
   benMingMajorStarsStr, currentHourZhi, isTimeModified, connections, daXianList, xiaoXianMingIdx,
   flyingStarsLookup,
   getRelativeNames, getIsBenMingMing, getAnchorCoord,
   onHistoryBack, onNavigate, onCompatibility, onChangeHour, onResetTime,
-  onToggleTwin, onToggleInverted, onToggleSmallLimit, onPalaceClick, onTriggerClick,
+  onToggleTwin, onToggleSmallLimit, onPalaceClick, onTriggerClick,
   permissionFlags,
   liuMonth, isLiuMonthLeap, liuDay, onSetLiuMonth, onSetLiuDay, liuMonthGan, liuDayGan,
   currentRealTime,
@@ -133,7 +142,7 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
   return (
     <div ref={ref} className="w-full h-full bg-white border-2 border-gray-800 shadow-xl z-10 relative pt-2">
       
-      {/* 內部容器：作為實際的 Grid 和 SVG 舞台，填滿剩餘空間 */}
+      {/* 內部容器：作為實際的 Grid 和 SVG 舞台 */}
       <div className="relative w-full h-full grid grid-cols-4 grid-rows-4">
 
         {/* SVG 相對於內部容器定位，與 Grid 完美重疊 */}
@@ -141,7 +150,7 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
             {selectedPalace !== null && (() => { const pSelf = getAnchorCoord(connections.self); const pTri1 = getAnchorCoord(connections.tri1); const pTri2 = getAnchorCoord(connections.tri2); const pOpp = getAnchorCoord(connections.opp); return ( <> <line x1={`${pSelf.x}%`} y1={`${pSelf.y}%`} x2={`${pTri1.x}%`} y2={`${pTri1.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> <line x1={`${pTri1.x}%`} y1={`${pTri1.y}%`} x2={`${pTri2.x}%`} y2={`${pTri2.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> <line x1={`${pTri2.x}%`} y1={`${pTri2.y}%`} x2={`${pSelf.x}%`} y2={`${pSelf.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> <line x1={`${pSelf.x}%`} y1={`${pSelf.y}%`} x2={`${pOpp.x}%`} y2={`${pOpp.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> </> ); })()}
         </svg>
 
-        {/* Grid Items 現在是內部容器的子元素 */}
+        {/* Grid Items */}
         {gridLayout.map((palaceIdx, gridPos) => {
             if (gridPos === 5) {
                 return (
@@ -165,7 +174,7 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
                             isDivinationReady={isDivinationReady}
                             
                             onToggleTwin={onToggleTwin}
-                            onToggleInverted={onToggleInverted}
+                            onToggleInverted={onToggleInverted || (() => {})}
                             onToggleSmallLimit={onToggleSmallLimit}
                             showTwin={isTwinMode}
                             showInverted={isReverse}
@@ -241,6 +250,10 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
                         flyingStars={flyingStarsLookup}
                         isTwinMode={isTwinMode}
                         isReverse={isReverse}
+                        
+                        // [修正] 傳遞 reverseFlags 給 PalaceCard
+                        reverseFlags={reverseFlags}
+
                         divinationName={relNames.divinationName}
                         divinationSiHua={mode === 'divination' ? divSiHuaMap : undefined}
                         externalSiHua={externalSiHuaMap}
@@ -249,7 +262,7 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
                 </div>
             );
         })}
-      </div> {/* 內部容器結束 */}
-    </div> // 最外層容器結束
+      </div>
+    </div>
   );
 });
