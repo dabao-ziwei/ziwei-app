@@ -71,7 +71,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const [showXiaoXian, setShowXiaoXian] = useState<boolean>(false);
   const [isTwinMode, setIsTwinMode] = useState<boolean>(false);
 
-  // [重點] 狀態持久化：使用 Map 記錄狀態，不隨便清空
+  // 狀態持久化：使用 Map 記錄狀態，不隨便清空
   const [reverseMap, setReverseMap] = useState<Record<string, boolean>>({});
 
   // 流月流日狀態
@@ -312,8 +312,13 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   };
   const resetTime = () => { setCurrentHour(client!.birthHour); resetAllStates(); };
   
+  // [修正] 返回邏輯：使用 navigate(-1) 回到上一頁 (包含搜尋狀態的列表)
   const handleBack = () => { 
-      if (onBack) { onBack(); } else { navigate('/list'); }
+      if (onBack) { 
+          onBack(); 
+      } else { 
+          navigate(-1); // 改為 -1 (回到上一頁)
+      }
   };
   
   const isBenMingState = daXianSeq === -1 && liuNianYear === null;
@@ -377,7 +382,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   else if (liuNianYear !== null) isCurrentReverseOn = isLiuRev;
   else if (daXianSeq >= 0) isCurrentReverseOn = isDaRev;
 
-  // [重點修正] 切換大限與流年時，不呼叫 resetAllStates，也不清空 reverseMap
+  // 切換大限與流年時，不呼叫 resetAllStates，也不清空 reverseMap
   const handleDaXianClick = (seq: number) => { 
       setDaXianSeq(daXianSeq === seq ? -1 : seq); 
       setLiuNianYear(null); 
@@ -451,6 +456,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   return (
     <div className="flex flex-col h-screen w-full bg-slate-100 overflow-hidden">
       <div className="flex justify-between items-center px-4 py-2 bg-white border-b border-gray-200 shadow-sm shrink-0 z-50 h-[56px]">
+        {/* [修正] 修改返回按鈕行為 */}
         <button onClick={handleBack} className="bg-white text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm">
             <ChevronLeft size={16} /> 列表
         </button>
