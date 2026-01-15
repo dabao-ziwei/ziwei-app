@@ -96,26 +96,20 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
 
   const gridLayout = [5, 6, 7, 8, 4, null, null, 9, 3, null, null, 10, 2, 1, 0, 11];
 
-  // [修改] 恢復小限盤的高亮邏輯 (Priority 3)
   const { highlightIdx, highlightClass } = React.useMemo(() => {
       const baseClass = "absolute inset-0 z-0 pointer-events-none"; 
 
-      // 1. 流日盤 (最高權重) - 淡紫色呼吸
       if (liuDay !== null && liuDayIdx >= 0) {
           return { highlightIdx: liuDayIdx, highlightClass: `${baseClass} bg-purple-100/50 animate-pulse` };
       }
-      // 2. 流月盤 - 淡琥珀色呼吸
       if (liuMonth !== null && liuMonthIdx >= 0) {
           return { highlightIdx: liuMonthIdx, highlightClass: `${baseClass} bg-amber-100/50 animate-pulse` };
       }
       
-      // [恢復] 3. 小限盤 - 淡綠色呼吸
-      // 當 showXiaoXian 為 true 時，這裡會觸發，顯示綠色背景
       if (showXiaoXian && xiaoXianMingIdx >= 0) {
           return { highlightIdx: xiaoXianMingIdx, highlightClass: `${baseClass} bg-green-100/50 animate-pulse` };
       }
       
-      // 4. 流年盤 - 淡藍色呼吸
       if (liuNianYear !== null) {
           const liuZhi = (liuNianYear - 4) % 12;
           const liuMingIdx = chartData.palaces.findIndex(p => p.zhiIndex === liuZhi);
@@ -123,11 +117,9 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
               return { highlightIdx: liuMingIdx, highlightClass: `${baseClass} bg-blue-100/50 animate-pulse` };
           }
       }
-      // 5. 大限盤 - 灰色靜態
       if (daXianSeq >= 0 && daXianList[daXianSeq]) {
           return { highlightIdx: daXianList[daXianSeq].palaceIdx, highlightClass: `${baseClass} bg-gray-200/70` };
       }
-      // 6. 本命盤 (預設) - 淡紅色靜態
       const benMingIdx = chartData.palaces.findIndex(p => getIsBenMingMing(p.index));
       if (benMingIdx >= 0) {
           return { highlightIdx: benMingIdx, highlightClass: `${baseClass} bg-red-50/60` };
@@ -139,11 +131,11 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
 
 
   return (
-    // [修改] 增加 pt-3 (約12px) 的頂部內距，創造安全緩衝區，防止飛化標籤被 Header 遮擋
+    // 您設定的 pt-2
     <div ref={ref} className="w-full h-full bg-white border-2 border-gray-800 shadow-xl z-10 grid grid-cols-4 grid-rows-4 relative pt-2">
             
-      {/* [修正] 將 z-40 提升至 z-[200]，確保線條覆蓋在 CenterInfoBoard (z-[100]+) 之上 */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none z-[200]">
+      {/* [修正] 方案 B：SVG 增加 top-2 以補償父容器的 pt-2，確保線條座標對齊被往下擠的格子 */}
+      <svg className="absolute left-0 right-0 bottom-0 top-2 w-full h-full pointer-events-none z-[200]">
           {selectedPalace !== null && (() => { const pSelf = getAnchorCoord(connections.self); const pTri1 = getAnchorCoord(connections.tri1); const pTri2 = getAnchorCoord(connections.tri2); const pOpp = getAnchorCoord(connections.opp); return ( <> <line x1={`${pSelf.x}%`} y1={`${pSelf.y}%`} x2={`${pTri1.x}%`} y2={`${pTri1.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> <line x1={`${pTri1.x}%`} y1={`${pTri1.y}%`} x2={`${pTri2.x}%`} y2={`${pTri2.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> <line x1={`${pTri2.x}%`} y1={`${pTri2.y}%`} x2={`${pSelf.x}%`} y2={`${pSelf.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> <line x1={`${pSelf.x}%`} y1={`${pSelf.y}%`} x2={`${pOpp.x}%`} y2={`${pOpp.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> </> ); })()}
       </svg>
 
@@ -188,6 +180,8 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
                           liuNianYear={liuNianYear}
                           liuMonthGan={liuMonthGan}
                           liuDayGan={liuDayGan}
+                          
+                          currentRealTime={currentRealTime}
                       />
                   </div>
               );
@@ -209,7 +203,6 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
           
           const isConnected = selectedPalace !== null && Object.values(connections).includes(palaceIdx);
           
-          // [邏輯確認] 當 showXiaoXian 為 true 時，showXiaoXianSeal 為 false，所以標籤消失
           const showXiaoXianSeal = isXiaoXianMingPalace && !showXiaoXian;
           const isFlyingSource = flyingPalace === palaceIdx;
           
