@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import type { Client, Relationship } from '../db';
 import type { ChartData } from '../logic/types';
 import type { PermissionState } from '../logic/permissions';
-import { LunarYear, Solar, Lunar } from 'lunar-typescript'; // [修正] 引入 Lunar 用於計算天數
+import { LunarYear, Solar, Lunar } from 'lunar-typescript';
 import { GAN } from '../logic/constants';
 
 const ArrowHead = ({ x, y, rotation }: { x: number, y: number, rotation: number }) => (
@@ -139,11 +139,10 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
         return LunarYear.fromYear(liuNianYear).getLeapMonth();
     }, [liuNianYear]);
 
-    // [新增] 計算當前流月的最大天數 (大小月)
+    // 計算當前流月的最大天數 (大小月)
     const maxDaysInLiuMonth = useMemo(() => {
         if (!liuNianYear || liuMonth === null || liuMonth === undefined) return 30;
         try {
-            // lunar-typescript: 負數月份代表閏月
             const m = isLiuMonthLeap ? -Math.abs(liuMonth) : Math.abs(liuMonth);
             const l = Lunar.fromYmd(liuNianYear, m, 1);
             return l.getDaysInMonth();
@@ -203,7 +202,7 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
         onSetLiuMonth(nextM, nextLeap);
     };
 
-    // [新增] 流日切換 Handler (上一日)
+    // 流日切換 Handler
     const handlePrevDay = (e: React.MouseEvent) => {
         e.stopPropagation();
         if (!onSetLiuDay || permissionFlags?.liu_day === 'disabled') return;
@@ -214,11 +213,10 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
         }
 
         let nextD = liuDay - 1;
-        if (nextD < 1) nextD = maxDaysInLiuMonth; // 循環到月底
+        if (nextD < 1) nextD = maxDaysInLiuMonth; 
         onSetLiuDay(nextD);
     };
 
-    // [新增] 流日切換 Handler (下一日)
     const handleNextDay = (e: React.MouseEvent) => {
         e.stopPropagation();
         if (!onSetLiuDay || permissionFlags?.liu_day === 'disabled') return;
@@ -229,7 +227,7 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
         }
 
         let nextD = liuDay + 1;
-        if (nextD > maxDaysInLiuMonth) nextD = 1; // 循環到月初
+        if (nextD > maxDaysInLiuMonth) nextD = 1; 
         onSetLiuDay(nextD);
     };
 
@@ -326,11 +324,12 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     const closePickers = () => { setIsMonthPickerOpen(false); setIsDayPickerOpen(false); };
 
     return (
-        <div className="col-span-2 row-span-2 flex z-10 relative overflow-hidden p-0.5 h-full w-full" onClick={closePickers}>
+        <div className="col-span-2 row-span-2 flex z-10 relative overflow-visible p-0.5 h-full w-full" onClick={closePickers}>
+            {/* [修正] 將 overflow-hidden 改為 overflow-visible，允許選單彈出容器外 */}
             <div className={`flex w-full h-full bg-white`}>
                 
-                {/* 左側面板：使用 z-50 確保在最上層，且 relative */}
-                <div className={`h-full flex flex-col p-1 border-r border-gray-100 bg-white z-[100] relative transition-all duration-300 ${hasRelations ? 'basis-[35%] shrink-0' : 'w-full'}`}>
+                {/* [修正] 左側面板：z-index 提高到 300，確保在所有線條和格子之上 */}
+                <div className={`h-full flex flex-col p-1 border-r border-gray-100 bg-white z-[300] relative transition-all duration-300 ${hasRelations ? 'basis-[35%] shrink-0' : 'w-full'}`}>
                     {historyStack.length > 0 && (
                           <div className="absolute top-0 left-0 w-full px-2 py-1 z-50 bg-white/90 backdrop-blur-sm border-b border-gray-100 flex items-center gap-1 overflow-hidden">
                             <button onClick={onHistoryBack} className="flex items-center text-gray-500 hover:text-blue-600 transition-colors shrink-0"><ArrowLeft size={14} /></button>
@@ -345,7 +344,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                     
                     <div className={`${historyStack.length > 0 ? 'mt-6' : 'mt-1'}`}></div>
 
-                    {/* 時間控制區：z-[200] 確保在面板內也是最上層 */}
                     <div className="flex justify-between items-center px-1 mt-1 shrink-0 relative z-[200]">
                         <button onClick={(e) => { e.stopPropagation(); onChangeHour(-1); }} className="text-gray-400 hover:text-gray-800 font-bold text-base select-none p-1 cursor-pointer bg-transparent">&lt;</button>
                         
@@ -377,7 +375,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                     <div className="mt-auto flex justify-center shrink-0 mb-1 w-full px-1">
                         <div className="flex flex-col gap-1 w-full bg-slate-100/80 rounded-lg p-1 border border-slate-200">
                             
-                            {/* 第一列：功能開關 */}
                             <div className="flex justify-center gap-1 w-full">
                                 {!isDaXian && !isLiuNian && (
                                     <>
@@ -423,11 +420,9 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                 )}
                             </div>
 
-                            {/* 第二列：時間導航 (流月、流日) */}
                             {isLiuNian && (
                                 <div className="hidden md:flex justify-center gap-1 w-full border-t border-gray-200 pt-1">
                                     
-                                    {/* 流月按鈕組 */}
                                     {permissionFlags?.liu_month !== 'hidden' && (
                                         <div className="relative flex-1">
                                             <div className={`flex items-center rounded overflow-hidden shadow-sm transition-colors
@@ -475,7 +470,8 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                             </div>
 
                                             {isMonthPickerOpen && onSetLiuMonth && (
-                                                <div className="absolute bottom-full left-0 mb-2 w-48 bg-white border border-amber-200 rounded-lg shadow-xl p-2 z-[60] grid grid-cols-3 gap-1 animate-in slide-in-from-bottom-2 fade-in duration-200" onClick={e => e.stopPropagation()}>
+                                                // [修正] 提高 z-index 至 z-[400] 確保蓋過其他元素
+                                                <div className="absolute bottom-full left-0 mb-2 w-48 bg-white border border-amber-200 rounded-lg shadow-xl p-2 z-[400] grid grid-cols-3 gap-1 animate-in slide-in-from-bottom-2 fade-in duration-200" onClick={e => e.stopPropagation()}>
                                                     {Array.from({length: 12}, (_, i) => i + 1).map(m => {
                                                         const isReal = isCurrentYear && !realIsLeap && realLunarMonth === m;
                                                         return (
@@ -509,7 +505,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                         </div>
                                     )}
 
-                                    {/* [修改] 流日按鈕 (改為左右按鈕控制，並動態計算天數) */}
                                     {liuMonth !== null && permissionFlags?.liu_day !== 'hidden' && (
                                         <div className="relative flex-1">
                                             <div className={`flex items-center rounded overflow-hidden shadow-sm transition-colors
@@ -557,8 +552,8 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                             </div>
 
                                             {isDayPickerOpen && onSetLiuDay && (
-                                                <div className="absolute bottom-full left-[-50px] mb-2 w-64 bg-white border border-green-200 rounded-lg shadow-xl p-2 z-[60] grid grid-cols-5 gap-1 animate-in slide-in-from-bottom-2 fade-in duration-200" onClick={e => e.stopPropagation()}>
-                                                    {/* [修改] 使用 maxDaysInLiuMonth 動態生成日期按鈕 */}
+                                                // [修正] 提高 z-index 至 z-[400] 確保蓋過其他元素
+                                                <div className="absolute bottom-full left-[-50px] mb-2 w-64 bg-white border border-green-200 rounded-lg shadow-xl p-2 z-[400] grid grid-cols-5 gap-1 animate-in slide-in-from-bottom-2 fade-in duration-200" onClick={e => e.stopPropagation()}>
                                                     {Array.from({length: maxDaysInLiuMonth}, (_, i) => i + 1).map(d => {
                                                         const isRealDay = isCurrentYear && 
                                                                           realLunarMonth === liuMonth && 
