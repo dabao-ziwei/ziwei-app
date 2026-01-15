@@ -22,9 +22,8 @@ interface PalaceCardProps {
   flyingStars?: Record<string, SiHuaType>;
   
   isTwinMode?: boolean; 
-  isReverse?: boolean; // 這裡保留是為了相容，但實際渲染改用下面的 flags
+  isReverse?: boolean; 
   
-  // [新增] 接收細分狀態
   reverseFlags?: {
       da: boolean;
       liu: boolean;
@@ -32,11 +31,30 @@ interface PalaceCardProps {
       ri: boolean;
   };
   
+  // [新增] 指南針顯示狀態
+  showCompass?: boolean;
+
   divinationName?: string;
 
   externalSiHua?: Record<string, '祿' | '權' | '科' | '忌'>;
   divinationSiHua?: Record<string, '祿' | '權' | '科' | '忌'>;
 }
+
+// [新增] 方位映射表 (0=子, 1=丑, ...)
+const COMPASS_MAP = [
+  '正北',   // 子 (0)
+  '北北東', // 丑 (1)
+  '東東北', // 寅 (2)
+  '正東',   // 卯 (3)
+  '東東南', // 辰 (4)
+  '南南東', // 巳 (5)
+  '正南',   // 午 (6)
+  '南南西', // 未 (7)
+  '西西南', // 申 (8)
+  '正西',   // 酉 (9)
+  '西西北', // 戌 (10)
+  '北北西'  // 亥 (11)
+];
 
 // 輔助函式：取得顛倒宮位名稱
 const getReversedName = (name: string): string | null => {
@@ -67,7 +85,8 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   flyingStars,
   isTwinMode,
   isReverse,
-  reverseFlags, // 解構出來
+  reverseFlags, 
+  showCompass, // [新增]
   divinationName, 
   externalSiHua,
   divinationSiHua
@@ -164,9 +183,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
     );
   };
 
-  // [修改] 通用標籤渲染函式：依據 reverseFlags 決定是否顯示對宮
   const renderLabel = (name: string, colorClass: string, targetLayer: 'ben' | 'da' | 'liu' | 'yue' | 'ri') => {
-      // 根據層級去查表
       let isReversed = false;
       if (reverseFlags) {
           if (targetLayer === 'da') isReversed = reverseFlags.da;
@@ -174,9 +191,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
           if (targetLayer === 'yue') isReversed = reverseFlags.yue;
           if (targetLayer === 'ri') isReversed = reverseFlags.ri;
       } else {
-          // Fallback: 如果沒有傳 reverseFlags，就用舊邏輯
-          // 但這裡為了簡化，我們假設都會傳
-          isReversed = isReverse; 
+          isReversed = isReverse || false; 
       }
 
       const reversedName = isReversed ? getReversedName(name) : null;
@@ -201,6 +216,15 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
     >
       {renderExternalChips()}
       {renderInteractiveFlyingStars()}
+
+      {/* [新增] 指南針文字標籤 */}
+      {showCompass && (
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none select-none">
+              <span className="text-xs font-bold text-amber-700 bg-amber-50/80 px-2 py-1 rounded-full border border-amber-200 shadow-sm backdrop-blur-[1px] whitespace-nowrap">
+                  {COMPASS_MAP[palace.zhiIndex]}
+              </span>
+          </div>
+      )}
 
       <div className="flex-1 flex flex-row gap-0.5 relative z-10 min-h-0 items-start content-start overflow-hidden pointer-events-none">
         {palace.majorStars.map((star, idx) => (

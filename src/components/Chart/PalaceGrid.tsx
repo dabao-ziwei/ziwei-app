@@ -21,7 +21,9 @@ interface PalaceGridProps {
   isReverse: boolean;
   isTwinMode: boolean;
   
-  // [新增] 傳入顛倒盤旗標物件與切換函式
+  // [新增] 接收指南針狀態
+  showCompass: boolean;
+
   reverseFlags?: {
       da: boolean;
       liu: boolean;
@@ -89,6 +91,7 @@ interface PalaceGridProps {
 export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
   client, chartData, relationships, historyStack,
   mode, selectedPalace, flyingPalace, daXianSeq, liuNianYear, showXiaoXian, isReverse, isTwinMode,
+  showCompass, // [新增]
   reverseFlags, onToggleInverted,
   divNum, isDivinationReady, divSiHuaMap,
   externalGan, externalSiHuaMap,
@@ -251,7 +254,9 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
                         isTwinMode={isTwinMode}
                         isReverse={isReverse}
                         
-                        // [修正] 傳遞 reverseFlags 給 PalaceCard
+                        // [新增] 傳遞指南針狀態
+                        showCompass={showCompass}
+
                         reverseFlags={reverseFlags}
 
                         divinationName={relNames.divinationName}
