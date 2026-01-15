@@ -31,19 +31,13 @@ interface PalaceCardProps {
 }
 
 // 輔助函式：取得顛倒宮位名稱
-// 例如輸入 "大命"，回傳 "大遷"
 const getReversedName = (name: string): string | null => {
     if (!name) return null;
-    // 取最後一個字 (如 "命")
     const lastChar = name.slice(-1);
-    // 查表找全名 (如 "命" -> "命宮")
     const fullKey = Object.keys(PALACE_REVERSE_MAP).find(k => k.includes(lastChar));
     if (!fullKey) return null;
-    // 查表找對宮全名 (如 "命宮" -> "遷移")
     const reversedFull = PALACE_REVERSE_MAP[fullKey];
-    // 取對宮簡稱 (如 "遷")
     const reversedSuffix = reversedFull.substring(0, 1);
-    // 拼回原本的前綴 (如 "大" + "遷")
     const prefix = name.substring(0, name.length - 1);
     return `${prefix}${reversedSuffix}`;
 };
@@ -73,9 +67,11 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   const isBenMing = !daName && !liuName && !xiaoName;
 
   // --- 判斷當前最高層級 (Active Layer) ---
-  // 用於決定 "顛倒盤" 功能該作用在哪一層，而不影響其他層
-  let activeLayer: 'ben' | 'da' | 'liu' = 'ben';
-  if (liuName) activeLayer = 'liu';
+  // [修改] 擴充判斷：加入流月(yue)與流日(ri)
+  let activeLayer: 'ben' | 'da' | 'liu' | 'yue' | 'ri' = 'ben';
+  if (riName) activeLayer = 'ri';
+  else if (yueName) activeLayer = 'yue';
+  else if (liuName) activeLayer = 'liu';
   else if (daName) activeLayer = 'da';
   else activeLayer = 'ben';
 
@@ -173,7 +169,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   };
 
   // 通用標籤渲染函式 (含顛倒盤邏輯)
-  const renderLabel = (name: string, colorClass: string, targetLayer: 'ben' | 'da' | 'liu') => {
+  const renderLabel = (name: string, colorClass: string, targetLayer: 'ben' | 'da' | 'liu' | 'yue' | 'ri') => {
       // 邏輯核心：只有當 "開啟顛倒盤" 且 "目標層級等於當前最高層級" 時，才顯示顛倒名稱
       const shouldReverse = isReverse && activeLayer === targetLayer;
       const reversedName = shouldReverse ? getReversedName(name) : null;
@@ -278,18 +274,32 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
           {/* 3. 流年 */}
           {liuName && renderLabel(liuName, 'text-blue-600', 'liu')}
           
-          {/* 4. 流月 (無顛倒功能) */}
+          {/* 4. 流月 (加入顛倒功能) */}
           {yueName && (
-              <span className="text-[13px] font-bold text-amber-600 whitespace-nowrap leading-none mb-[1px] bg-white/80 px-0.5 rounded shadow-sm border border-amber-100">
-                  {yueName}
-              </span>
+             <div className="flex items-center justify-end gap-1 mb-[1px] origin-bottom-right">
+                {(isReverse && activeLayer === 'yue') && (
+                    <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none bg-white/90 px-0.5 rounded shadow-sm border border-purple-200">
+                        {getReversedName(yueName)}
+                    </span>
+                )}
+                <span className="text-[13px] font-bold text-amber-600 whitespace-nowrap leading-none bg-white/80 px-0.5 rounded shadow-sm border border-amber-100">
+                    {yueName}
+                </span>
+             </div>
           )}
 
-          {/* 5. 流日 (無顛倒功能) */}
+          {/* 5. 流日 (加入顛倒功能) */}
           {riName && (
-              <span className="text-[13px] font-bold text-green-700 whitespace-nowrap leading-none mb-[1px] bg-white/80 px-0.5 rounded shadow-sm border border-green-100">
-                  {riName}
-              </span>
+             <div className="flex items-center justify-end gap-1 mb-[1px] origin-bottom-right">
+                {(isReverse && activeLayer === 'ri') && (
+                    <span className="text-[13px] font-bold text-purple-600 whitespace-nowrap leading-none bg-white/90 px-0.5 rounded shadow-sm border border-purple-200">
+                        {getReversedName(riName)}
+                    </span>
+                )}
+                <span className="text-[13px] font-bold text-green-700 whitespace-nowrap leading-none bg-white/80 px-0.5 rounded shadow-sm border border-green-100">
+                    {riName}
+                </span>
+             </div>
           )}
 
           {/* 6. 小限 (最頂層，無顛倒功能) */}

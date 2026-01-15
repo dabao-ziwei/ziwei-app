@@ -75,6 +75,11 @@ interface CenterInfoBoardProps {
   liuNianYear?: number | null;
   liuMonthGan?: number;
   liuDayGan?: number;
+  
+  currentRealTime?: {
+      year: number;
+      daSeq: number;
+  };
 }
 
 const NUM_CN = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二'];
@@ -103,7 +108,8 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     isDaXian,
     isLiuNian,
     permissionFlags,
-    liuMonth, isLiuMonthLeap, liuDay, onSetLiuMonth, onSetLiuDay, liuNianYear, liuMonthGan, liuDayGan
+    liuMonth, isLiuMonthLeap, liuDay, onSetLiuMonth, onSetLiuDay, liuNianYear, liuMonthGan, liuDayGan,
+    currentRealTime
 }) => {
     const navigate = useNavigate();
     const hasRelations = relationships.length > 0;
@@ -280,7 +286,7 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
         <div className="col-span-2 row-span-2 flex z-10 relative overflow-hidden p-0.5 h-full w-full" onClick={closePickers}>
             <div className={`flex w-full h-full bg-white`}>
                 
-                {/* [修正] 左側面板：使用 z-50 確保在最上層，且 relative */}
+                {/* 左側面板：使用 z-50 確保在最上層，且 relative */}
                 <div className={`h-full flex flex-col p-1 border-r border-gray-100 bg-white z-[100] relative transition-all duration-300 ${hasRelations ? 'basis-[35%] shrink-0' : 'w-full'}`}>
                     {historyStack.length > 0 && (
                           <div className="absolute top-0 left-0 w-full px-2 py-1 z-50 bg-white/90 backdrop-blur-sm border-b border-gray-100 flex items-center gap-1 overflow-hidden">
@@ -296,7 +302,7 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                     
                     <div className={`${historyStack.length > 0 ? 'mt-6' : 'mt-1'}`}></div>
 
-                    {/* [修正] 時間控制區：z-[200] 確保在面板內也是最上層 */}
+                    {/* 時間控制區：z-[200] 確保在面板內也是最上層 */}
                     <div className="flex justify-between items-center px-1 mt-1 shrink-0 relative z-[200]">
                         <button onClick={(e) => { e.stopPropagation(); onChangeHour(-1); }} className="text-gray-400 hover:text-gray-800 font-bold text-base select-none p-1 cursor-pointer bg-transparent">&lt;</button>
                         
@@ -346,8 +352,8 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                     </>
                                 )}
                                 
-                                {/* [修改] 顛倒盤按鈕邏輯：小限開啟或有流月時不顯示 */}
-                                {permissionFlags?.inverted !== 'hidden' && !showSmallLimit && liuMonth === null && (
+                                {/* [修改] 移除 liuMonth === null 判斷，允許在流月/流日開啟顛倒盤 */}
+                                {permissionFlags?.inverted !== 'hidden' && !showSmallLimit && (
                                     <button 
                                         onClick={onToggleInverted} 
                                         disabled={permissionFlags?.inverted === 'disabled'}
