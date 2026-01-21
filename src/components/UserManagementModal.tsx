@@ -1,3 +1,5 @@
+// src/components/UserManagementModal.tsx
+
 import React, { useEffect, useState, useMemo } from 'react';
 import { X, Search, ChevronLeft, ChevronRight, Loader2, Shield, Trash2, UserPlus, CalendarClock, Settings, Sliders, Save, RotateCcw, Sparkles, ArrowUp, ArrowDown, Filter, ChevronDown, Users, Repeat, Clock, RefreshCw, Calendar, Check } from 'lucide-react';
 import { getAllProfilesWithStats, updateProfile, toggleUserBan, deleteUserProfile, inviteUserByEmail, bulkUpdateAccessExpiry, type UserProfile, type UserFeatures } from '../db';
@@ -390,7 +392,12 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                                 return (
                                     <tr key={user.id} className={`hover:bg-gray-50 group transition-colors ${selectedIds.has(user.id) ? 'bg-blue-50/50' : ''} ${editingUser?.id === user.id ? 'bg-blue-100/30' : ''}`}>
                                         <td className="py-3 px-4"><input type="checkbox" checked={selectedIds.has(user.id)} onChange={() => handleSelectOne(user.id)} disabled={isSuper}/></td>
-                                        <td className="py-3 px-2 text-sm font-bold text-gray-700"><div className="flex items-center gap-2">{isSuper && '👑'} <span className="truncate max-w-[180px]">{user.email}</span></div></td>
+                                        <td className="py-3 px-2 text-sm font-bold text-gray-700">
+                                            <div className="flex items-center gap-2">
+                                                {isSuper && '👑'} 
+                                                <span className="select-text break-all">{user.email}</span>
+                                            </div>
+                                        </td>
                                         
                                         <td className="py-3 px-2 text-center">
                                             <span className={`text-xs font-mono font-bold px-2 py-1 rounded-full ${isFull ? 'bg-red-100 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
@@ -416,164 +423,176 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 )}
             </div>
             {selectedIds.size > 0 && (
-                <div className="bg-blue-600 text-white p-3 flex justify-between items-center z-20 shadow-[0_-4px_10px_rgba(0,0,0,0.1)]">
-                    <div className="px-4 text-sm font-bold">已選 {selectedIds.size} 人</div>
-                    <div className="flex items-center gap-2 px-4">
-                        <div className="flex items-center gap-2 bg-blue-700 rounded-lg p-1 pr-3">
-                            <CalendarClock size={16} className="ml-2"/>
-                            <input type="date" className="bg-transparent border-b border-blue-400 text-sm focus:outline-none text-center w-32 cursor-pointer" value={bulkDate} onChange={e => setBulkDate(e.target.value)}/>
-                        </div>
-                        <button onClick={handleBulkUpdate} disabled={isBulkUpdating} className="bg-white text-blue-600 px-4 py-1.5 rounded-lg font-bold text-sm hover:bg-blue-50 transition-colors flex gap-2">{isBulkUpdating ? <Loader2 className="animate-spin" size={16}/> : '批量更新'}</button>
+                <div className="bg-blue-50 px-6 py-3 border-t border-blue-100 flex items-center justify-between">
+                    <span className="text-sm font-bold text-blue-800">已選擇 {selectedIds.size} 位使用者</span>
+                    <div className="flex items-center gap-3">
+                        <input type="date" className="px-3 py-1.5 border border-blue-200 rounded text-sm bg-white" value={bulkDate} onChange={e => setBulkDate(e.target.value)} />
+                        <button onClick={handleBulkUpdate} disabled={isBulkUpdating} className="px-4 py-1.5 bg-blue-600 text-white rounded text-sm font-bold hover:bg-blue-700 flex items-center gap-2">{isBulkUpdating ? <Loader2 className="animate-spin" size={14}/> : <CalendarClock size={14}/>} 批量展延期限</button>
                     </div>
                 </div>
             )}
-            <div className="p-3 border-t border-gray-100 bg-gray-50 flex justify-between items-center text-sm text-gray-500">
-                <span>{paginatedData.length} / {processedProfiles.length} 筆</span>
+            <div className="bg-white border-t border-gray-100 px-6 py-3 flex items-center justify-between">
+                <span className="text-xs text-gray-400">Showing {paginatedData.length} of {processedProfiles.length}</span>
                 <div className="flex gap-2">
-                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-1 border rounded bg-white disabled:opacity-50"><ChevronLeft size={16} /></button>
-                    <span className="px-2">{currentPage} / {totalPages || 1}</span>
-                    <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-1 border rounded bg-white disabled:opacity-50"><ChevronRight size={16} /></button>
+                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30"><ChevronLeft size={16}/></button>
+                    <span className="text-sm font-mono text-gray-600 flex items-center">{currentPage} / {totalPages}</span>
+                    <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30"><ChevronRight size={16}/></button>
                 </div>
             </div>
         </div>
 
-        {/* 右側編輯抽屜 */}
+        {/* 右側編輯面板 (Drawer) */}
         {editingUser && (
-            <div className="w-[400px] bg-white border-l border-gray-200 shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-300 z-20">
-                <div className="p-5 border-b border-gray-100 flex justify-between items-start bg-slate-50">
-                    <div><h3 className="text-lg font-bold text-slate-800">編輯使用者</h3><p className="text-xs text-slate-500 mt-1 font-mono">{editingUser.email}</p></div>
-                    <button onClick={() => setEditingUser(null)} className="text-gray-400 hover:text-gray-600"><X size={20}/></button>
+            <div className="w-1/3 h-full bg-gray-50 flex flex-col border-l border-gray-200 shadow-xl z-20 animate-in slide-in-from-right-10 duration-200">
+                <div className="p-6 border-b border-gray-200 bg-white flex justify-between items-center shrink-0">
+                    <div>
+                        <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2"><Sliders size={18} className="text-purple-600"/> 編輯權限</h3>
+                        <p className="text-xs text-gray-500 mt-1 select-text break-all">{editingUser.email}</p>
+                    </div>
+                    <button onClick={() => setEditingUser(null)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
                 </div>
-                <div className="flex-1 overflow-y-auto p-6 space-y-8">
-                    {/* 基本權限 */}
-                    <div className="space-y-4">
-                        <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2"><Sliders size={14}/> 基本權限</h4>
-                        <div className="grid grid-cols-1 gap-4">
+                
+                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                    {/* 1. 角色與基礎設定 */}
+                    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-4">
+                        <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Basic Settings</h4>
+                        
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">角色權限 (Role)</label>
+                            <select 
+                                className="w-full p-2 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none transition-all"
+                                value={editForm.role}
+                                onChange={e => handleRoleChange(e.target.value)}
+                                disabled={checkIsSuperAdmin(editingUser.email)}
+                            >
+                                <option value="general">一般會員 (General)</option>
+                                <option value="student">學員 (Student)</option>
+                                <option value="competitor">同業 (Competitor)</option>
+                                <option value="admin">管理員 (Admin)</option>
+                            </select>
+                            <p className="text-[10px] text-gray-400 mt-1">* 切換角色將重置功能開關為該角色的預設值</p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">角色身份</label>
-                                <select 
-                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                    value={editForm.role}
-                                    onChange={e => handleRoleChange(e.target.value)}
-                                    disabled={checkIsSuperAdmin(editingUser.email)}
-                                >
-                                    <option value="general">一般會員</option>
-                                    <option value="student">正式學員</option>
-                                    <option value="competitor">其他同業</option>
-                                    <option value="admin">系統管理員</option>
-                                </select>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">命盤上限</label>
+                                <input type="number" className="w-full p-2 border border-gray-300 rounded-lg text-sm" value={editForm.maxCharts} onChange={e => handleFormChange('maxCharts', parseInt(e.target.value))} />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">權限到期日</label>
-                                <input type="date" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={editForm.accessExpiry || ''} onChange={e => handleFormChange('accessExpiry', e.target.value)} />
-                                <p className="text-xs text-gray-400 mt-1">* 若為「其他同業」，過期後進階功能將鎖定</p>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">每盤修改次數</label>
+                                <input type="number" className="w-full p-2 border border-gray-300 rounded-lg text-sm" value={editForm.maxEditsPerChart} onChange={e => handleFormChange('maxEditsPerChart', parseInt(e.target.value))} />
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div><label className="block text-sm font-medium text-gray-700 mb-1">命盤上限</label><input type="number" className="w-full border rounded-lg px-3 py-2 text-sm" value={editForm.maxCharts} onChange={e => handleFormChange('maxCharts', parseInt(e.target.value))}/></div>
-                                <div><label className="block text-sm font-medium text-gray-700 mb-1">修改次數</label><input type="number" className="w-full border rounded-lg px-3 py-2 text-sm" value={editForm.maxEditsPerChart} onChange={e => handleFormChange('maxEditsPerChart', parseInt(e.target.value))}/></div>
-                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1">權限到期日</label>
+                            <input type="date" className="w-full p-2 border border-gray-300 rounded-lg text-sm" value={editForm.accessExpiry || ''} onChange={e => handleFormChange('accessExpiry', e.target.value)} />
+                            <p className="text-[10px] text-gray-400 mt-1">* 若留空則永久有效 (視角色而定)</p>
                         </div>
                     </div>
-                    <hr className="border-gray-100"/>
-                    
-                    {/* 功能開關 */}
-                    <div className="space-y-4">
-                        <div className="flex justify-between items-center">
-                            <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2"><Sparkles size={14}/> 功能開關</h4>
+
+                    {/* 2. 功能細項開關 (Feature Flags) */}
+                    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                        <div className="flex justify-between items-center mb-3">
+                            <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Feature Flags (Overrides)</h4>
                             <button 
-                                onClick={() => handleRoleChange(editForm.role)} 
-                                className="text-[10px] text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 transition-colors flex items-center gap-1"
-                                title="回復此角色的預設值"
+                                onClick={() => {
+                                    // 重置為預設
+                                    setEditForm(prev => ({ ...prev, feature_flags: {} }));
+                                    setHasChanges(true);
+                                }}
+                                className="text-[10px] text-blue-600 hover:underline flex items-center gap-1"
                             >
-                                <RotateCcw size={10} /> 重置預設
+                                <RotateCcw size={10} /> 重置為預設
                             </button>
                         </div>
-                        <div className="space-y-3">
-                            {(Object.keys(FEATURE_NAMES) as Array<keyof UserFeatures>).map((key) => {
-                                const flagVal = editForm.feature_flags?.[key];
-                                const defaultVal = DEFAULT_FLAGS_BY_ROLE[editForm.role as string]?.[key] ?? false;
-                                
-                                // 計算「視覺」狀態：若設定為 undefined，則顯示 defaultVal
-                                const effectiveIsOn = flagVal !== undefined ? flagVal : defaultVal;
-
-                                const isLiuDayDisabled = key === 'liu_day' && editForm.feature_flags?.liu_month === false;
+                        
+                        <div className="space-y-2">
+                            {Object.entries(FEATURE_NAMES).map(([key, label]) => {
+                                const k = key as keyof UserFeatures;
+                                const defaultVal = DEFAULT_FLAGS_BY_ROLE[editForm.role || 'general']?.[k] ?? false;
+                                const currentVal = editForm.feature_flags?.[k];
+                                const isOverridden = currentVal !== undefined;
+                                const effectiveVal = isOverridden ? currentVal : defaultVal;
 
                                 return (
-                                    <div key={key} className={`flex items-center justify-between p-3 rounded-lg border border-gray-100 bg-white hover:border-blue-200 transition-colors ${isLiuDayDisabled ? 'opacity-40 pointer-events-none grayscale' : ''}`}>
-                                        <div className="flex flex-col">
-                                            <span className="text-sm font-medium text-gray-700">{FEATURE_NAMES[key]}</span>
-                                            {isLiuDayDisabled && <span className="text-[10px] text-red-500">(需開啟流月)</span>}
-                                        </div>
+                                    <div key={key} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 border border-transparent hover:border-gray-100 transition-colors">
                                         <div className="flex items-center gap-2">
-                                            
-                                            {/* 狀態標籤 */}
-                                            {flagVal === undefined ? (
-                                                <span className={`text-[10px] px-2 py-0.5 rounded-full border ${effectiveIsOn ? 'bg-green-50 text-green-600 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
-                                                    {effectiveIsOn ? '開啟' : '關閉'} (預設)
-                                                </span>
-                                            ) : (
-                                                <span className={`text-[10px] px-2 py-0.5 rounded-full border ${flagVal ? 'bg-green-100 text-green-700 border-green-300 font-bold' : 'bg-red-100 text-red-700 border-red-300 font-bold'}`}>
-                                                    {flagVal ? '強制開啟' : '強制關閉'}
-                                                </span>
-                                            )}
-
-                                            <div className="flex bg-slate-100 p-1 rounded-lg gap-0.5 shadow-inner">
-                                                {/* 預設按鈕：若 flagVal 是 undefined 則亮起 */}
-                                                <button 
-                                                    onClick={() => handleFeatureToggle(key, undefined)} 
-                                                    className={`w-7 h-7 rounded flex items-center justify-center transition-all ${flagVal === undefined ? 'bg-white shadow text-blue-600 ring-1 ring-blue-200' : 'text-slate-400 hover:bg-white/50'}`} 
-                                                    title="使用角色預設值"
-                                                >
-                                                    <RotateCcw size={12}/>
-                                                </button>
-                                                
-                                                {/* ON 按鈕：若有效狀態是 ON 則亮綠燈 */}
-                                                <button 
-                                                    onClick={() => handleFeatureToggle(key, true)} 
-                                                    className={`w-9 h-7 rounded text-xs font-bold flex items-center justify-center transition-all ${effectiveIsOn ? 'bg-green-600 text-white shadow-md ring-1 ring-green-600' : 'text-slate-400 hover:bg-white/50 hover:text-green-600'}`}
-                                                >
-                                                    ON
-                                                </button>
-                                                
-                                                {/* OFF 按鈕：若有效狀態是 OFF 則亮紅燈 */}
-                                                <button 
-                                                    onClick={() => handleFeatureToggle(key, false)} 
-                                                    className={`w-9 h-7 rounded text-xs font-bold flex items-center justify-center transition-all ${!effectiveIsOn ? 'bg-red-500 text-white shadow-md ring-1 ring-red-500' : 'text-slate-400 hover:bg-white/50 hover:text-red-600'}`}
-                                                >
-                                                    OFF
-                                                </button>
-                                            </div>
+                                            <div className={`w-2 h-2 rounded-full ${effectiveVal ? 'bg-green-500' : 'bg-gray-300'}`} />
+                                            <span className={`text-sm font-medium ${effectiveVal ? 'text-gray-900' : 'text-gray-400'}`}>{label}</span>
+                                            {isOverridden && <span className="text-[9px] px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded-full font-bold">自訂</span>}
+                                        </div>
+                                        <div className="flex bg-gray-100 p-0.5 rounded-lg">
+                                            <button 
+                                                onClick={() => handleFeatureToggle(k, true)}
+                                                className={`px-2 py-1 text-xs rounded-md transition-all ${effectiveVal === true && isOverridden ? 'bg-white shadow text-green-700 font-bold' : 'text-gray-400 hover:text-gray-600'}`}
+                                            >ON</button>
+                                            <button 
+                                                onClick={() => handleFeatureToggle(k, undefined)}
+                                                className={`px-2 py-1 text-xs rounded-md transition-all ${!isOverridden ? 'bg-white shadow text-gray-700 font-bold' : 'text-gray-400 hover:text-gray-600'}`}
+                                                title="使用角色預設值"
+                                            >預設</button>
+                                            <button 
+                                                onClick={() => handleFeatureToggle(k, false)}
+                                                className={`px-2 py-1 text-xs rounded-md transition-all ${effectiveVal === false && isOverridden ? 'bg-white shadow text-red-700 font-bold' : 'text-gray-400 hover:text-gray-600'}`}
+                                            >OFF</button>
                                         </div>
                                     </div>
                                 );
                             })}
                         </div>
                     </div>
+
+                    {/* 危險區域 */}
                     {!checkIsSuperAdmin(editingUser.email) && (
-                        <div className="pt-6 mt-6 border-t border-gray-100">
-                            <button onClick={handleDeleteUser} className="w-full py-3 border-2 border-red-50 text-red-500 rounded-xl hover:bg-red-50 hover:border-red-100 transition-colors flex items-center justify-center gap-2 font-bold text-sm"><Trash2 size={16} /> 刪除此使用者</button>
+                        <div className="border border-red-100 bg-red-50 p-4 rounded-xl">
+                            <h4 className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2">Danger Zone</h4>
+                            <button 
+                                onClick={handleDeleteUser} 
+                                className="w-full py-2 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-colors text-sm font-bold flex items-center justify-center gap-2"
+                            >
+                                <Trash2 size={16} /> 刪除使用者 (移轉資料)
+                            </button>
                         </div>
                     )}
                 </div>
-                <div className="p-5 border-t border-gray-200 bg-white flex gap-3 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
-                    <button onClick={() => setEditingUser(null)} className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-200 transition-colors">取消</button>
-                    <button onClick={handleSaveProfile} disabled={!hasChanges} className="flex-[2] py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"><Save size={18} /> 儲存變更</button>
+
+                <div className="p-4 bg-white border-t border-gray-200 flex justify-end gap-3 shrink-0">
+                    <button onClick={() => setEditingUser(null)} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors">取消</button>
+                    <button 
+                        onClick={handleSaveProfile} 
+                        disabled={!hasChanges}
+                        className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg shadow-lg shadow-purple-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-bold flex items-center gap-2"
+                    >
+                        <Save size={18} /> 儲存變更
+                    </button>
                 </div>
             </div>
         )}
-        {/* Invite Modal */}
+
+        {/* 邀請視窗 (Modal) */}
         {isInviteOpen && (
-            <div className="absolute inset-0 bg-black/50 z-[70] flex items-center justify-center p-4 animate-in fade-in duration-200">
-                <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 relative">
-                    <button onClick={() => setIsInviteOpen(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={20} /></button>
-                    <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2"><UserPlus className="text-blue-600" size={20}/> 新增/邀請 使用者</h3>
-                    <div className="space-y-4">
-                        <input type="email" placeholder="user@example.com" className="w-full px-4 py-2 border rounded-lg outline-none focus:border-blue-500" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}/>
-                        <button onClick={handleInvite} disabled={!inviteEmail || isInviting} className="w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg flex justify-center gap-2">{isInviting && <Loader2 className="animate-spin" size={18} />} 發送邀請</button>
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 animate-in zoom-in duration-200">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2"><UserPlus size={20} className="text-blue-600"/> 新增使用者</h3>
+                    <p className="text-sm text-gray-500 mb-4">輸入對方的 Email，系統將發送邀請信 (包含重設密碼連結)。對方點擊連結設定密碼後即可登入。</p>
+                    <input 
+                        type="email" 
+                        placeholder="user@example.com" 
+                        className="w-full p-3 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-blue-500 outline-none"
+                        value={inviteEmail}
+                        onChange={e => setInviteEmail(e.target.value)}
+                    />
+                    <div className="flex gap-3">
+                        <button onClick={() => setIsInviteOpen(false)} className="flex-1 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">取消</button>
+                        <button onClick={handleInvite} disabled={isInviting || !inviteEmail} className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-bold flex justify-center items-center gap-2">
+                            {isInviting ? <Loader2 className="animate-spin" size={18} /> : '發送邀請'}
+                        </button>
                     </div>
                 </div>
             </div>
         )}
+
       </div>
     </div>
   );
