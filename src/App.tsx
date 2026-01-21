@@ -15,6 +15,9 @@ import { DualChart } from './components/Chart/DualChart';
 import { CompatibilitySetup } from './pages/CompatibilitySetup';
 import { LuckyPage } from './pages/LuckyPage'; // [新增] 引入 LuckyPage
 
+// [新增] Vercel Speed Insights 效能監控
+import { SpeedInsights } from "@vercel/speed-insights/react";
+
 function App() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -92,43 +95,48 @@ function App() {
   };
 
   return (
-    <Routes>
-      <Route path="/login" element={!session ? <Auth /> : <Navigate to="/" replace />} />
+    <>
+      {/* [新增] 效能監控元件，放在這裡可以在所有頁面生效 */}
+      <SpeedInsights />
       
-      {/* [新增] 公開占卜頁面 - 放在 ProtectedLayout 之外 */}
-      <Route path="/lucky" element={<LuckyPage />} />
-      
-      <Route element={<ProtectedLayout />}>
-        <Route path="/" element={<Dashboard />} />
+      <Routes>
+        <Route path="/login" element={!session ? <Auth /> : <Navigate to="/" replace />} />
         
-        <Route 
-          path="/list" 
-          element={
-            <ClientList 
-              onAdd={() => {
-                setEditingClient(null);
-                setIsModalOpen(true);
-              }}
-              onEdit={(client) => {
-                setEditingClient(client);
-                setIsModalOpen(true);
-              }}
-            />
-          } 
-        />
+        {/* [新增] 公開占卜頁面 - 放在 ProtectedLayout 之外 */}
+        <Route path="/lucky" element={<LuckyPage />} />
         
-        <Route path="/chart/:id" element={<ChartBoard />} />
-        
-        <Route path="/compatibility" element={<CompatibilitySetup />} />
-        <Route path="/dual-chart" element={<DualChart />} />
+        <Route element={<ProtectedLayout />}>
+          <Route path="/" element={<Dashboard />} />
+          
+          <Route 
+            path="/list" 
+            element={
+              <ClientList 
+                onAdd={() => {
+                  setEditingClient(null);
+                  setIsModalOpen(true);
+                }}
+                onEdit={(client) => {
+                  setEditingClient(client);
+                  setIsModalOpen(true);
+                }}
+              />
+            } 
+          />
+          
+          <Route path="/chart/:id" element={<ChartBoard />} />
+          
+          <Route path="/compatibility" element={<CompatibilitySetup />} />
+          <Route path="/dual-chart" element={<DualChart />} />
 
-        <Route path="/divination" element={<ChartBoard mode="divination" />} />
-        
-        <Route path="/admin" element={<DivinationAdminPanel />} />
-      </Route>
+          <Route path="/divination" element={<ChartBoard mode="divination" />} />
+          
+          <Route path="/admin" element={<DivinationAdminPanel />} />
+        </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   );
 }
 
