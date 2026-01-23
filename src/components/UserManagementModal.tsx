@@ -1,7 +1,5 @@
-// src/components/UserManagementModal.tsx
-
 import React, { useEffect, useState, useMemo } from 'react';
-import { X, Search, ChevronLeft, ChevronRight, Loader2, Shield, Trash2, UserPlus, CalendarClock, Settings, Sliders, Save, RotateCcw, Sparkles, ArrowUp, ArrowDown, Filter, ChevronDown, Users, Repeat, Clock, RefreshCw, Calendar, Check } from 'lucide-react';
+import { X, Search, ChevronLeft, ChevronRight, Loader2, Shield, Trash2, UserPlus, CalendarClock, Settings, Sliders, Save, RotateCcw, ArrowUp, ArrowDown, Filter, ChevronDown, Users, Repeat, Clock, RefreshCw, Calendar, UserPlus as UserPlusIcon, Sparkles } from 'lucide-react';
 import { getAllProfilesWithStats, updateProfile, toggleUserBan, deleteUserProfile, inviteUserByEmail, bulkUpdateAccessExpiry, type UserProfile, type UserFeatures } from '../db';
 import { FEATURE_NAMES } from '../logic/permissions';
 
@@ -18,55 +16,26 @@ type SortConfig = {
     direction: 'asc' | 'desc';
 };
 
-// 各角色的預設功能開關
 const DEFAULT_FLAGS_BY_ROLE: Record<string, Partial<UserFeatures>> = {
     general: {
-        liu_month: false,
-        liu_day: false,
-        twin: false,
-        inverted: false,
-        xiao_limit: false,
-        flying_star: false,
-        dual_chart: false,
-        screenshot: false,
-        divination: false,
-        lucky_divination: false
+        liu_month: false, liu_day: false, twin: false, inverted: false,
+        xiao_limit: false, flying_star: false, dual_chart: false,
+        screenshot: false, divination: false, lucky_divination: false
     },
     student: {
-        liu_month: true,
-        liu_day: true,
-        twin: true,
-        inverted: true,
-        xiao_limit: true,
-        flying_star: true,
-        dual_chart: true,
-        screenshot: true,
-        divination: false,
-        lucky_divination: false
+        liu_month: true, liu_day: true, twin: true, inverted: true,
+        xiao_limit: true, flying_star: true, dual_chart: true,
+        screenshot: true, divination: false, lucky_divination: false
     },
     admin: {
-        liu_month: true,
-        liu_day: true,
-        twin: true,
-        inverted: true,
-        xiao_limit: true,
-        flying_star: true,
-        dual_chart: true,
-        screenshot: true,
-        divination: true,
-        lucky_divination: true
+        liu_month: true, liu_day: true, twin: true, inverted: true,
+        xiao_limit: true, flying_star: true, dual_chart: true,
+        screenshot: true, divination: true, lucky_divination: true
     },
     competitor: {
-        liu_month: true,
-        liu_day: true,
-        twin: true,
-        inverted: true,
-        xiao_limit: true, 
-        flying_star: false,
-        dual_chart: false,
-        screenshot: false,
-        divination: false,
-        lucky_divination: false
+        liu_month: true, liu_day: true, twin: true, inverted: true,
+        xiao_limit: true, flying_star: false, dual_chart: false,
+        screenshot: false, divination: false, lucky_divination: false
     }
 };
 
@@ -145,7 +114,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
     });
   }, [profiles, searchTerm, filterRole, sortConfig]);
 
-  const totalPages = Math.ceil(processedProfiles.length / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(processedProfiles.length / ITEMS_PER_PAGE) || 1;
   const paginatedData = processedProfiles.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   const handleSelectOne = (id: string) => {
@@ -157,7 +126,8 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const handleSelectAllPage = () => {
       const newSet = new Set(selectedIds);
       const validItems = paginatedData.filter(p => !checkIsSuperAdmin(p.email));
-      const allSelected = validItems.every(p => newSet.has(p.id));
+      const allSelected = validItems.length > 0 && validItems.every(p => newSet.has(p.id));
+      
       if (allSelected) validItems.forEach(p => newSet.delete(p.id));
       else validItems.forEach(p => newSet.add(p.id));
       setSelectedIds(newSet);
@@ -179,10 +149,10 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const openEditDrawer = (user: UserProfile) => {
       setEditingUser(user);
       setEditForm({
-          role: user.role,
-          maxCharts: user.maxCharts,
-          maxEditsPerChart: user.maxEditsPerChart,
-          accessExpiry: user.accessExpiry ? user.accessExpiry.split('T')[0] : '',
+          role: user.role || 'general',
+          maxCharts: user.maxCharts ?? 5,
+          maxEditsPerChart: user.maxEditsPerChart ?? 3,
+          accessExpiry: user.accessExpiry ? user.accessExpiry.split('T')[0] : '', // 處理 null
           can_use_divination: user.can_use_divination,
           feature_flags: { ...user.feature_flags } || {}
       });
@@ -213,11 +183,10 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
   };
 
   const handleRoleChange = (newRole: any) => {
-      const defaultFlags = DEFAULT_FLAGS_BY_ROLE[newRole] || {};
       setEditForm(prev => ({
           ...prev, 
           role: newRole,
-          feature_flags: {} // 重置為跟隨角色預設
+          feature_flags: {} 
       }));
       setHasChanges(true);
   };
@@ -238,21 +207,14 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const handleDeleteUser = async () => {
       if (!editingUser || checkIsSuperAdmin(editingUser.email)) return;
       const chartCount = editingUser.activeCount || 0;
-      const confirmMsg = 
-          `【危險操作】\n\n` +
-          `您確定要刪除使用者 ${editingUser.email} 嗎？\n` +
-          `該使用者目前擁有 ${chartCount} 張命盤。\n\n` +
-          `注意：確認刪除後，這 ${chartCount} 張命盤將【全數移轉】至您的帳號下。\n` +
-          `此操作無法復原，是否繼續？`;
-
-      if (confirm(confirmMsg)) {
+      if (confirm(`確定要刪除使用者 ${editingUser.email} 嗎？\n他擁有的 ${chartCount} 張命盤將移轉給您。\n此操作無法復原。`)) {
           const success = await deleteUserProfile(editingUser.id);
           if (success) {
-              alert('使用者已刪除，資料已移轉完畢。');
+              alert('使用者已刪除，資料已移轉。');
               setEditingUser(null);
               loadData();
           } else {
-              alert('刪除失敗，請檢查網路或資料庫狀態。');
+              alert('刪除失敗。');
           }
       }
   };
@@ -295,16 +257,13 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const renderFeatureIcons = (user: UserProfile) => {
       const defaultFlags = DEFAULT_FLAGS_BY_ROLE[user.role] || {};
       const userFlags = user.feature_flags || {};
-
-      const isActive = (key: keyof UserFeatures) => {
-          return userFlags[key] !== undefined ? userFlags[key] : defaultFlags[key];
-      };
+      const isActive = (key: keyof UserFeatures) => userFlags[key] !== undefined ? userFlags[key] : defaultFlags[key];
 
       const icons = [
           { key: 'twin', icon: Users, label: '雙胞胎', color: 'text-indigo-500' },
           { key: 'inverted', icon: Repeat, label: '顛倒盤', color: 'text-indigo-500' },
           { key: 'xiao_limit', icon: Clock, label: '小限', color: 'text-green-600' },
-          { key: 'flying_star', icon: UserPlus, label: '飛化', color: 'text-purple-600' },
+          { key: 'flying_star', icon: UserPlusIcon, label: '飛化', color: 'text-purple-600' },
           { key: 'dual_chart', icon: RefreshCw, label: '合盤', color: 'text-purple-600' },
           { key: 'liu_month', icon: Calendar, label: '流月日', color: 'text-amber-500' },
           { key: 'lucky_divination', icon: Sparkles, label: '吉凶占卜', color: 'text-rose-500' },
@@ -322,9 +281,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                       </div>
                   );
               })}
-              {icons.every(i => !isActive(i.key as keyof UserFeatures)) && (
-                  <span className="text-[10px] text-gray-300">-</span>
-              )}
+              {icons.every(i => !isActive(i.key as keyof UserFeatures)) && <span className="text-[10px] text-gray-300">-</span>}
           </div>
       );
   };
@@ -333,11 +290,11 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex overflow-hidden animate-in fade-in zoom-in duration-200 relative">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex overflow-hidden animate-in fade-in zoom-in duration-200 relative text-gray-800">
         
         {/* 左側列表 (Table) */}
         <div className={`flex-1 flex flex-col h-full transition-all duration-300 ${editingUser ? 'w-2/3 border-r border-gray-200' : 'w-full'}`}>
-            <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 bg-gray-50">
+            <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 bg-gray-50 shrink-0">
                 <div className="flex items-center gap-2">
                     <Shield className="text-blue-600" />
                     <h2 className="text-lg font-bold text-gray-900">使用者管理</h2>
@@ -345,16 +302,17 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 </div>
                 <button onClick={onClose} className="p-1 hover:bg-gray-200 rounded-full"><X size={20} className="text-gray-500" /></button>
             </div>
-            <div className="p-4 border-b border-gray-100 flex gap-4 bg-white items-center">
+            
+            <div className="p-4 border-b border-gray-100 flex gap-4 bg-white items-center shrink-0">
                 <div className="relative flex-1 max-w-sm">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                    <input type="text" placeholder="搜尋 Email..." className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
+                    <input type="text" placeholder="搜尋 Email..." className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
                 </div>
                 
                 <div className="relative">
                     <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                     <select 
-                        className="pl-9 pr-8 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white text-sm text-gray-700 appearance-none cursor-pointer hover:bg-gray-50"
+                        className="pl-9 pr-8 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white text-sm text-gray-900 appearance-none cursor-pointer hover:bg-gray-50"
                         value={filterRole}
                         onChange={e => { setFilterRole(e.target.value); setCurrentPage(1); }}
                     >
@@ -369,12 +327,13 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
                 <button onClick={() => setIsInviteOpen(true)} className="ml-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 font-bold text-sm shadow-md transition-all"><UserPlus size={18} /> 新增</button>
             </div>
-            <div className="flex-1 overflow-y-auto p-0 relative">
+
+            <div className="flex-1 overflow-y-auto p-0 relative min-h-0">
                 {loading ? <div className="flex justify-center py-20"><Loader2 className="animate-spin text-gray-400"/></div> : (
                     <table className="w-full text-left border-collapse">
                         <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm text-gray-500 text-sm">
                             <tr>
-                                <th className="py-3 px-4 w-10"><input type="checkbox" onChange={handleSelectAllPage} checked={paginatedData.length > 0 && paginatedData.every(p => selectedIds.has(p.id))} disabled={paginatedData.length===0}/></th>
+                                <th className="py-3 px-4 w-10"><input type="checkbox" onChange={handleSelectAllPage} checked={paginatedData.length > 0 && paginatedData.filter(p=>!checkIsSuperAdmin(p.email)).every(p => selectedIds.has(p.id))} disabled={paginatedData.length===0}/></th>
                                 <SortableHeader label="Email" sortKey="email" />
                                 <SortableHeader label="已排/上限" sortKey="activeCount" className="text-center w-28" />
                                 <SortableHeader label="角色" sortKey="role" className="text-center w-20" />
@@ -422,20 +381,22 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                     </table>
                 )}
             </div>
+
             {selectedIds.size > 0 && (
-                <div className="bg-blue-50 px-6 py-3 border-t border-blue-100 flex items-center justify-between">
+                <div className="bg-blue-50 px-6 py-3 border-t border-blue-100 flex items-center justify-between shrink-0">
                     <span className="text-sm font-bold text-blue-800">已選擇 {selectedIds.size} 位使用者</span>
                     <div className="flex items-center gap-3">
-                        <input type="date" className="px-3 py-1.5 border border-blue-200 rounded text-sm bg-white" value={bulkDate} onChange={e => setBulkDate(e.target.value)} />
+                        <input type="date" className="px-3 py-1.5 border border-blue-200 rounded text-sm bg-white text-gray-900" value={bulkDate} onChange={e => setBulkDate(e.target.value)} />
                         <button onClick={handleBulkUpdate} disabled={isBulkUpdating} className="px-4 py-1.5 bg-blue-600 text-white rounded text-sm font-bold hover:bg-blue-700 flex items-center gap-2">{isBulkUpdating ? <Loader2 className="animate-spin" size={14}/> : <CalendarClock size={14}/>} 批量展延期限</button>
                     </div>
                 </div>
             )}
-            <div className="bg-white border-t border-gray-100 px-6 py-3 flex items-center justify-between">
+
+            <div className="bg-white border-t border-gray-100 px-6 py-3 flex items-center justify-between shrink-0 h-14">
                 <span className="text-xs text-gray-400">Showing {paginatedData.length} of {processedProfiles.length}</span>
                 <div className="flex gap-2">
                     <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30"><ChevronLeft size={16}/></button>
-                    <span className="text-sm font-mono text-gray-600 flex items-center">{currentPage} / {totalPages}</span>
+                    <span className="text-sm font-mono text-gray-600 flex items-center min-w-[3rem] justify-center">{currentPage} / {totalPages}</span>
                     <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30"><ChevronRight size={16}/></button>
                 </div>
             </div>
@@ -460,8 +421,8 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-1">角色權限 (Role)</label>
                             <select 
-                                className="w-full p-2 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none transition-all"
-                                value={editForm.role}
+                                className="w-full p-2 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none transition-all text-gray-900"
+                                value={editForm.role || 'general'}
                                 onChange={e => handleRoleChange(e.target.value)}
                                 disabled={checkIsSuperAdmin(editingUser.email)}
                             >
@@ -476,17 +437,17 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-1">命盤上限</label>
-                                <input type="number" className="w-full p-2 border border-gray-300 rounded-lg text-sm" value={editForm.maxCharts} onChange={e => handleFormChange('maxCharts', parseInt(e.target.value))} />
+                                <input type="number" className="w-full p-2 border border-gray-300 rounded-lg text-sm text-gray-900" value={editForm.maxCharts ?? 0} onChange={e => handleFormChange('maxCharts', parseInt(e.target.value))} />
                             </div>
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-1">每盤修改次數</label>
-                                <input type="number" className="w-full p-2 border border-gray-300 rounded-lg text-sm" value={editForm.maxEditsPerChart} onChange={e => handleFormChange('maxEditsPerChart', parseInt(e.target.value))} />
+                                <input type="number" className="w-full p-2 border border-gray-300 rounded-lg text-sm text-gray-900" value={editForm.maxEditsPerChart ?? 0} onChange={e => handleFormChange('maxEditsPerChart', parseInt(e.target.value))} />
                             </div>
                         </div>
 
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-1">權限到期日</label>
-                            <input type="date" className="w-full p-2 border border-gray-300 rounded-lg text-sm" value={editForm.accessExpiry || ''} onChange={e => handleFormChange('accessExpiry', e.target.value)} />
+                            <input type="date" className="w-full p-2 border border-gray-300 rounded-lg text-sm text-gray-900" value={editForm.accessExpiry ?? ''} onChange={e => handleFormChange('accessExpiry', e.target.value)} />
                             <p className="text-[10px] text-gray-400 mt-1">* 若留空則永久有效 (視角色而定)</p>
                         </div>
                     </div>
@@ -497,7 +458,6 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                             <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Feature Flags (Overrides)</h4>
                             <button 
                                 onClick={() => {
-                                    // 重置為預設
                                     setEditForm(prev => ({ ...prev, feature_flags: {} }));
                                     setHasChanges(true);
                                 }}
@@ -579,7 +539,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                     <input 
                         type="email" 
                         placeholder="user@example.com" 
-                        className="w-full p-3 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-blue-500 outline-none"
+                        className="w-full p-3 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-blue-500 outline-none text-gray-900"
                         value={inviteEmail}
                         onChange={e => setInviteEmail(e.target.value)}
                     />
