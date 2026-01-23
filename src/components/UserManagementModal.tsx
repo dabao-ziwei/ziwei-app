@@ -392,12 +392,29 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 </div>
             )}
 
-            <div className="bg-white border-t border-gray-100 px-6 py-3 flex items-center justify-between shrink-0 h-14">
-                <span className="text-xs text-gray-400">Showing {paginatedData.length} of {processedProfiles.length}</span>
-                <div className="flex gap-2">
-                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30"><ChevronLeft size={16}/></button>
-                    <span className="text-sm font-mono text-gray-600 flex items-center min-w-[3rem] justify-center">{currentPage} / {totalPages}</span>
-                    <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-30"><ChevronRight size={16}/></button>
+            {/* [修正] 換頁功能區域：強化對比度、按鈕實體化 */}
+            <div className="bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-between shrink-0 h-16 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] z-20">
+                <span className="text-xs font-bold text-gray-500">Showing {paginatedData.length} of {processedProfiles.length}</span>
+                <div className="flex gap-2 items-center">
+                    <button 
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
+                        disabled={currentPage === 1} 
+                        className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50 disabled:bg-gray-50 disabled:cursor-not-allowed transition-all"
+                    >
+                        <ChevronLeft size={18}/>
+                    </button>
+                    
+                    <div className="bg-gray-50 border border-gray-200 px-4 py-1.5 rounded-lg text-sm font-mono font-bold text-gray-700 min-w-[4rem] text-center">
+                        {currentPage} / {totalPages}
+                    </div>
+                    
+                    <button 
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
+                        disabled={currentPage === totalPages} 
+                        className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50 disabled:bg-gray-50 disabled:cursor-not-allowed transition-all"
+                    >
+                        <ChevronRight size={18}/>
+                    </button>
                 </div>
             </div>
         </div>
