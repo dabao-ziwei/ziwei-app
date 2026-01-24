@@ -136,7 +136,7 @@ const JiaoBlock3D = ({ position, rotation }: { position: [number, number, number
     );
 };
 
-// 顯示用元件：根據是否有 staticImage 決定顯示 3D 還是靜態圖
+// 顯示用元件
 const SacredJiaoScene3D = ({ luck, staticImage }: { luck: string, staticImage?: string | null }) => {
     if (luck === '無結果') {
         return (
@@ -148,7 +148,6 @@ const SacredJiaoScene3D = ({ luck, staticImage }: { luck: string, staticImage?: 
         );
     }
 
-    // 如果有靜態圖，直接顯示圖片
     if (staticImage) {
         return (
             <div className="relative w-full h-36 flex items-center justify-center">
@@ -178,7 +177,7 @@ const SacredJiaoScene3D = ({ luck, staticImage }: { luck: string, staticImage?: 
                 shadows 
                 dpr={[1, 2]} 
                 className="w-full h-full z-20" 
-                gl={{ preserveDrawingBuffer: true }} // 關鍵：允許外部抓取圖片
+                gl={{ preserveDrawingBuffer: true }} 
                 id="jiao-canvas"
             >
                 <PerspectiveCamera makeDefault position={[0, 1.5, 6]} fov={35} /> 
@@ -206,17 +205,17 @@ function CameraRig() {
     return null;
 }
 
-// [修改] Seal 元件：移除紅色陰影與邊框，避免截圖出現紅塊
+// [修正] Seal 元件：移除所有陰影，避免截圖紅塊
 const Seal = () => (
     <img 
         src="/image_1bd31c.png" 
         alt="大寶印章" 
-        className="h-10 w-auto object-contain flex-shrink-0 block drop-shadow-md" 
-        // 移除 shadow-[...] 和 border-red-...，改用簡單的 drop-shadow
+        className="h-10 w-auto object-contain flex-shrink-0 block"
+        style={{ filter: 'none', boxShadow: 'none' }} // 強制移除濾鏡
     />
 );
 
-// --- [新增] 靜態擲筊圖片顯示元件 (結果顯示用) ---
+// --- 靜態擲筊圖片 ---
 const JiaoResultImage = ({ luck }: { luck: string }) => {
     if (luck === '無結果') {
         return (
@@ -248,7 +247,7 @@ const JiaoResultImage = ({ luck }: { luck: string }) => {
     );
 };
 
-// --- 預覽視窗 (Modal) ---
+// --- 預覽視窗 ---
 interface SharePreviewModalProps { isOpen: boolean; onClose: () => void; imageUrl: string | null; onDownload: () => void; onSystemShare: () => void; }
 const SharePreviewModal: React.FC<SharePreviewModalProps> = ({ isOpen, onClose, imageUrl, onDownload, onSystemShare }) => {
     if (!isOpen) return null;
@@ -261,7 +260,6 @@ const SharePreviewModal: React.FC<SharePreviewModalProps> = ({ isOpen, onClose, 
                     <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors"><X size={20} /></button>
                 </div>
                 
-                {/* 圖片預覽區：如果 imageUrl 還沒好，顯示 Loading 動畫 */}
                 <div className="p-6 flex justify-center bg-[#020617] min-h-[300px] items-center">
                     {imageUrl ? (
                         <div className="relative shadow-[0_0_30px_rgba(139,92,246,0.3)] rounded-lg overflow-hidden animate-in zoom-in duration-300">
@@ -293,11 +291,10 @@ const SharePreviewModal: React.FC<SharePreviewModalProps> = ({ isOpen, onClose, 
     );
 };
 
-// --- [優化] 隱藏的截圖專用卡片 (4:5 完美比例版) ---
+// --- [優化] 隱藏的截圖專用卡片 ---
 const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string | null, finalLuck: string, finalKeyword: string, finalContent: string }>(
     ({ selectedCat, finalLuck, finalKeyword, finalContent }, ref) => {
     return (
-        // 寬度設為 380px，比例設為 4/5 (0.8)
         <div ref={ref} className="bg-[#09090b] w-[380px] rounded-xl border border-white/20 flex flex-col items-center relative overflow-hidden shadow-2xl shrink-0" style={{aspectRatio: '4/5'}}>
             <div className="flex flex-col items-center mt-4 z-10 w-full px-4 shrink-0">
                 <div className="text-[9px] text-amber-500/70 font-serif-tc tracking-[0.2em] mb-1">{getArtisticDate()}</div>
@@ -309,7 +306,6 @@ const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string
             </div>
 
             <div className="relative z-10 w-full h-24 shrink-0 -my-1 flex items-center justify-center">
-                 {/* 截圖時使用縮小版的靜態圖 */}
                  <JiaoResultImage luck={finalLuck} />
             </div>
             
@@ -319,7 +315,6 @@ const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string
                 </div>
             </div>
 
-            {/* 文字區塊自適應 */}
             <div className="flex-1 w-full px-6 relative z-10 flex flex-col items-center justify-start overflow-hidden">
                 <div className="w-full text-slate-300 text-xs leading-relaxed text-justify font-serif-tc tracking-wide opacity-90 line-clamp-[12]">
                     {finalContent || "暫無說明"}
@@ -328,11 +323,17 @@ const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string
 
             <div className="w-full px-5 py-4 z-10 flex items-end justify-between mt-auto bg-[#09090b] shrink-0">
                 <div className="flex items-center gap-2">
-                    <div className="bg-white p-1 rounded-md shadow-lg opacity-90">
+                    <div className="bg-white p-1 rounded-md shadow-lg opacity-90 relative overflow-hidden">
+                        {/* [修正] QR Code 圖片設定，增加 onError 顯示 */}
                         <img 
                             src="/qr-lucky.png" 
                             alt="Scan to Play" 
                             className="w-9 h-9 object-contain block"
+                            onError={(e) => {
+                                // 圖片讀取失敗時，顯示紅色錯誤提示，方便除錯
+                                e.currentTarget.style.display = 'none';
+                                e.currentTarget.parentElement!.innerHTML = '<div class="w-9 h-9 bg-red-500 flex items-center justify-center text-[6px] text-white text-center leading-tight">圖片遺失</div>';
+                            }}
                         />
                     </div>
                     <div className="flex flex-col gap-0.5">
@@ -460,27 +461,24 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
         }
     }, [step, result, selectedCat]);
 
-    // [優化] 截圖流程：按鈕觸發 -> 開啟Modal -> 背景繪圖 -> 更新Modal內容
     const handleShare = async () => { 
-        // 1. 立即打開 Modal，顯示 Loading 狀態
         setShareImageUrl(null);
         setShareBlob(null);
         setIsShareModalOpen(true);
         setIsGeneratingImg(true); 
 
-        // 2. 異步執行繪圖 (不卡住 UI)
         setTimeout(async () => {
             try {
                 if (!hiddenCaptureRef.current) throw new Error("Hidden card not found");
                 
-                // 確保靜態圖片載入
+                // 強制預載所有圖片
                 const images = hiddenCaptureRef.current.querySelectorAll('img');
                 await Promise.all(Array.from(images).map(img => {
                     if (img.complete) return Promise.resolve();
                     return new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
                 }));
 
-                // 截圖 (使用 2倍 圖，兼顧畫質與速度)
+                // 產生截圖 (2倍圖，速度快)
                 const dataUrl = await toPng(hiddenCaptureRef.current, { 
                     pixelRatio: 2, 
                     backgroundColor: '#09090b',
@@ -502,11 +500,11 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
             } catch (e) { 
                 console.error("Screenshot failed:", e); 
                 alert('圖片生成失敗，請稍後再試'); 
-                setIsShareModalOpen(false); // 失敗則關閉
+                setIsShareModalOpen(false);
             } finally { 
                 setIsGeneratingImg(false); 
             }
-        }, 100); // 稍微延遲一點點，讓 Modal 先順利渲染出來
+        }, 100);
     };
 
     const handleDownload = () => {
@@ -544,7 +542,7 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                 onSystemShare={handleSystemShare} 
             />
             
-            {/* 隱藏的截圖專用卡片元素 (永遠存在，隨時待命) */}
+            {/* 隱藏的截圖專用卡片元素 */}
             <div style={{ position: 'fixed', top: '0', left: '-9999px', opacity: 1, zIndex: -10 }}>
                 <HiddenCaptureCard 
                     ref={hiddenCaptureRef}
@@ -683,9 +681,9 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                         {/* 底部操作區 */}
                         <div className="flex-1 w-full max-w-sm mx-auto flex flex-col justify-end pb-safe px-4 gap-3 mt-4">
                             <div className="flex gap-2 w-full">
-                                {/* [優化] 按鈕不變狀態，只觸發事件 */}
-                                <button onClick={handleShare} className="flex-1 py-3 bg-gradient-to-r from-purple-700 to-indigo-700 text-white rounded-full font-bold shadow-lg shadow-purple-900/30 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 font-serif-tc tracking-widest border border-white/10 text-sm">
-                                    <Share2 size={16} /> 分享
+                                {/* [優化] 按鈕文字：顯示繪製中 */}
+                                <button onClick={handleShare} disabled={isGeneratingImg} className="flex-1 py-3 bg-gradient-to-r from-purple-700 to-indigo-700 text-white rounded-full font-bold shadow-lg shadow-purple-900/30 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 font-serif-tc tracking-widest border border-white/10 text-sm">
+                                    {isGeneratingImg ? <><Loader2 className="animate-spin" size={16}/> 繪製中...</> : <><Share2 size={16} /> 分享</>}
                                 </button>
                                 
                                 {isPublicPage ? (
