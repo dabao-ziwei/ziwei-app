@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
-import { X, Heart, Briefcase, Wallet, Activity, Users, Sparkles, Share2, AlertCircle, Loader2, Zap, MessageCircle, ArrowRight } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { X, Heart, Briefcase, Wallet, Activity, Users, Sparkles, Share2, AlertCircle, Loader2, Zap, MessageCircle, ArrowRight, Download, Smartphone } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toPng } from 'html-to-image';
 import { getDivinationResult } from '../db';
@@ -14,16 +15,12 @@ const GlobalStyles = () => (
     <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700;900&display=swap');
         .font-serif-tc { font-family: 'Noto Serif TC', serif; }
-        .bg-noise { position: relative; }
-        .bg-noise::before {
-            content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        /* 移除 bg-noise 的偽元素，直接用 CSS background */
+        .bg-noise { 
+            background-color: #09090b;
             background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
-            opacity: 0.4; pointer-events: none; z-index: 0;
         }
         .keyword-glow { text-shadow: 0 0 20px rgba(255, 215, 0, 0.3), 0 0 40px rgba(255, 215, 0, 0.1); }
-        
-        /* 截圖專用：隱藏特效類別 */
-        .screenshot-hidden { opacity: 0 !important; visibility: hidden !important; }
     `}</style>
 );
 
@@ -140,7 +137,8 @@ const JiaoBlock3D = ({ position, rotation }: { position: [number, number, number
     );
 };
 
-const SacredJiaoScene3D = ({ luck }: { luck: string }) => {
+// 顯示用元件：根據是否有 staticImage 決定顯示 3D 還是靜態圖
+const SacredJiaoScene3D = ({ luck, staticImage }: { luck: string, staticImage?: string | null }) => {
     if (luck === '無結果') {
         return (
              <div className="relative w-64 h-44 flex items-center justify-center">
@@ -150,6 +148,16 @@ const SacredJiaoScene3D = ({ luck }: { luck: string }) => {
             </div>
         );
     }
+
+    // 如果有靜態圖，直接顯示圖片
+    if (staticImage) {
+        return (
+            <div className="relative w-full h-36 flex items-center justify-center">
+                <img src={staticImage} alt="Jiao Snapshot" className="h-full object-contain pointer-events-none" />
+            </div>
+        );
+    }
+
     const randomWobble = () => (Math.random() - 0.5) * 0.2;
     let leftRot: [number, number, number] = [0, Math.PI / 2, 0];
     let rightRot: [number, number, number] = [0, -Math.PI / 2, 0];
@@ -166,8 +174,14 @@ const SacredJiaoScene3D = ({ luck }: { luck: string }) => {
     }
 
     return (
-        <div className="relative w-full h-36">
-            <Canvas shadows dpr={[1, 2]} className="w-full h-full z-20" gl={{ preserveDrawingBuffer: true }}>
+        <div className="relative w-full h-36" id="jiao-container">
+            <Canvas 
+                shadows 
+                dpr={[1, 2]} 
+                className="w-full h-full z-20" 
+                gl={{ preserveDrawingBuffer: true }} // 關鍵：允許外部抓取圖片
+                id="jiao-canvas"
+            >
                 <PerspectiveCamera makeDefault position={[0, 1.5, 6]} fov={35} /> 
                 <ambientLight intensity={0.5} color="#ffdad4" />
                 <directionalLight position={[-2, 5, 2]} intensity={2} castShadow color="#fff0e0" />
@@ -197,6 +211,81 @@ const Seal = () => (
     <img src="/image_1bd31c.png" alt="大寶印章" className="h-10 w-auto rounded-md shadow-[0_2px_10px_rgba(185,28,28,0.4)] border border-red-900/20 object-contain flex-shrink-0 block" />
 );
 
+// --- 預覽視窗 (Modal) ---
+interface SharePreviewModalProps { isOpen: boolean; onClose: () => void; imageUrl: string | null; onDownload: () => void; onSystemShare: () => void; }
+const SharePreviewModal: React.FC<SharePreviewModalProps> = ({ isOpen, onClose, imageUrl, onDownload, onSystemShare }) => {
+    if (!isOpen || !imageUrl) return null;
+    return createPortal(
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+            <div className="bg-[#0f172a] rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col relative border border-slate-700">
+                <div className="flex justify-between items-center p-4 border-b border-slate-700">
+                    <h3 className="text-white font-bold flex items-center gap-2"><Sparkles size={18} className="text-purple-400"/> 分享運勢卡片</h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors"><X size={20} /></button>
+                </div>
+                <div className="p-6 flex justify-center bg-[#020617]"><div className="relative shadow-[0_0_30px_rgba(139,92,246,0.3)] rounded-lg overflow-hidden"><img src={imageUrl} alt="Daily Fortune Card" className="max-h-[50vh] object-contain rounded-lg" /></div></div>
+                <div className="p-4 bg-slate-900 border-t border-slate-700 flex flex-col gap-3">
+                    <button onClick={onDownload} className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-900/20"><Download size={18} /> 下載圖片</button>
+                    {navigator.share && (<button onClick={onSystemShare} className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold flex items-center justify-center gap-2 transition-all border border-slate-700"><Smartphone size={18} /> 系統分享</button>)}
+                </div>
+            </div>
+        </div>,
+        document.body
+    );
+};
+
+// --- [全新] 隱藏的截圖專用卡片元件 ---
+// 修改策略：不使用 fixed: -9999px，而是用一個絕對定位的容器，放在最下層
+const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string | null, finalLuck: string, finalKeyword: string, finalContent: string, staticJiaoImage: string | null }>(
+    ({ selectedCat, finalLuck, finalKeyword, finalContent, staticJiaoImage }, ref) => {
+    return (
+        <div ref={ref} className="bg-[#09090b] w-[380px] rounded-xl border border-white/20 flex flex-col items-center relative overflow-hidden shadow-2xl shrink-0" style={{aspectRatio: '9/16'}}>
+            {/* 純淨背景，無雜訊濾鏡，但加上深色背景色確保不透明 */}
+            
+            <div className="flex flex-col items-center mt-6 z-10 w-full px-4">
+                <div className="text-[10px] text-amber-500/70 font-serif-tc tracking-[0.2em] mb-1">{getArtisticDate()}</div>
+                <div className="flex items-center gap-3">
+                    <div className="h-[1px] w-8 bg-gradient-to-r from-transparent to-amber-500/50"></div>
+                    <h2 className="text-xl font-bold text-slate-200 font-serif-tc tracking-widest">{selectedCat}運勢</h2>
+                    <div className="h-[1px] w-8 bg-gradient-to-l from-transparent to-amber-500/50"></div>
+                </div>
+            </div>
+
+            <div className="relative z-10 w-full h-32 shrink-0 -my-2 flex items-center justify-center">
+                 {/* 這裡只顯示靜態圖，絕對不會有 WebGL */}
+                 {staticJiaoImage && <img src={staticJiaoImage} alt="Jiao Snapshot" className="h-full object-contain pointer-events-none" />}
+            </div>
+            
+            <div className="z-10 flex flex-col items-center justify-center shrink-0 mb-3">
+                <div className="text-4xl font-black text-white font-serif-tc keyword-glow tracking-[0.2em] ml-2">
+                    {finalKeyword}
+                </div>
+            </div>
+
+            <div className="flex-1 w-full px-8 relative z-10 flex flex-col items-center">
+                <div className="w-full text-slate-300 text-sm leading-7 text-justify font-serif-tc tracking-wide opacity-90">
+                    {finalContent || "暫無說明"}
+                </div>
+            </div>
+
+            <div className="w-full px-6 py-5 z-10 flex items-end justify-between mt-auto bg-[#09090b]">
+                <div className="flex items-center gap-3">
+                    <div className="bg-white p-1 rounded-md shadow-lg opacity-90">
+                        <img src="/qr-lucky.png" alt="Scan to Play" className="w-10 h-10 object-contain block" />
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                        <span className="text-[8px] text-slate-400 font-sans tracking-wider uppercase">SCAN TO PLAY</span>
+                        <div className="text-[9px] font-serif-tc tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-amber-100 via-yellow-300 to-amber-100 opacity-90 drop-shadow-[0_1px_2px_rgba(251,191,36,0.3)]">
+                            ziweiapp.dabao.life/lucky
+                        </div>
+                    </div>
+                </div>
+                <Seal />
+            </div>
+        </div>
+    );
+});
+
+
 interface LuckyGameProps {
     onClose: () => void;
     isPublicPage?: boolean;
@@ -209,31 +298,34 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
     const [breathingText, setBreathingText] = useState('');
     const [canProceed, setCanProceed] = useState(false);
     const [sceneState, setSceneState] = useState<CeremonyState>('black');
-    
-    // [修正] 預設為 false，只有管理員可開啟速測
     const [skipAnimation, setSkipAnimation] = useState(false);
-    
     const [round, setRound] = useState(0); 
     const [selections, setSelections] = useState<number[]>([]);
     const [bubbles, setBubbles] = useState<{val: number, x: number, y: number, scale: number, delay: number}[]>([]);
     const [finalContent, setFinalContent] = useState<string>('');
     const [finalLuck, setFinalLuck] = useState<string>('平');
     const [finalKeyword, setFinalKeyword] = useState<string>('');
+    
     const [isGeneratingImg, setIsGeneratingImg] = useState(false);
     const [isLoadingResult, setIsLoadingResult] = useState(false);
     
-    // [新增] 管理員狀態
+    // [狀態] 用來控制是否顯示隱藏的截圖卡片
+    const [showHiddenCard, setShowHiddenCard] = useState(false);
+    
+    const [staticJiaoImage, setStaticJiaoImage] = useState<string | null>(null);
+    const [shareImageUrl, setShareImageUrl] = useState<string | null>(null);
+    const [shareBlob, setShareBlob] = useState<Blob | null>(null);
+    
     const [isAdmin, setIsAdmin] = useState(false);
 
+    // [新增] 指向隱藏截圖元素的 ref
+    const hiddenCaptureRef = useRef<HTMLDivElement>(null);
     const resultRef = useRef<HTMLDivElement>(null);
 
-    // [新增] 檢查是否為管理員
     useEffect(() => {
         const checkAdmin = async () => {
             const { data: { user } } = await supabase.auth.getUser();
-            if (user?.email === SUPER_ADMIN_EMAIL) {
-                setIsAdmin(true);
-            }
+            if (user?.email === SUPER_ADMIN_EMAIL) setIsAdmin(true);
         };
         checkAdmin();
     }, []);
@@ -307,64 +399,69 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
         }
     }, [step, result, selectedCat]);
 
-    // [修正] 截圖功能：淨化畫面後再截圖，避免黑屏
+    // [修正] 截圖處理函式：場外渲染 (確保隱藏元素已被繪製)
     const handleShare = async () => { 
-        if (!resultRef.current) return; 
-        
         setIsGeneratingImg(true); 
 
-        // 1. 抓取所有可能導致崩潰的特效元素
-        const effectsToHide = resultRef.current.querySelectorAll('.absolute.top-\\[-50px\\], .absolute.bottom-\\[-50px\\]');
-        const noiseClass = resultRef.current.className.includes('bg-noise');
+        try {
+            // 1. 偷拍 3D Canvas
+            const canvasEl = document.querySelector('#jiao-canvas canvas') as HTMLCanvasElement;
+            if (canvasEl) {
+                const jiaoDataUrl = canvasEl.toDataURL('image/png');
+                setStaticJiaoImage(jiaoDataUrl);
+            }
 
-        // 2. 暫時移除/隱藏特效
-        if (noiseClass) resultRef.current.classList.remove('bg-noise');
-        effectsToHide.forEach(el => el.classList.add('screenshot-hidden'));
+            // 2. 顯示隱藏卡片 (觸發 React 渲染)
+            setShowHiddenCard(true);
 
-        // 3. 強制等待圖片資源 (QR Code, Seal) 載入
-        const images = resultRef.current.querySelectorAll('img');
-        const promises = Array.from(images).map(img => {
-            if (img.complete) return Promise.resolve();
-            return new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
-        });
-        await Promise.all(promises);
+            // 3. 等待渲染完成 (這步最關鍵，給瀏覽器時間去繪製那個 invisible 的 DOM)
+            await new Promise(resolve => setTimeout(resolve, 500));
 
-        // 4. 給 DOM 一點時間重繪 (重要)
-        await new Promise(resolve => setTimeout(resolve, 300));
+            // 4. 確保隱藏卡片內的圖片已載入
+            if (!hiddenCaptureRef.current) throw new Error("Hidden card not found");
+            
+            const images = hiddenCaptureRef.current.querySelectorAll('img');
+            await Promise.all(Array.from(images).map(img => {
+                if (img.complete) return Promise.resolve();
+                return new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
+            }));
 
-        try { 
-            // 5. 使用 toPng 並強制背景色，確保不是透明導致變黑
-            const dataUrl = await toPng(resultRef.current, { 
+            // 5. 截圖
+            const dataUrl = await toPng(hiddenCaptureRef.current, { 
                 pixelRatio: 3, 
-                backgroundColor: '#09090b', // 強制黑底，避免透明
-                cacheBust: false, 
-                skipAutoScale: true,
-                style: {
-                    boxShadow: 'none', // 移除陰影避免運算錯誤
-                    transform: 'none'
-                },
-                filter: (node) => {
-                    // 過濾掉可能殘留的特效 div
-                    if (node.classList && node.classList.contains('screenshot-hidden')) return false;
-                    return true;
-                }
+                backgroundColor: '#09090b',
+                cacheBust: false,
+                width: 380, // 強制寬度
+                // 這裡不使用 style 強制顯示，因為我們已經在 DOM 上處理了
             }); 
             
-            if (dataUrl) { 
-                const link = document.createElement('a'); 
-                link.download = `紫微占卜-${selectedCat}-${new Date().getTime()}.png`; 
-                link.href = dataUrl; 
-                link.click(); 
-            } 
+            const blob = await (await fetch(dataUrl)).blob();
+            setShareImageUrl(dataUrl);
+            setShareBlob(blob);
+
         } catch (e) { 
             console.error("Screenshot failed:", e); 
             alert('圖片生成失敗，請稍後再試'); 
         } finally { 
-            // 6. 恢復特效
-            if (noiseClass) resultRef.current.classList.add('bg-noise');
-            effectsToHide.forEach(el => el.classList.remove('screenshot-hidden'));
+            // 6. 截完圖後，隱藏那個卡片
+            setShowHiddenCard(false);
+            setStaticJiaoImage(null);
             setIsGeneratingImg(false); 
         } 
+    };
+
+    const handleDownload = () => {
+        if (!shareImageUrl) return;
+        const link = document.createElement('a');
+        link.download = `紫微占卜-${selectedCat}-${new Date().getTime()}.png`;
+        link.href = shareImageUrl;
+        link.click();
+    };
+
+    const handleSystemShare = async () => {
+        if (!shareBlob || !navigator.share) return;
+        const file = new File([shareBlob], 'fortune.png', { type: 'image/png' });
+        try { await navigator.share({ title: '紫微占卜結果', files: [file] }); } catch (err) {}
     };
 
     const isIncenseVisible = ['incense_show', 'light_out', 'igniting', 'smoking', 'text_typing', 'ready'].includes(sceneState);
@@ -379,12 +476,29 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
         <div className="flex flex-col overflow-hidden text-white font-sans h-full w-full relative">
             <SmokeStyles />
             <GlobalStyles />
+
+            <SharePreviewModal isOpen={!!shareImageUrl} onClose={() => { setShareImageUrl(null); setShareBlob(null); }} imageUrl={shareImageUrl} onDownload={handleDownload} onSystemShare={handleSystemShare} />
             
+            {/* [全新] 隱藏的截圖專用卡片元素 */}
+            {/* 技巧：用 fixed 定位在螢幕外，但 z-index 很低，且利用 opacity: 0 來隱藏，但讓它佔有空間(雖然是在視窗外) */}
+            {/* 使用 showHiddenCard 控制是否渲染 DOM，節省效能 */}
+            {showHiddenCard && (
+                <div style={{ position: 'fixed', top: '0', left: '-9999px', opacity: 1, zIndex: -10 }}>
+                    <HiddenCaptureCard 
+                        ref={hiddenCaptureRef}
+                        selectedCat={selectedCat}
+                        finalLuck={finalLuck}
+                        finalKeyword={finalKeyword}
+                        finalContent={finalContent}
+                        staticJiaoImage={staticJiaoImage}
+                    />
+                </div>
+            )}
+
             {step !== 'BREATHING' && step !== 'RESULT' && (
                 <div className="p-4 flex justify-between items-center z-50 shrink-0">
                     <div className="flex items-center gap-2 text-slate-400"><Sparkles size={18} /><span className="text-sm font-bold tracking-widest">吉凶占卜</span></div>
                     <div className="flex items-center gap-4">
-                        {/* [權限控制] 僅 Admin 可見速測按鈕 */}
                         {step === 'CATEGORY' && isAdmin && (
                             <button onClick={() => setSkipAnimation(!skipAnimation)} className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${skipAnimation ? 'bg-yellow-500/20 border-yellow-500 text-yellow-400 shadow-[0_0_10px_rgba(234,179,8,0.2)]' : 'bg-white/5 border-white/10 text-slate-500 hover:text-slate-300'}`}>
                                 <Zap size={14} className={skipAnimation ? "fill-current" : ""} /><span>速測</span>
@@ -398,6 +512,7 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
             )}
 
             <div className="flex-1 relative w-full p-2 overflow-y-auto pb-safe">
+                {/* (省略前面的步驟...) */}
                 {step === 'CATEGORY' && (
                     <div className="w-full h-full flex flex-col items-center justify-center max-w-5xl mx-auto animate-in slide-in-from-bottom-8 duration-500">
                         <div className="text-center mb-6 sm:mb-10">
@@ -454,7 +569,12 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                 
                 {step === 'RESULT' && result && (
                     <div className="w-full h-full flex flex-col items-center animate-in fade-in duration-1000 relative pt-[calc(env(safe-area-inset-top)+0.5rem)]">
-                        <div ref={resultRef} className="bg-[#09090b] bg-noise w-full max-w-sm mx-auto rounded-xl border border-white/20 flex flex-col items-center relative overflow-hidden shadow-2xl shrink-0" style={{aspectRatio: '9/16', maxHeight: '75vh'}}>
+                        {/* 原本顯示給使用者看的卡片 (完全不動它) */}
+                        <div 
+                            ref={resultRef} 
+                            className="bg-[#09090b] w-full max-w-sm mx-auto rounded-xl border border-white/20 flex flex-col items-center relative overflow-hidden shadow-2xl shrink-0 bg-noise"
+                            style={{aspectRatio: '9/16', maxHeight: '75vh'}}
+                        >
                             <div className="absolute top-[-50px] left-[-50px] w-[180px] h-[180px] bg-purple-900/30 rounded-full blur-[60px]"></div>
                             <div className="absolute bottom-[-50px] right-[-50px] w-[180px] h-[180px] bg-blue-900/30 rounded-full blur-[60px]"></div>
                             
@@ -467,7 +587,10 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                                 </div>
                             </div>
 
-                            <div className="relative z-10 w-full h-32 shrink-0 -my-2"><SacredJiaoScene3D luck={finalLuck} /></div>
+                            <div className="relative z-10 w-full h-32 shrink-0 -my-2">
+                                {/* 這裡顯示真正的 3D */}
+                                <SacredJiaoScene3D luck={finalLuck} />
+                            </div>
                             
                             <div className="z-10 flex flex-col items-center justify-center shrink-0 mb-3">
                                 <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.5, duration: 0.8 }} className="text-4xl font-black text-white font-serif-tc keyword-glow tracking-[0.2em] ml-2">
@@ -483,16 +606,9 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
 
                             <div className="w-full px-6 py-5 z-10 flex items-end justify-between mt-auto">
                                 <div className="flex items-center gap-3">
-                                    {/* QR Code 容器 */}
                                     <div className="bg-white p-1 rounded-md shadow-lg opacity-90">
-                                        <img 
-                                            src="/qr-lucky.png" 
-                                            alt="Scan to Play" 
-                                            className="w-10 h-10 object-contain block" // 設定 QR Code 大小
-                                        />
+                                        <img src="/qr-lucky.png" alt="Scan to Play" className="w-10 h-10 object-contain block" />
                                     </div>
-                                    
-                                    {/* 網址文字 (稍微縮小並靠左) */}
                                     <div className="flex flex-col gap-0.5">
                                         <span className="text-[8px] text-slate-400 font-sans tracking-wider uppercase">SCAN TO PLAY</span>
                                         <div className="text-[9px] font-serif-tc tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-amber-100 via-yellow-300 to-amber-100 opacity-90 drop-shadow-[0_1px_2px_rgba(251,191,36,0.3)]">
