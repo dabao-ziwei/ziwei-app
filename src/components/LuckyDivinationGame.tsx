@@ -427,43 +427,6 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
         }
     }, [step]);
 
-    const reset = () => { 
-        if (isPublicPage) {
-            navigate('/');
-        } else {
-            onClose(); 
-            setTimeout(() => { setStep('CATEGORY'); setSelectedCat(null); setSelections([]); setRound(0); setBreathingText(''); setSceneState('black'); }, 500); 
-        }
-    };
-
-    const result = useMemo(() => { if (selections.length !== 4) return null; const numAB = parseInt(`${selections[0]}${selections[1]}`); const finalAB = getRecursiveSum(numAB); const numCD = parseInt(`${selections[2]}${selections[3]}`); const finalCD = getRecursiveSum(numCD); const ganIdx = getDivinationStem(finalCD); return { mingNum: finalAB, mingZhi: ZHI[finalAB - 1], sihuaNum: finalCD, sihuaGan: GAN[ganIdx] }; }, [selections]);
-
-    useEffect(() => {
-        if (step === 'RESULT' && result && selectedCat) {
-            const fetchData = async () => {
-                setIsLoadingResult(true);
-                try { 
-                    const data = await getDivinationResult(selectedCat, result.mingZhi, result.sihuaGan); 
-                    if (data) { 
-                        setFinalContent(data.content); 
-                        setFinalLuck(data.luck); 
-                        setFinalKeyword(getKeyword(data.luck)); 
-                    } else { 
-                        setFinalContent("星象混沌，天機未顯。此時心緒尚不穩，建議靜待時機，改日誠心再占。"); 
-                        setFinalLuck('無結果'); 
-                        setFinalKeyword(getKeyword('無結果'));
-                    } 
-                } catch (e) { 
-                    console.error("Fetch Error:", e); 
-                    setFinalContent("連線異常，無法讀取星象資料。"); 
-                    setFinalLuck('無結果');
-                    setFinalKeyword('異常'); 
-                } finally { setIsLoadingResult(false); }
-            };
-            fetchData();
-        }
-    }, [step, result, selectedCat]);
-
     const handleShare = async () => { 
         setShareImageUrl(null);
         setShareBlob(null);
@@ -481,7 +444,6 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                 const images = hiddenCaptureRef.current.querySelectorAll('img');
                 await Promise.all(Array.from(images).map(img => {
                     if (img.complete) {
-                         // 對已經載入的圖片，嘗試強制解碼 (iOS Safari fix)
                         return img.decode ? img.decode().catch(() => {}) : Promise.resolve();
                     }
                     return new Promise(resolve => { 
@@ -493,12 +455,16 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                     });
                 }));
 
-                // 3. 截圖參數：移除所有可能導致黑屏的設定
+                // 3. 截圖參數：我們在最下面的 div 設定了 opacity: 0.01 (隱藏)
+                // 這裡我們告訴 toPng 忽略那個透明度，強制用全不透明 (opacity: 1) 輸出圖片
                 const options = {
                     pixelRatio: 2, 
                     backgroundColor: '#09090b',
-                    // cacheBust: false,  <-- 預設為 false，明確不加
                     width: 380, 
+                    style: {
+                        opacity: 1, // [關鍵修正] 讓截圖出來的圖片是清楚的，即便螢幕上是透明的
+                        transform: 'scale(1)',
+                    }
                 };
 
                 // 4. iOS 緩衝 (給一點時間讓 decode 生效)
@@ -556,10 +522,11 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                 onSystemShare={handleSystemShare} 
             />
             
-            {/* [iOS 黑屏終極修正] 
-               1. 將卡片移回 viewport 內 (left: 0, top: 0)
-               2. 使用 fixed + z-index: -50 藏在主畫面下方
-               3. 這樣 iOS 認為它是可見的(Visible)，才會渲染像素，但使用者看不到
+            {/* [iOS 黑屏與鬼影終極修正] 
+               1. 保持在 viewport 內 (left: 0, top: 0) 以確保 iOS 繪製
+               2. opacity: 0.01 (肉眼不可見，解決鬼影問題，但 iOS 仍會運算)
+               3. pointerEvents: none (讓點擊穿透，不擋住按鈕)
+               4. handleShare 裡的 options.style.opacity: 1 確保截圖出來是清楚的
             */}
             <div style={{ 
                 position: 'fixed', 
@@ -567,8 +534,9 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                 left: 0, 
                 width: '100vw', 
                 height: '100vh', 
-                zIndex: -50, 
-                pointerEvents: 'none', 
+                zIndex: -9999, 
+                opacity: 0.01,         // [重點] 讓它在螢幕上隱形
+                pointerEvents: 'none', // [重點] 讓滑鼠/手指可以點擊底下的按鈕
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
