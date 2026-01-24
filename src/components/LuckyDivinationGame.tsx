@@ -206,8 +206,14 @@ function CameraRig() {
     return null;
 }
 
+// [修改] Seal 元件：移除紅色陰影與邊框，避免截圖出現紅塊
 const Seal = () => (
-    <img src="/image_1bd31c.png" alt="大寶印章" className="h-10 w-auto rounded-md shadow-[0_2px_10px_rgba(185,28,28,0.4)] border border-red-900/20 object-contain flex-shrink-0 block" />
+    <img 
+        src="/image_1bd31c.png" 
+        alt="大寶印章" 
+        className="h-10 w-auto object-contain flex-shrink-0 block drop-shadow-md" 
+        // 移除 shadow-[...] 和 border-red-...，改用簡單的 drop-shadow
+    />
 );
 
 // --- [新增] 靜態擲筊圖片顯示元件 (結果顯示用) ---
@@ -232,8 +238,6 @@ const JiaoResultImage = ({ luck }: { luck: string }) => {
                 src={src} 
                 alt={`${luck}筊`} 
                 className="h-full object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.5)]"
-                // [關鍵修改] 移除 crossOrigin，避免本地圖片被當作跨域資源阻擋
-                // crossOrigin="anonymous" 
                 onError={(e) => {
                     e.currentTarget.style.display = 'none';
                     e.currentTarget.parentElement!.innerHTML = `<div class="text-white font-bold text-2xl border-2 border-white rounded-full w-20 h-20 flex items-center justify-center">${luck}</div>`;
@@ -293,7 +297,7 @@ const SharePreviewModal: React.FC<SharePreviewModalProps> = ({ isOpen, onClose, 
 const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string | null, finalLuck: string, finalKeyword: string, finalContent: string }>(
     ({ selectedCat, finalLuck, finalKeyword, finalContent }, ref) => {
     return (
-        // [關鍵修改] 寬度設為 380px，比例設為 4/5 (0.8)
+        // 寬度設為 380px，比例設為 4/5 (0.8)
         <div ref={ref} className="bg-[#09090b] w-[380px] rounded-xl border border-white/20 flex flex-col items-center relative overflow-hidden shadow-2xl shrink-0" style={{aspectRatio: '4/5'}}>
             <div className="flex flex-col items-center mt-4 z-10 w-full px-4 shrink-0">
                 <div className="text-[9px] text-amber-500/70 font-serif-tc tracking-[0.2em] mb-1">{getArtisticDate()}</div>
@@ -325,7 +329,6 @@ const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string
             <div className="w-full px-5 py-4 z-10 flex items-end justify-between mt-auto bg-[#09090b] shrink-0">
                 <div className="flex items-center gap-2">
                     <div className="bg-white p-1 rounded-md shadow-lg opacity-90">
-                        {/* [關鍵修正] 移除 crossOrigin，避免本地圖片被阻擋造成白塊 */}
                         <img 
                             src="/qr-lucky.png" 
                             alt="Scan to Play" 
@@ -626,7 +629,7 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                 
                 {step === 'RESULT' && result && (
                     <div className="w-full h-full flex flex-col items-center animate-in fade-in duration-1000 relative pt-[calc(env(safe-area-inset-top)+0.5rem)]">
-                        {/* 原本顯示給使用者看的卡片 (使用靜態圖，但保持 9:16) */}
+                        {/* 原本顯示給使用者看的卡片 (使用靜態圖) */}
                         <div 
                             ref={resultRef} 
                             className="bg-[#09090b] w-full max-w-sm mx-auto rounded-xl border border-white/20 flex flex-col items-center relative overflow-hidden shadow-2xl shrink-0 bg-noise"
@@ -680,9 +683,9 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                         {/* 底部操作區 */}
                         <div className="flex-1 w-full max-w-sm mx-auto flex flex-col justify-end pb-safe px-4 gap-3 mt-4">
                             <div className="flex gap-2 w-full">
-                                {/* [優化] 按鈕文字：顯示繪製中 */}
-                                <button onClick={handleShare} disabled={isGeneratingImg} className="flex-1 py-3 bg-gradient-to-r from-purple-700 to-indigo-700 text-white rounded-full font-bold shadow-lg shadow-purple-900/30 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 font-serif-tc tracking-widest border border-white/10 text-sm">
-                                    {isGeneratingImg ? <><Loader2 className="animate-spin" size={16}/> 繪製中...</> : <><Share2 size={16} /> 分享</>}
+                                {/* [優化] 按鈕不變狀態，只觸發事件 */}
+                                <button onClick={handleShare} className="flex-1 py-3 bg-gradient-to-r from-purple-700 to-indigo-700 text-white rounded-full font-bold shadow-lg shadow-purple-900/30 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 font-serif-tc tracking-widest border border-white/10 text-sm">
+                                    <Share2 size={16} /> 分享
                                 </button>
                                 
                                 {isPublicPage ? (
