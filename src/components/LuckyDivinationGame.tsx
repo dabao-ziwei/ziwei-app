@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { X, Heart, Briefcase, Wallet, Activity, Users, Sparkles, Share2, AlertCircle, Loader2, Zap, MessageCircle, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { toBlob } from 'html-to-image';
+// [修改 1] 改用 toPng，相容性比 toBlob 好
+import { toPng } from 'html-to-image';
 import { getDivinationResult } from '../db';
 import { supabase } from '../supabase';
 import { Canvas, useFrame } from '@react-three/fiber';
@@ -304,35 +305,56 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
         }
     }, [step, result, selectedCat]);
 
-    // 修改 handleShare 函式：加入 cacheBust 與稍作延遲確保渲染
+    // [修正版] handleShare：解決一片黑與 QR Code 消失的問題
     const handleShare = async () => { 
         if (!resultRef.current) return; 
         
         setIsGeneratingImg(true); 
-        
-        // 給瀏覽器一點時間準備渲染 (解決圖片空白的關鍵)
-        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // 1. 暫時移除 bg-noise 類別 (關鍵修正：避免 SVG 濾鏡導致截圖崩潰)
+        const originalClass = resultRef.current.className;
+        if (originalClass.includes('bg-noise')) {
+            resultRef.current.classList.remove('bg-noise');
+        }
+
+        // 2. 強制等待圖片載入 (解決 QR Code 消失)
+        const images = resultRef.current.querySelectorAll('img');
+        const promises = Array.from(images).map(img => {
+            if (img.complete) return Promise.resolve();
+            return new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
+        });
+        await Promise.all(promises);
+
+        // 額外緩衝時間，讓 DOM 渲染完成
+        await new Promise(resolve => setTimeout(resolve, 300));
 
         try { 
-            const blob = await toBlob(resultRef.current, { 
+            // 3. 改用 toPng (比 toBlob 更穩定)
+            const dataUrl = await toPng(resultRef.current, { 
                 pixelRatio: 3, 
                 backgroundColor: '#09090b', 
-                width: 380,
-                cacheBust: true, // [關鍵] 強制載入圖片資源
-                skipAutoScale: true // 防止某些手機上比例跑掉
+                cacheBust: false, // 關閉 cacheBust
+                skipAutoScale: true,
+                style: {
+                    boxShadow: 'none',
+                    transform: 'none'
+                }
             }); 
             
-            if (blob) { 
+            if (dataUrl) { 
                 const link = document.createElement('a'); 
-                // 檔名加上時間戳記，避免重複
                 link.download = `紫微占卜-${selectedCat}-${new Date().getTime()}.png`; 
-                link.href = URL.createObjectURL(blob); 
+                link.href = dataUrl; 
                 link.click(); 
             } 
         } catch (e) { 
-            console.error(e); 
+            console.error("Screenshot failed:", e); 
             alert('圖片生成失敗，請稍後再試'); 
         } finally { 
+            // 4. 恢復 bg-noise 類別
+            if (originalClass.includes('bg-noise')) {
+                resultRef.current.classList.add('bg-noise');
+            }
             setIsGeneratingImg(false); 
         } 
     };
