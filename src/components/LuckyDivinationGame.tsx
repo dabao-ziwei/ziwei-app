@@ -205,13 +205,13 @@ function CameraRig() {
     return null;
 }
 
-// [修正] Seal 元件：移除所有陰影，避免截圖紅塊
+// Seal 元件
 const Seal = () => (
     <img 
         src="/image_1bd31c.png" 
         alt="大寶印章" 
         className="h-10 w-auto object-contain flex-shrink-0 block"
-        style={{ filter: 'none', boxShadow: 'none' }} // 強制移除濾鏡
+        style={{ filter: 'none', boxShadow: 'none' }}
     />
 );
 
@@ -291,9 +291,13 @@ const SharePreviewModal: React.FC<SharePreviewModalProps> = ({ isOpen, onClose, 
     );
 };
 
-// --- [優化] 隱藏的截圖專用卡片 ---
+// --- [優化修正] 隱藏的截圖專用卡片 ---
 const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string | null, finalLuck: string, finalKeyword: string, finalContent: string }>(
     ({ selectedCat, finalLuck, finalKeyword, finalContent }, ref) => {
+    
+    // 產生時間戳記，確保每次渲染都是新的圖片請求，避免瀏覽器快取舊圖
+    const cacheBuster = useMemo(() => new Date().getTime(), []);
+
     return (
         <div ref={ref} className="bg-[#09090b] w-[380px] rounded-xl border border-white/20 flex flex-col items-center relative overflow-hidden shadow-2xl shrink-0" style={{aspectRatio: '4/5'}}>
             <div className="flex flex-col items-center mt-4 z-10 w-full px-4 shrink-0">
@@ -324,13 +328,13 @@ const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string
             <div className="w-full px-5 py-4 z-10 flex items-end justify-between mt-auto bg-[#09090b] shrink-0">
                 <div className="flex items-center gap-2">
                     <div className="bg-white p-1 rounded-md shadow-lg opacity-90 relative overflow-hidden">
-                        {/* [修正] QR Code 圖片設定，增加 onError 顯示 */}
+                        {/* [修正] 加入時間戳記參數與 crossOrigin，確保 html-to-image 能抓到圖片 */}
                         <img 
-                            src="/qr-lucky.png" 
+                            src={`/qr-lucky.png?v=${cacheBuster}`} 
                             alt="Scan to Play" 
+                            crossOrigin="anonymous"
                             className="w-9 h-9 object-contain block"
                             onError={(e) => {
-                                // 圖片讀取失敗時，顯示紅色錯誤提示，方便除錯
                                 e.currentTarget.style.display = 'none';
                                 e.currentTarget.parentElement!.innerHTML = '<div class="w-9 h-9 bg-red-500 flex items-center justify-center text-[6px] text-white text-center leading-tight">圖片遺失</div>';
                             }}
@@ -478,17 +482,19 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                     return new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
                 }));
 
-                // 產生截圖 (2倍圖，速度快)
+                // 產生截圖 
+                // [修正] 開啟 cacheBust，並在樣式中強制定位到可視範圍但隱藏 (zIndex: -100) 以確保瀏覽器繪製
                 const dataUrl = await toPng(hiddenCaptureRef.current, { 
                     pixelRatio: 2, 
                     backgroundColor: '#09090b',
-                    cacheBust: false,
+                    cacheBust: true,  // 強制忽略快取
                     width: 380, 
                     style: {
                         visibility: 'visible',
                         position: 'fixed',
-                        top: '-9999px',
-                        left: '-9999px',
+                        top: '0px',       // 移至視窗內確保渲染
+                        left: '0px',      
+                        zIndex: '-1000',  // 藏在最底下
                         transform: 'none', 
                     }
                 }); 
@@ -542,7 +548,7 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                 onSystemShare={handleSystemShare} 
             />
             
-            {/* 隱藏的截圖專用卡片元素 */}
+            {/* 隱藏的截圖專用卡片元素，位置樣式交由 toPng 的 style 屬性控制 */}
             <div style={{ position: 'fixed', top: '0', left: '-9999px', opacity: 1, zIndex: -10 }}>
                 <HiddenCaptureCard 
                     ref={hiddenCaptureRef}
@@ -570,7 +576,6 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
             )}
 
             <div className="flex-1 relative w-full p-2 overflow-y-auto pb-safe">
-                {/* (省略前面的步驟...) */}
                 {step === 'CATEGORY' && (
                     <div className="w-full h-full flex flex-col items-center justify-center max-w-5xl mx-auto animate-in slide-in-from-bottom-8 duration-500">
                         <div className="text-center mb-6 sm:mb-10">
@@ -681,7 +686,6 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                         {/* 底部操作區 */}
                         <div className="flex-1 w-full max-w-sm mx-auto flex flex-col justify-end pb-safe px-4 gap-3 mt-4">
                             <div className="flex gap-2 w-full">
-                                {/* [優化] 按鈕文字：顯示繪製中 */}
                                 <button onClick={handleShare} disabled={isGeneratingImg} className="flex-1 py-3 bg-gradient-to-r from-purple-700 to-indigo-700 text-white rounded-full font-bold shadow-lg shadow-purple-900/30 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 font-serif-tc tracking-widest border border-white/10 text-sm">
                                     {isGeneratingImg ? <><Loader2 className="animate-spin" size={16}/> 繪製中...</> : <><Share2 size={16} /> 分享</>}
                                 </button>
