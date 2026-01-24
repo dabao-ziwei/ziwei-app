@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Heart, Briefcase, Wallet, Activity, Users, Sparkles, Share2, AlertCircle, Loader2, Zap, MessageCircle, ArrowRight, Download, Smartphone, Image as ImageIcon } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { X, Heart, Briefcase, Wallet, Activity, Users, Sparkles, Share2, AlertCircle, Loader2, Zap, MessageCircle, ArrowRight, Download, Smartphone } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { toPng } from 'html-to-image';
 import { getDivinationResult } from '../db';
 import { supabase } from '../supabase';
@@ -107,7 +107,7 @@ function Loader() {
   return <Html center><div className="text-white font-bold whitespace-nowrap">{Math.floor(progress)} % 讀取中...</div></Html>
 }
 
-// 3D 筊杯元件
+// 3D 筊杯元件 (保留給動畫展示用)
 const JiaoBlock3D = ({ position, rotation }: { position: [number, number, number], rotation: [number, number, number] }) => {
     const meshRef = useRef<THREE.Group>(null);
     const { scene } = useGLTF('/jiaobei.glb'); 
@@ -214,9 +214,9 @@ const Seal = () => (
 const JiaoResultImage = ({ luck }: { luck: string }) => {
     if (luck === '無結果') {
         return (
-             <div className="relative w-64 h-44 flex items-center justify-center">
-                <div className="w-40 h-40 rounded-full border-4 border-dashed border-slate-700/50 flex items-center justify-center relative">
-                    <span className="text-6xl font-bold text-slate-500">無</span>
+             <div className="relative w-64 h-32 flex items-center justify-center">
+                <div className="w-28 h-28 rounded-full border-4 border-dashed border-slate-700/50 flex items-center justify-center relative">
+                    <span className="text-4xl font-bold text-slate-500">無</span>
                 </div>
             </div>
         );
@@ -227,17 +227,17 @@ const JiaoResultImage = ({ luck }: { luck: string }) => {
     else if (luck === '凶') src = '/jiao-xiong.png';
 
     return (
-        <div className="relative w-full h-36 flex items-center justify-center animate-in zoom-in duration-500">
+        <div className="relative w-full h-24 flex items-center justify-center animate-in zoom-in duration-500">
             <img 
                 src={src} 
                 alt={`${luck}筊`} 
-                className="h-full object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)]"
+                className="h-full object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.5)]"
                 onError={(e) => {
                     e.currentTarget.style.display = 'none';
-                    e.currentTarget.parentElement!.innerHTML = `<div class="text-white font-bold text-2xl border-2 border-white rounded-full w-24 h-24 flex items-center justify-center">${luck}</div>`;
+                    e.currentTarget.parentElement!.innerHTML = `<div class="text-white font-bold text-2xl border-2 border-white rounded-full w-20 h-20 flex items-center justify-center">${luck}</div>`;
                 }}
             />
-             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-amber-500/10 rounded-full blur-[60px] z-[-1] pointer-events-none"></div>
+             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 bg-amber-500/10 rounded-full blur-[40px] z-[-1] pointer-events-none"></div>
         </div>
     );
 };
@@ -287,50 +287,54 @@ const SharePreviewModal: React.FC<SharePreviewModalProps> = ({ isOpen, onClose, 
     );
 };
 
-// --- [優化] 隱藏的截圖專用卡片 ---
+// --- [優化] 隱藏的截圖專用卡片 (4:5 完美比例版) ---
 const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string | null, finalLuck: string, finalKeyword: string, finalContent: string }>(
     ({ selectedCat, finalLuck, finalKeyword, finalContent }, ref) => {
     return (
-        <div ref={ref} className="bg-[#09090b] w-[380px] rounded-xl border border-white/20 flex flex-col items-center relative overflow-hidden shadow-2xl shrink-0" style={{aspectRatio: '9/16'}}>
-            <div className="flex flex-col items-center mt-6 z-10 w-full px-4">
-                <div className="text-[10px] text-amber-500/70 font-serif-tc tracking-[0.2em] mb-1">{getArtisticDate()}</div>
+        // [關鍵修改] 寬度設為 380px，比例設為 4/5 (0.8)，這樣高度會是 475px，完美符合 IG 貼文
+        <div ref={ref} className="bg-[#09090b] w-[380px] rounded-xl border border-white/20 flex flex-col items-center relative overflow-hidden shadow-2xl shrink-0" style={{aspectRatio: '4/5'}}>
+            <div className="flex flex-col items-center mt-4 z-10 w-full px-4 shrink-0">
+                <div className="text-[9px] text-amber-500/70 font-serif-tc tracking-[0.2em] mb-1">{getArtisticDate()}</div>
                 <div className="flex items-center gap-3">
                     <div className="h-[1px] w-8 bg-gradient-to-r from-transparent to-amber-500/50"></div>
-                    <h2 className="text-xl font-bold text-slate-200 font-serif-tc tracking-widest">{selectedCat}運勢</h2>
+                    <h2 className="text-lg font-bold text-slate-200 font-serif-tc tracking-widest">{selectedCat}運勢</h2>
                     <div className="h-[1px] w-8 bg-gradient-to-l from-transparent to-amber-500/50"></div>
                 </div>
             </div>
 
-            <div className="relative z-10 w-full h-32 shrink-0 -my-2 flex items-center justify-center">
-                 {/* 截圖時使用靜態圖 */}
+            <div className="relative z-10 w-full h-24 shrink-0 -my-1 flex items-center justify-center">
+                 {/* 截圖時使用縮小版的靜態圖 */}
                  <JiaoResultImage luck={finalLuck} />
             </div>
             
-            <div className="z-10 flex flex-col items-center justify-center shrink-0 mb-3">
-                <div className="text-4xl font-black text-white font-serif-tc keyword-glow tracking-[0.2em] ml-2">
+            <div className="z-10 flex flex-col items-center justify-center shrink-0 mb-2">
+                <div className="text-3xl font-black text-white font-serif-tc keyword-glow tracking-[0.2em] ml-2">
                     {finalKeyword}
                 </div>
             </div>
 
-            <div className="flex-1 w-full px-8 relative z-10 flex flex-col items-center">
-                <div className="w-full text-slate-300 text-sm leading-7 text-justify font-serif-tc tracking-wide opacity-90">
+            {/* [關鍵修改] 讓文字區塊自適應，字體縮小 */}
+            <div className="flex-1 w-full px-6 relative z-10 flex flex-col items-center justify-start overflow-hidden">
+                <div className="w-full text-slate-300 text-xs leading-relaxed text-justify font-serif-tc tracking-wide opacity-90 line-clamp-[12]">
                     {finalContent || "暫無說明"}
                 </div>
             </div>
 
-            <div className="w-full px-6 py-5 z-10 flex items-end justify-between mt-auto bg-[#09090b]">
-                <div className="flex items-center gap-3">
+            <div className="w-full px-5 py-4 z-10 flex items-end justify-between mt-auto bg-[#09090b] shrink-0">
+                <div className="flex items-center gap-2">
                     <div className="bg-white p-1 rounded-md shadow-lg opacity-90">
-                        <img src="/qr-lucky.png" alt="Scan to Play" className="w-10 h-10 object-contain block" crossOrigin="anonymous" />
+                        <img src="/qr-lucky.png" alt="Scan to Play" className="w-9 h-9 object-contain block" crossOrigin="anonymous" />
                     </div>
                     <div className="flex flex-col gap-0.5">
-                        <span className="text-[8px] text-slate-400 font-sans tracking-wider uppercase">SCAN TO PLAY</span>
-                        <div className="text-[9px] font-serif-tc tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-amber-100 via-yellow-300 to-amber-100 opacity-90 drop-shadow-[0_1px_2px_rgba(251,191,36,0.3)]">
+                        <span className="text-[7px] text-slate-400 font-sans tracking-wider uppercase">SCAN TO PLAY</span>
+                        <div className="text-[8px] font-serif-tc tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-amber-100 via-yellow-300 to-amber-100 opacity-90 drop-shadow-[0_1px_2px_rgba(251,191,36,0.3)]">
                             ziweiapp.dabao.life/lucky
                         </div>
                     </div>
                 </div>
-                <Seal />
+                <div className="transform scale-90 origin-bottom-right">
+                    <Seal />
+                </div>
             </div>
         </div>
     );
@@ -446,27 +450,22 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
         }
     }, [step, result, selectedCat]);
 
-    // [優化] 截圖流程：按鈕觸發 -> 開啟Modal -> 背景繪圖 -> 更新Modal內容
     const handleShare = async () => { 
-        // 1. 立即打開 Modal，顯示 Loading 狀態
         setShareImageUrl(null);
         setShareBlob(null);
         setIsShareModalOpen(true);
         setIsGeneratingImg(true); 
 
-        // 2. 異步執行繪圖 (不卡住 UI)
         setTimeout(async () => {
             try {
                 if (!hiddenCaptureRef.current) throw new Error("Hidden card not found");
                 
-                // 確保靜態圖片載入
                 const images = hiddenCaptureRef.current.querySelectorAll('img');
                 await Promise.all(Array.from(images).map(img => {
                     if (img.complete) return Promise.resolve();
                     return new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
                 }));
 
-                // 截圖
                 const dataUrl = await toPng(hiddenCaptureRef.current, { 
                     pixelRatio: 2, 
                     backgroundColor: '#09090b',
@@ -488,11 +487,11 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
             } catch (e) { 
                 console.error("Screenshot failed:", e); 
                 alert('圖片生成失敗，請稍後再試'); 
-                setIsShareModalOpen(false); // 失敗則關閉
+                setIsShareModalOpen(false);
             } finally { 
                 setIsGeneratingImg(false); 
             }
-        }, 100); // 稍微延遲一點點，讓 Modal 先順利渲染出來
+        }, 100);
     };
 
     const handleDownload = () => {
@@ -522,7 +521,6 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
             <SmokeStyles />
             <GlobalStyles />
 
-            {/* Modal 現在由 isOpen 控制，內容會根據 imageUrl 是否存在而變換 */}
             <SharePreviewModal 
                 isOpen={isShareModalOpen} 
                 onClose={() => { setIsShareModalOpen(false); }} 
@@ -531,7 +529,6 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                 onSystemShare={handleSystemShare} 
             />
             
-            {/* 隱藏的截圖專用卡片元素 (永遠存在，隨時待命) */}
             <div style={{ position: 'fixed', top: '0', left: '-9999px', opacity: 1, zIndex: -10 }}>
                 <HiddenCaptureCard 
                     ref={hiddenCaptureRef}
