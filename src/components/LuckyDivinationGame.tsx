@@ -292,7 +292,6 @@ const SharePreviewModal: React.FC<SharePreviewModalProps> = ({ isOpen, onClose, 
 };
 
 // --- [隱藏的截圖專用卡片] ---
-// [修正] 新增 qrCodeDataUrl 屬性，接收 Base64 圖片
 const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string | null, finalLuck: string, finalKeyword: string, finalContent: string, qrCodeDataUrl: string }>(
     ({ selectedCat, finalLuck, finalKeyword, finalContent, qrCodeDataUrl }, ref) => {
     
@@ -325,16 +324,19 @@ const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string
 
             <div className="w-full px-5 py-4 z-10 flex items-end justify-between mt-auto bg-[#09090b] shrink-0">
                 <div className="flex items-center gap-2">
-                    <div className="bg-white p-1 rounded-md shadow-lg opacity-90 relative overflow-hidden">
-                        {/* [關鍵修正] 使用 Base64 圖片源 (qrCodeDataUrl)，不再依賴網路請求，保證截圖有圖 */}
-                        <img 
-                            src={qrCodeDataUrl} 
-                            alt="Scan to Play" 
-                            className="w-9 h-9 object-contain block"
-                            onError={(e) => {
-                                e.currentTarget.style.display = 'none';
-                                e.currentTarget.parentElement!.innerHTML = '<div class="w-9 h-9 bg-red-500 flex items-center justify-center text-[6px] text-white text-center leading-tight">!</div>';
-                            }}
+                    <div className="bg-white p-1 rounded-md shadow-lg opacity-90 relative overflow-hidden flex items-center justify-center">
+                        {/* [終極修正] 將 QR Code 改為 background-image，徹底解決 iOS 下圖片解碼延遲問題 */}
+                        <div 
+                            style={{
+                                width: '36px', 
+                                height: '36px', 
+                                backgroundImage: `url(${qrCodeDataUrl})`,
+                                backgroundSize: 'contain',
+                                backgroundRepeat: 'no-repeat',
+                                backgroundPosition: 'center',
+                                // 強制讓瀏覽器認為這是有內容的區塊
+                                display: 'block',
+                            }} 
                         />
                     </div>
                     <div className="flex flex-col gap-0.5">
@@ -380,7 +382,7 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
     const [shareBlob, setShareBlob] = useState<Blob | null>(null);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     
-    // [新增] 儲存 QR Code 的 Base64 字串，預設先用路徑
+    // 儲存 QR Code 的 Base64 字串
     const [qrCodeBase64, setQrCodeBase64] = useState<string>('/qr-lucky.png');
 
     const [isAdmin, setIsAdmin] = useState(false);
@@ -388,7 +390,7 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
     const hiddenCaptureRef = useRef<HTMLDivElement>(null);
     const resultRef = useRef<HTMLDivElement>(null);
 
-    // [關鍵修正] 組件載入時，預先將 QR Code 圖片轉為 Base64
+    // 預先載入圖片轉 Base64
     useEffect(() => {
         const loadQrCode = async () => {
             try {
