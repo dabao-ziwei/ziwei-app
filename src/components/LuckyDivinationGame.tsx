@@ -292,12 +292,10 @@ const SharePreviewModal: React.FC<SharePreviewModalProps> = ({ isOpen, onClose, 
 };
 
 // --- [隱藏的截圖專用卡片] ---
-const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string | null, finalLuck: string, finalKeyword: string, finalContent: string }>(
-    ({ selectedCat, finalLuck, finalKeyword, finalContent }, ref) => {
+// [修正] 新增 qrCodeDataUrl 屬性，接收 Base64 圖片
+const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string | null, finalLuck: string, finalKeyword: string, finalContent: string, qrCodeDataUrl: string }>(
+    ({ selectedCat, finalLuck, finalKeyword, finalContent, qrCodeDataUrl }, ref) => {
     
-    // QR Code 專用時間戳記 (Cache Buster)
-    const cacheBuster = useMemo(() => new Date().getTime(), []);
-
     return (
         <div ref={ref} className="bg-[#09090b] w-[380px] rounded-xl border border-white/20 flex flex-col items-center relative overflow-hidden shadow-2xl shrink-0" style={{aspectRatio: '4/5'}}>
             <div className="flex flex-col items-center mt-4 z-10 w-full px-4 shrink-0">
@@ -328,10 +326,10 @@ const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string
             <div className="w-full px-5 py-4 z-10 flex items-end justify-between mt-auto bg-[#09090b] shrink-0">
                 <div className="flex items-center gap-2">
                     <div className="bg-white p-1 rounded-md shadow-lg opacity-90 relative overflow-hidden">
+                        {/* [關鍵修正] 使用 Base64 圖片源 (qrCodeDataUrl)，不再依賴網路請求，保證截圖有圖 */}
                         <img 
-                            src={`/qr-lucky.png?v=${cacheBuster}`} 
+                            src={qrCodeDataUrl} 
                             alt="Scan to Play" 
-                            crossOrigin="anonymous" 
                             className="w-9 h-9 object-contain block"
                             onError={(e) => {
                                 e.currentTarget.style.display = 'none';
@@ -382,12 +380,33 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
     const [shareBlob, setShareBlob] = useState<Blob | null>(null);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     
+    // [新增] 儲存 QR Code 的 Base64 字串，預設先用路徑
+    const [qrCodeBase64, setQrCodeBase64] = useState<string>('/qr-lucky.png');
+
     const [isAdmin, setIsAdmin] = useState(false);
 
     const hiddenCaptureRef = useRef<HTMLDivElement>(null);
     const resultRef = useRef<HTMLDivElement>(null);
 
+    // [關鍵修正] 組件載入時，預先將 QR Code 圖片轉為 Base64
     useEffect(() => {
+        const loadQrCode = async () => {
+            try {
+                const response = await fetch('/qr-lucky.png');
+                const blob = await response.blob();
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    if (typeof reader.result === 'string') {
+                        setQrCodeBase64(reader.result);
+                    }
+                };
+                reader.readAsDataURL(blob);
+            } catch (error) {
+                console.error("Failed to preload QR code:", error);
+            }
+        };
+        loadQrCode();
+
         const checkAdmin = async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (user?.email === SUPER_ADMIN_EMAIL) setIsAdmin(true);
@@ -436,7 +455,6 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
         }
     };
 
-    // [嚴重修正] 之前遺失的 result 變數定義，導致白屏
     const result = useMemo(() => { 
         if (selections.length !== 4) return null; 
         const numAB = parseInt(`${selections[0]}${selections[1]}`); 
@@ -486,7 +504,6 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                 
                 await document.fonts.ready;
 
-                // 2. [關鍵] 強制解碼所有圖片，特別是 QR Code
                 const images = hiddenCaptureRef.current.querySelectorAll('img');
                 await Promise.all(Array.from(images).map(img => {
                     if (img.complete) {
@@ -501,22 +518,19 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                     });
                 }));
 
-                // 3. 截圖參數：我們在最下面的 div 設定了 opacity: 0.01 (隱藏)
-                // 這裡我們告訴 toPng 忽略那個透明度，強制用全不透明 (opacity: 1) 輸出圖片
                 const options = {
                     pixelRatio: 2, 
                     backgroundColor: '#09090b',
                     width: 380, 
                     style: {
-                        opacity: 1, // [關鍵修正] 讓截圖出來的圖片是清楚的，即便螢幕上是透明的
+                        opacity: 1, 
                         transform: 'scale(1)',
                     }
                 };
 
-                // 4. iOS 緩衝 (給一點時間讓 decode 生效)
+                // 4. iOS 緩衝 
                 await new Promise(resolve => setTimeout(resolve, 300));
 
-                // 5. 正式截圖
                 const dataUrl = await toPng(hiddenCaptureRef.current, options);
                 
                 const blob = await (await fetch(dataUrl)).blob();
@@ -594,6 +608,7 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                     finalLuck={finalLuck}
                     finalKeyword={finalKeyword}
                     finalContent={finalContent}
+                    qrCodeDataUrl={qrCodeBase64}
                 />
             </div>
 
