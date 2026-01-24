@@ -325,18 +325,18 @@ const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string
             <div className="w-full px-5 py-4 z-10 flex items-end justify-between mt-auto bg-[#09090b] shrink-0">
                 <div className="flex items-center gap-2">
                     <div className="bg-white p-1 rounded-md shadow-lg opacity-90 relative overflow-hidden flex items-center justify-center">
-                        {/* [終極修正] 將 QR Code 改為 background-image，徹底解決 iOS 下圖片解碼延遲問題 */}
+                        {/* [終極修正] 使用 background-image 替代 img 標籤 */}
+                        {/* 這裡使用 div 並強制指定寬高，繞過 iOS Safari 對隱藏 img 的解碼優化 */}
                         <div 
                             style={{
-                                width: '36px', 
-                                height: '36px', 
+                                width: '36px',
+                                height: '36px',
                                 backgroundImage: `url(${qrCodeDataUrl})`,
                                 backgroundSize: 'contain',
                                 backgroundRepeat: 'no-repeat',
                                 backgroundPosition: 'center',
-                                // 強制讓瀏覽器認為這是有內容的區塊
-                                display: 'block',
-                            }} 
+                                display: 'block', // 確保它是區塊元素
+                            }}
                         />
                     </div>
                     <div className="flex flex-col gap-0.5">
@@ -499,13 +499,14 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
         setIsShareModalOpen(true);
         setIsGeneratingImg(true); 
 
-        // [iPhone/iOS 修復邏輯]
+        // [iOS 修復邏輯]
         setTimeout(async () => {
             try {
                 if (!hiddenCaptureRef.current) throw new Error("Hidden card not found");
                 
                 await document.fonts.ready;
 
+                // 2. 預載其他圖片
                 const images = hiddenCaptureRef.current.querySelectorAll('img');
                 await Promise.all(Array.from(images).map(img => {
                     if (img.complete) {
@@ -527,7 +528,9 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                     style: {
                         opacity: 1, 
                         transform: 'scale(1)',
-                    }
+                    },
+                    // [關鍵] 強制忽略可能導致 iOS 崩潰的字型嵌入，改用系統字型繪製
+                    fontEmbedCSS: '', 
                 };
 
                 // 4. iOS 緩衝 
@@ -584,11 +587,10 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                 onSystemShare={handleSystemShare} 
             />
             
-            {/* [iOS 黑屏與鬼影終極修正] 
-               1. 保持在 viewport 內 (left: 0, top: 0) 以確保 iOS 繪製
-               2. opacity: 0.01 (肉眼不可見，解決鬼影問題，但 iOS 仍會運算)
-               3. pointerEvents: none (讓點擊穿透，不擋住按鈕)
-               4. handleShare 裡的 options.style.opacity: 1 確保截圖出來是清楚的
+            {/* [iOS 終極修正] 
+               1. 保持在 viewport 內 (left: 0, top: 0)
+               2. opacity: 0.01 (肉眼不可見，但 iOS 仍會運算)
+               3. pointerEvents: none (讓點擊穿透)
             */}
             <div style={{ 
                 position: 'fixed', 
@@ -597,8 +599,8 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                 width: '100vw', 
                 height: '100vh', 
                 zIndex: -9999, 
-                opacity: 0.01,         // [重點] 讓它在螢幕上隱形
-                pointerEvents: 'none', // [重點] 讓滑鼠/手指可以點擊底下的按鈕
+                opacity: 0.01,         
+                pointerEvents: 'none', 
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
