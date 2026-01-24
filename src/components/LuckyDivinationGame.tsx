@@ -295,7 +295,7 @@ const SharePreviewModal: React.FC<SharePreviewModalProps> = ({ isOpen, onClose, 
 const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string | null, finalLuck: string, finalKeyword: string, finalContent: string }>(
     ({ selectedCat, finalLuck, finalKeyword, finalContent }, ref) => {
     
-    // 產生時間戳記，確保每次渲染都是新的圖片請求，避免瀏覽器快取舊圖
+    // 產生時間戳記，只給 QR Code 使用
     const cacheBuster = useMemo(() => new Date().getTime(), []);
 
     return (
@@ -328,7 +328,7 @@ const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string
             <div className="w-full px-5 py-4 z-10 flex items-end justify-between mt-auto bg-[#09090b] shrink-0">
                 <div className="flex items-center gap-2">
                     <div className="bg-white p-1 rounded-md shadow-lg opacity-90 relative overflow-hidden">
-                        {/* 修正：加入時間戳記參數與 crossOrigin，確保 html-to-image 能抓到圖片 */}
+                        {/* 這裡保留時間戳記，確保 QR Code 會更新，且不會影響整張圖的渲染 */}
                         <img 
                             src={`/qr-lucky.png?v=${cacheBuster}`} 
                             alt="Scan to Play" 
@@ -471,26 +471,24 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
         setIsShareModalOpen(true);
         setIsGeneratingImg(true); 
 
-        // [iPhone/iOS 修復邏輯]
         setTimeout(async () => {
             try {
                 if (!hiddenCaptureRef.current) throw new Error("Hidden card not found");
                 
-                // 1. 等待字型載入
                 await document.fonts.ready;
 
-                // 2. 預載圖片
+                // 預載圖片
                 const images = hiddenCaptureRef.current.querySelectorAll('img');
                 await Promise.all(Array.from(images).map(img => {
                     if (img.complete) return Promise.resolve();
                     return new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
                 }));
 
-                // 3. 設定通用截圖參數
+                // 移除 cacheBust，防止 iOS 渲染失敗
                 const options = {
                     pixelRatio: 2, 
                     backgroundColor: '#09090b',
-                    cacheBust: true, // 強制忽略快取
+                    cacheBust: false,  // [關鍵修正] 改回 false，避免重新下載導致的黑屏
                     width: 380, 
                     style: {
                         visibility: 'visible',
@@ -502,18 +500,15 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                     }
                 };
 
-                // 4. [關鍵修復] Warmup Render：先跑一次 toPng (不使用結果)，
-                // 這會強迫 iOS/Safari 的 GPU 喚醒並準備好該 DOM 的紋理
+                // Warmup Render (針對 iOS 喚醒 GPU)
                 try {
                     await toPng(hiddenCaptureRef.current, { ...options, pixelRatio: 1 });
                 } catch (e) {
-                    console.warn("Warmup render failed (expected on some devices), continuing...");
+                    console.warn("Warmup render failed, continuing...");
                 }
 
-                // 5. 等待極短時間讓瀏覽器渲染引擎跟上
                 await new Promise(resolve => setTimeout(resolve, 100));
 
-                // 6. 正式截圖
                 const dataUrl = await toPng(hiddenCaptureRef.current, options);
                 
                 const blob = await (await fetch(dataUrl)).blob();
@@ -565,7 +560,7 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                 onSystemShare={handleSystemShare} 
             />
             
-            {/* 隱藏的截圖專用卡片元素，位置樣式交由 toPng 的 style 屬性控制 */}
+            {/* 隱藏的截圖專用卡片元素 */}
             <div style={{ position: 'fixed', top: '0', left: '-9999px', opacity: 1, zIndex: -10 }}>
                 <HiddenCaptureCard 
                     ref={hiddenCaptureRef}
