@@ -295,7 +295,7 @@ const SharePreviewModal: React.FC<SharePreviewModalProps> = ({ isOpen, onClose, 
 const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string | null, finalLuck: string, finalKeyword: string, finalContent: string }>(
     ({ selectedCat, finalLuck, finalKeyword, finalContent }, ref) => {
     
-    // [關鍵修正] 使用時間戳記更新 QR Code，這會強制 DOM 更新，html-to-image 就能抓到新圖
+    // QR Code 專用時間戳記 (Cache Buster)
     const cacheBuster = useMemo(() => new Date().getTime(), []);
 
     return (
@@ -328,7 +328,6 @@ const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string
             <div className="w-full px-5 py-4 z-10 flex items-end justify-between mt-auto bg-[#09090b] shrink-0">
                 <div className="flex items-center gap-2">
                     <div className="bg-white p-1 rounded-md shadow-lg opacity-90 relative overflow-hidden">
-                        {/* 這裡使用 cacheBuster 確保 QR Code 圖片是新的，且加上 crossOrigin 允許 canvas 繪製 */}
                         <img 
                             src={`/qr-lucky.png?v=${cacheBuster}`} 
                             alt="Scan to Play" 
@@ -476,44 +475,36 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
             try {
                 if (!hiddenCaptureRef.current) throw new Error("Hidden card not found");
                 
-                // 1. 等待字型載入 (避免文字消失)
                 await document.fonts.ready;
 
-                // 2. 預載圖片 (確保圖片已在快取中)
+                // 2. [關鍵] 強制解碼所有圖片，特別是 QR Code
                 const images = hiddenCaptureRef.current.querySelectorAll('img');
                 await Promise.all(Array.from(images).map(img => {
-                    if (img.complete) return Promise.resolve();
-                    return new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
+                    if (img.complete) {
+                         // 對已經載入的圖片，嘗試強制解碼 (iOS Safari fix)
+                        return img.decode ? img.decode().catch(() => {}) : Promise.resolve();
+                    }
+                    return new Promise(resolve => { 
+                        img.onload = async () => {
+                            if (img.decode) await img.decode().catch(() => {});
+                            resolve(null);
+                        }; 
+                        img.onerror = resolve; 
+                    });
                 }));
 
-                // 3. 通用截圖參數 
-                // [絕對禁止] 在這裡使用 cacheBust: true，因為這會導致 iOS 記憶體崩潰變黑
+                // 3. 截圖參數：移除所有可能導致黑屏的設定
                 const options = {
                     pixelRatio: 2, 
                     backgroundColor: '#09090b',
-                    // cacheBust: false (預設就是 false，這裡不加就是安全)
+                    // cacheBust: false,  <-- 預設為 false，明確不加
                     width: 380, 
-                    style: {
-                        visibility: 'visible',
-                        position: 'fixed',
-                        top: '0px',       
-                        left: '0px',      
-                        zIndex: '-1000',  
-                        transform: 'none', 
-                    }
                 };
 
-                // 4. [iOS 關鍵] Warmup Render：先用低畫質跑一次，喚醒 GPU
-                try {
-                    await toPng(hiddenCaptureRef.current, { ...options, pixelRatio: 1 });
-                } catch (e) {
-                    console.warn("Warmup render failed, continuing...");
-                }
-
-                // 5. [iOS 關鍵] 等待時間加長至 300ms，讓手機處理記憶體
+                // 4. iOS 緩衝 (給一點時間讓 decode 生效)
                 await new Promise(resolve => setTimeout(resolve, 300));
 
-                // 6. 正式截圖
+                // 5. 正式截圖
                 const dataUrl = await toPng(hiddenCaptureRef.current, options);
                 
                 const blob = await (await fetch(dataUrl)).blob();
@@ -565,8 +556,24 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                 onSystemShare={handleSystemShare} 
             />
             
-            {/* 隱藏的截圖專用卡片元素，位置樣式交由 toPng 的 style 屬性控制 */}
-            <div style={{ position: 'fixed', top: '0', left: '-9999px', opacity: 1, zIndex: -10 }}>
+            {/* [iOS 黑屏終極修正] 
+               1. 將卡片移回 viewport 內 (left: 0, top: 0)
+               2. 使用 fixed + z-index: -50 藏在主畫面下方
+               3. 這樣 iOS 認為它是可見的(Visible)，才會渲染像素，但使用者看不到
+            */}
+            <div style={{ 
+                position: 'fixed', 
+                top: 0, 
+                left: 0, 
+                width: '100vw', 
+                height: '100vh', 
+                zIndex: -50, 
+                pointerEvents: 'none', 
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden'
+            }}>
                 <HiddenCaptureCard 
                     ref={hiddenCaptureRef}
                     selectedCat={selectedCat}
