@@ -304,7 +304,38 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
         }
     }, [step, result, selectedCat]);
 
-    const handleShare = async () => { if (!resultRef.current) return; setIsGeneratingImg(true); try { const blob = await toBlob(resultRef.current, { pixelRatio: 3, backgroundColor: '#09090b', width: 380 }); if (blob) { const link = document.createElement('a'); link.download = `紫微占卜-${selectedCat}-${new Date().getTime()}.png`; link.href = URL.createObjectURL(blob); link.click(); } } catch (e) { console.error(e); alert('圖片生成失敗，請稍後再試'); } finally { setIsGeneratingImg(false); } };
+    // 修改 handleShare 函式：加入 cacheBust 與稍作延遲確保渲染
+    const handleShare = async () => { 
+        if (!resultRef.current) return; 
+        
+        setIsGeneratingImg(true); 
+        
+        // 給瀏覽器一點時間準備渲染 (解決圖片空白的關鍵)
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        try { 
+            const blob = await toBlob(resultRef.current, { 
+                pixelRatio: 3, 
+                backgroundColor: '#09090b', 
+                width: 380,
+                cacheBust: true, // [關鍵] 強制載入圖片資源
+                skipAutoScale: true // 防止某些手機上比例跑掉
+            }); 
+            
+            if (blob) { 
+                const link = document.createElement('a'); 
+                // 檔名加上時間戳記，避免重複
+                link.download = `紫微占卜-${selectedCat}-${new Date().getTime()}.png`; 
+                link.href = URL.createObjectURL(blob); 
+                link.click(); 
+            } 
+        } catch (e) { 
+            console.error(e); 
+            alert('圖片生成失敗，請稍後再試'); 
+        } finally { 
+            setIsGeneratingImg(false); 
+        } 
+    };
 
     const isIncenseVisible = ['incense_show', 'light_out', 'igniting', 'smoking', 'text_typing', 'ready'].includes(sceneState);
     const isSpotlightOn = ['light_in', 'incense_show'].includes(sceneState);
@@ -421,9 +452,23 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                             </div>
 
                             <div className="w-full px-6 py-5 z-10 flex items-end justify-between mt-auto">
-                                {/* [修改] 燙金效果網址 */}
-                                <div className="text-[10px] font-serif-tc tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-amber-100 via-yellow-300 to-amber-100 opacity-90 drop-shadow-[0_1px_2px_rgba(251,191,36,0.3)]">
-                                    https://ziweiapp.dabao.life/lucky
+                                <div className="flex items-center gap-3">
+                                    {/* QR Code 容器 */}
+                                    <div className="bg-white p-1 rounded-md shadow-lg opacity-90">
+                                        <img 
+                                            src="/qr-lucky.png" 
+                                            alt="Scan to Play" 
+                                            className="w-10 h-10 object-contain block" // 設定 QR Code 大小
+                                        />
+                                    </div>
+                                    
+                                    {/* 網址文字 (稍微縮小並靠左) */}
+                                    <div className="flex flex-col gap-0.5">
+                                        <span className="text-[8px] text-slate-400 font-sans tracking-wider uppercase">SCAN TO PLAY</span>
+                                        <div className="text-[9px] font-serif-tc tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-amber-100 via-yellow-300 to-amber-100 opacity-90 drop-shadow-[0_1px_2px_rgba(251,191,36,0.3)]">
+                                            ziweiapp.dabao.life/lucky
+                                        </div>
+                                    </div>
                                 </div>
                                 <Seal />
                             </div>

@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-// [修正] 將 CloudUpload 改為 Upload，這是最通用的名稱，保證不會報錯
 import { Save, ArrowLeft, Database, CheckCircle, AlertCircle, Plus, Trash2, Smile, Frown, Meh, HelpCircle, Upload, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getAllDivinationContents, saveDivinationContent, deleteDivinationContent, bulkUploadDivination } from '../db';
@@ -8,6 +7,7 @@ import { getAllDivinationContents, saveDivinationContent, deleteDivinationConten
 const CATEGORIES = ['感情', '工作', '理財', '健康', '交友'];
 const ZHI = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
 const GAN = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'];
+const MAX_CONTENT_LENGTH = 250; // [新增] 字數上限設定
 
 type LuckType = '吉' | '凶' | '吉凶參半' | '無結果';
 type DivinationItem = { content: string; luck: LuckType; };
@@ -93,6 +93,12 @@ export const DivinationAdminPanel: React.FC = () => {
 
     const handleSave = async () => {
         if (!editingKey) return;
+        // [新增] 雙重檢查：防止繞過 UI 直接觸發
+        if (tempContent.length > MAX_CONTENT_LENGTH) {
+            alert(`字數超過上限 (${MAX_CONTENT_LENGTH}字)，無法儲存。`);
+            return;
+        }
+
         const { cat, zhi, gan } = parseKey(editingKey);
         
         // 1. 樂觀更新 UI
@@ -125,8 +131,6 @@ export const DivinationAdminPanel: React.FC = () => {
         await deleteDivinationContent(cat, zhi, gan);
     };
 
-    // [已修正] 移除 ESC 關閉視窗的監聽器
-
     const progress = useMemo(() => {
         const total = ZHI.length * GAN.length;
         const currentCount = Object.keys(db).filter(k => k.startsWith(activeCat)).length;
@@ -142,6 +146,9 @@ export const DivinationAdminPanel: React.FC = () => {
             default: return 'bg-gray-200';
         }
     };
+
+    // [新增] 判斷是否超過字數
+    const isOverLimit = tempContent.length > MAX_CONTENT_LENGTH;
 
     return (
         <div className="h-screen flex flex-col bg-gray-50 text-gray-800 font-sans overflow-hidden">
@@ -164,7 +171,6 @@ export const DivinationAdminPanel: React.FC = () => {
                             disabled={isSyncing}
                             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow-md hover:bg-blue-700 transition-colors disabled:opacity-50 text-sm font-bold"
                         >
-                            {/* [修正] 使用 Upload Icon */}
                             {isSyncing ? <Loader2 className="animate-spin" size={16}/> : <Upload size={16}/>}
                             同步本機資料到雲端
                         </button>
@@ -250,14 +256,34 @@ export const DivinationAdminPanel: React.FC = () => {
                         </div>
                         <div className="mb-6 flex-1 flex flex-col min-h-0">
                             <label className="block text-sm font-bold text-gray-500 mb-2">建議內容</label>
-                            <textarea value={tempContent} onChange={(e) => setTempContent(e.target.value)} placeholder="請輸入詳細的解盤結果與建議..." className="w-full flex-1 bg-gray-50 border border-gray-300 rounded-xl p-4 text-gray-800 focus:outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-100 transition-all resize-none leading-relaxed text-lg placeholder:text-gray-400" autoFocus />
-                            <div className="text-right text-xs text-gray-400 mt-2">目前字數: {tempContent.length}</div>
+                            <textarea 
+                                value={tempContent} 
+                                onChange={(e) => setTempContent(e.target.value)} 
+                                placeholder="請輸入詳細的解盤結果與建議..." 
+                                className={`w-full flex-1 bg-gray-50 border rounded-xl p-4 text-gray-800 focus:outline-none focus:ring-4 transition-all resize-none leading-relaxed text-lg placeholder:text-gray-400
+                                    ${isOverLimit ? 'border-red-500 focus:border-red-500 focus:ring-red-100' : 'border-gray-300 focus:border-purple-500 focus:ring-purple-100'}
+                                `} 
+                                autoFocus 
+                            />
+                            {/* [修改] 字數統計與顏色變化 */}
+                            <div className={`text-right text-xs mt-2 font-mono font-bold transition-colors ${isOverLimit ? 'text-red-600' : 'text-gray-400'}`}>
+                                目前字數: {tempContent.length} / {MAX_CONTENT_LENGTH}
+                            </div>
                         </div>
                         <div className="flex justify-between items-center shrink-0 pt-4 border-t border-gray-100">
                             {db[editingKey] ? (<button onClick={handleDelete} className="flex items-center gap-2 text-red-500 hover:text-red-700 hover:bg-red-50 px-4 py-2 rounded-lg transition-colors text-sm font-bold"><Trash2 size={18} /> 刪除</button>) : (<div></div>)}
                             <div className="flex gap-3">
                                 <button onClick={() => setEditingKey(null)} className="px-6 py-2.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors font-medium">取消</button>
-                                <button onClick={handleSave} className="px-8 py-2.5 rounded-lg bg-purple-600 text-white font-bold hover:bg-purple-700 hover:shadow-lg hover:shadow-purple-200 transition-all flex items-center gap-2"><Save size={18} /> 儲存文案</button>
+                                {/* [修改] 儲存按鈕綁定禁用狀態 */}
+                                <button 
+                                    onClick={handleSave} 
+                                    disabled={isOverLimit}
+                                    className={`px-8 py-2.5 rounded-lg text-white font-bold transition-all flex items-center gap-2
+                                        ${isOverLimit ? 'bg-gray-400 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700 hover:shadow-lg hover:shadow-purple-200'}
+                                    `}
+                                >
+                                    <Save size={18} /> 儲存文案
+                                </button>
                             </div>
                         </div>
                     </div>
