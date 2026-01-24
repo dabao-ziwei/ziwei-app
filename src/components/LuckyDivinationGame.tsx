@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { X, Heart, Briefcase, Wallet, Activity, Users, Sparkles, Share2, AlertCircle, Loader2, Zap, MessageCircle, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
-// [修改 1] 改用 toPng，相容性比 toBlob 好
 import { toPng } from 'html-to-image';
 import { getDivinationResult } from '../db';
 import { supabase } from '../supabase';
@@ -22,6 +21,9 @@ const GlobalStyles = () => (
             opacity: 0.4; pointer-events: none; z-index: 0;
         }
         .keyword-glow { text-shadow: 0 0 20px rgba(255, 215, 0, 0.3), 0 0 40px rgba(255, 215, 0, 0.1); }
+        
+        /* 截圖專用：隱藏特效類別 */
+        .screenshot-hidden { opacity: 0 !important; visibility: hidden !important; }
     `}</style>
 );
 
@@ -305,19 +307,21 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
         }
     }, [step, result, selectedCat]);
 
-    // [修正版] handleShare：解決一片黑與 QR Code 消失的問題
+    // [修正] 截圖功能：淨化畫面後再截圖，避免黑屏
     const handleShare = async () => { 
         if (!resultRef.current) return; 
         
         setIsGeneratingImg(true); 
 
-        // 1. 暫時移除 bg-noise 類別 (關鍵修正：避免 SVG 濾鏡導致截圖崩潰)
-        const originalClass = resultRef.current.className;
-        if (originalClass.includes('bg-noise')) {
-            resultRef.current.classList.remove('bg-noise');
-        }
+        // 1. 抓取所有可能導致崩潰的特效元素
+        const effectsToHide = resultRef.current.querySelectorAll('.absolute.top-\\[-50px\\], .absolute.bottom-\\[-50px\\]');
+        const noiseClass = resultRef.current.className.includes('bg-noise');
 
-        // 2. 強制等待圖片載入 (解決 QR Code 消失)
+        // 2. 暫時移除/隱藏特效
+        if (noiseClass) resultRef.current.classList.remove('bg-noise');
+        effectsToHide.forEach(el => el.classList.add('screenshot-hidden'));
+
+        // 3. 強制等待圖片資源 (QR Code, Seal) 載入
         const images = resultRef.current.querySelectorAll('img');
         const promises = Array.from(images).map(img => {
             if (img.complete) return Promise.resolve();
@@ -325,19 +329,24 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
         });
         await Promise.all(promises);
 
-        // 額外緩衝時間，讓 DOM 渲染完成
+        // 4. 給 DOM 一點時間重繪 (重要)
         await new Promise(resolve => setTimeout(resolve, 300));
 
         try { 
-            // 3. 改用 toPng (比 toBlob 更穩定)
+            // 5. 使用 toPng 並強制背景色，確保不是透明導致變黑
             const dataUrl = await toPng(resultRef.current, { 
                 pixelRatio: 3, 
-                backgroundColor: '#09090b', 
-                cacheBust: false, // 關閉 cacheBust
+                backgroundColor: '#09090b', // 強制黑底，避免透明
+                cacheBust: false, 
                 skipAutoScale: true,
                 style: {
-                    boxShadow: 'none',
+                    boxShadow: 'none', // 移除陰影避免運算錯誤
                     transform: 'none'
+                },
+                filter: (node) => {
+                    // 過濾掉可能殘留的特效 div
+                    if (node.classList && node.classList.contains('screenshot-hidden')) return false;
+                    return true;
                 }
             }); 
             
@@ -351,10 +360,9 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
             console.error("Screenshot failed:", e); 
             alert('圖片生成失敗，請稍後再試'); 
         } finally { 
-            // 4. 恢復 bg-noise 類別
-            if (originalClass.includes('bg-noise')) {
-                resultRef.current.classList.add('bg-noise');
-            }
+            // 6. 恢復特效
+            if (noiseClass) resultRef.current.classList.add('bg-noise');
+            effectsToHide.forEach(el => el.classList.remove('screenshot-hidden'));
             setIsGeneratingImg(false); 
         } 
     };
