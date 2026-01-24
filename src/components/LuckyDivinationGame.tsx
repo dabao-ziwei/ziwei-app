@@ -291,7 +291,7 @@ const SharePreviewModal: React.FC<SharePreviewModalProps> = ({ isOpen, onClose, 
     );
 };
 
-// --- [優化修正] 隱藏的截圖專用卡片 ---
+// --- [隱藏的截圖專用卡片] ---
 const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string | null, finalLuck: string, finalKeyword: string, finalContent: string }>(
     ({ selectedCat, finalLuck, finalKeyword, finalContent }, ref) => {
     
@@ -328,7 +328,7 @@ const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string
             <div className="w-full px-5 py-4 z-10 flex items-end justify-between mt-auto bg-[#09090b] shrink-0">
                 <div className="flex items-center gap-2">
                     <div className="bg-white p-1 rounded-md shadow-lg opacity-90 relative overflow-hidden">
-                        {/* [修正] 加入時間戳記參數與 crossOrigin，確保 html-to-image 能抓到圖片 */}
+                        {/* 修正：加入時間戳記參數與 crossOrigin，確保 html-to-image 能抓到圖片 */}
                         <img 
                             src={`/qr-lucky.png?v=${cacheBuster}`} 
                             alt="Scan to Play" 
@@ -471,33 +471,50 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
         setIsShareModalOpen(true);
         setIsGeneratingImg(true); 
 
+        // [iPhone/iOS 修復邏輯]
         setTimeout(async () => {
             try {
                 if (!hiddenCaptureRef.current) throw new Error("Hidden card not found");
                 
-                // 強制預載所有圖片
+                // 1. 等待字型載入
+                await document.fonts.ready;
+
+                // 2. 預載圖片
                 const images = hiddenCaptureRef.current.querySelectorAll('img');
                 await Promise.all(Array.from(images).map(img => {
                     if (img.complete) return Promise.resolve();
                     return new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
                 }));
 
-                // 產生截圖 
-                // [修正] 開啟 cacheBust，並在樣式中強制定位到可視範圍但隱藏 (zIndex: -100) 以確保瀏覽器繪製
-                const dataUrl = await toPng(hiddenCaptureRef.current, { 
+                // 3. 設定通用截圖參數
+                const options = {
                     pixelRatio: 2, 
                     backgroundColor: '#09090b',
-                    cacheBust: true,  // 強制忽略快取
+                    cacheBust: true, // 強制忽略快取
                     width: 380, 
                     style: {
                         visibility: 'visible',
                         position: 'fixed',
-                        top: '0px',       // 移至視窗內確保渲染
+                        top: '0px',       
                         left: '0px',      
-                        zIndex: '-1000',  // 藏在最底下
+                        zIndex: '-1000',  
                         transform: 'none', 
                     }
-                }); 
+                };
+
+                // 4. [關鍵修復] Warmup Render：先跑一次 toPng (不使用結果)，
+                // 這會強迫 iOS/Safari 的 GPU 喚醒並準備好該 DOM 的紋理
+                try {
+                    await toPng(hiddenCaptureRef.current, { ...options, pixelRatio: 1 });
+                } catch (e) {
+                    console.warn("Warmup render failed (expected on some devices), continuing...");
+                }
+
+                // 5. 等待極短時間讓瀏覽器渲染引擎跟上
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+                // 6. 正式截圖
+                const dataUrl = await toPng(hiddenCaptureRef.current, options);
                 
                 const blob = await (await fetch(dataUrl)).blob();
                 setShareImageUrl(dataUrl);
