@@ -292,12 +292,9 @@ const SharePreviewModal: React.FC<SharePreviewModalProps> = ({ isOpen, onClose, 
 };
 
 // --- [隱藏的截圖專用卡片] ---
-const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string | null, finalLuck: string, finalKeyword: string, finalContent: string }>(
-    ({ selectedCat, finalLuck, finalKeyword, finalContent }, ref) => {
+const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string | null, finalLuck: string, finalKeyword: string, finalContent: string, qrCodeDataUrl: string }>(
+    ({ selectedCat, finalLuck, finalKeyword, finalContent, qrCodeDataUrl }, ref) => {
     
-    // 使用快取 Buster，這跟之前的版本一樣，確保圖片能被重新請求
-    const cacheBuster = useMemo(() => new Date().getTime(), []);
-
     return (
         <div ref={ref} className="bg-[#09090b] w-[380px] rounded-xl border border-white/20 flex flex-col items-center relative overflow-hidden shadow-2xl shrink-0" style={{aspectRatio: '4/5'}}>
             <div className="flex flex-col items-center mt-4 z-10 w-full px-4 shrink-0">
@@ -328,12 +325,18 @@ const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string
             <div className="w-full px-5 py-4 z-10 flex items-end justify-between mt-auto bg-[#09090b] shrink-0">
                 <div className="flex items-center gap-2">
                     <div className="bg-white p-1 rounded-md shadow-lg opacity-90 relative overflow-hidden flex items-center justify-center">
-                        {/* [回歸本源] 使用 img 標籤 + cacheBuster，但依靠父層容器的 'overflow: hidden' 來隱藏，保持 opacity: 1 */}
+                        {/* [終極修正] 
+                            1. data-qr="true": 讓 handleShare 可以抓到這個元素
+                            2. transform: translateZ(0): 強制 GPU 渲染
+                            3. decoding="sync": 強制同步解碼
+                        */}
                         <img 
-                            src={`/qr-lucky.png?v=${cacheBuster}`} 
+                            data-qr="true"
+                            src={qrCodeDataUrl} 
                             alt="Scan to Play" 
-                            crossOrigin="anonymous" 
-                            className="w-9 h-9 object-contain block"
+                            decoding="sync"
+                            loading="eager"
+                            style={{ width: '36px', height: '36px', display: 'block', transform: 'translateZ(0)' }}
                             onError={(e) => {
                                 e.currentTarget.style.display = 'none';
                                 e.currentTarget.parentElement!.innerHTML = '<div class="w-9 h-9 bg-red-500 flex items-center justify-center text-[6px] text-white text-center leading-tight">!</div>';
@@ -348,7 +351,6 @@ const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string
                     </div>
                 </div>
                 <div className="transform scale-90 origin-bottom-right">
-                    {/* [修正] 移除可能導致背景渲染錯誤的 filter，改用純圖片 */}
                     <Seal />
                 </div>
             </div>
@@ -384,12 +386,33 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
     const [shareBlob, setShareBlob] = useState<Blob | null>(null);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     
+    // 儲存 QR Code 的 Base64 字串
+    const [qrCodeBase64, setQrCodeBase64] = useState<string>('/qr-lucky.png');
+
     const [isAdmin, setIsAdmin] = useState(false);
 
     const hiddenCaptureRef = useRef<HTMLDivElement>(null);
     const resultRef = useRef<HTMLDivElement>(null);
 
+    // 預先載入圖片轉 Base64
     useEffect(() => {
+        const loadQrCode = async () => {
+            try {
+                const response = await fetch('/qr-lucky.png');
+                const blob = await response.blob();
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    if (typeof reader.result === 'string') {
+                        setQrCodeBase64(reader.result);
+                    }
+                };
+                reader.readAsDataURL(blob);
+            } catch (error) {
+                console.error("Failed to preload QR code:", error);
+            }
+        };
+        loadQrCode();
+
         const checkAdmin = async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (user?.email === SUPER_ADMIN_EMAIL) setIsAdmin(true);
@@ -487,7 +510,7 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                 
                 await document.fonts.ready;
 
-                // 預載圖片
+                // 2. 預載圖片
                 const images = hiddenCaptureRef.current.querySelectorAll('img');
                 await Promise.all(Array.from(images).map(img => {
                     if (img.complete) {
@@ -502,18 +525,28 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                     });
                 }));
 
+                // 3. [ChatGPT 建議] 強制觸發一次 Layout 和 Decode
+                // 這是針對 iOS Safari "懶加載" 的核心破解法
+                const qrImg = hiddenCaptureRef.current.querySelector('img[data-qr="true"]');
+                if (qrImg) {
+                    qrImg.getBoundingClientRect(); // 強制 Layout 計算
+                    (qrImg as HTMLElement).style.transform = 'translateZ(0)'; // 強制 GPU 層
+                }
+
                 const options = {
                     pixelRatio: 2, 
                     backgroundColor: '#09090b',
                     width: 380, 
-                    // [關鍵] 強制移除陰影和濾鏡，避免紅底問題
+                    // [關鍵] 強制移除陰影和濾鏡，避免紅底問題。同時確保 opacity 為 1
                     style: {
                         boxShadow: 'none',
                         filter: 'none',
-                        // 確保元素是完全不透明的，避免 iOS 懶加載
                         opacity: '1',
+                        transform: 'scale(1)',
                     },
-                    cacheBust: true, // 針對紅底印章，有時 cacheBust 可以解決舊的渲染殘留
+                    // [關鍵] 開啟 skipAutoScale 修復 iOS 繪圖位移
+                    skipAutoScale: true,
+                    cacheBust: false,
                 };
 
                 // 4. iOS 緩衝 
@@ -570,24 +603,24 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                 onSystemShare={handleSystemShare} 
             />
             
-            {/* [iOS 隱藏截圖容器終極版] 
-               1. position: fixed; left: 0; top: 0; -> 放在可視區左上角
-               2. width: 1px; height: 1px; -> 讓它有物理體積，騙過瀏覽器以為它是可見內容
-               3. overflow: hidden; -> 隱藏真正大張的卡片
-               4. opacity: 0.01; -> 肉眼不可見，但瀏覽器必須渲染 (opacity 0 有時會被優化掉)
-               5. z-index: -9999; -> 確保在所有內容最底層
-               6. pointer-events: none; -> 確保不擋住按鈕點擊
+            {/* [iOS 終極修正] 
+               1. left: 0, top: 0: 確保在視窗內
+               2. opacity: 0.01: "看得到"但人類看不到，騙過 iOS 的懶加載
+               3. pointerEvents: none: 不擋按鈕
+               4. zIndex: -9999: 藏在最下面
             */}
             <div style={{ 
                 position: 'fixed', 
                 left: 0, 
                 top: 0, 
-                width: '1px', 
-                height: '1px', 
-                overflow: 'hidden', 
+                width: '100%', 
+                height: '100%', 
                 zIndex: -9999, 
-                opacity: 0.01,
-                pointerEvents: 'none'
+                opacity: 0.01,            
+                pointerEvents: 'none', 
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
             }}>
                 <HiddenCaptureCard 
                     ref={hiddenCaptureRef}
@@ -595,6 +628,7 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                     finalLuck={finalLuck}
                     finalKeyword={finalKeyword}
                     finalContent={finalContent}
+                    qrCodeDataUrl={qrCodeBase64}
                 />
             </div>
 
