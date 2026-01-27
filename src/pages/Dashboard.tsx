@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, ArrowRight, Menu, LogOut, UserCog, Loader2, PlusCircle, Database, FileText, Calendar, Clock, HelpCircle, ArrowLeft } from 'lucide-react';
+import { Sparkles, ArrowRight, Menu, LogOut, UserCog, Loader2, PlusCircle, Database, FileText, Calendar, Clock, HelpCircle, ArrowLeft, Globe } from 'lucide-react';
 import { supabase } from '../supabase';
 import { loadClients, saveClient, getMyProfile, getUsedChartCount, type Client, type UserProfile } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
@@ -12,6 +12,7 @@ import { ZHI } from '../logic/constants';
 import { getFeaturePermission } from '../logic/permissions';
 
 const SUPER_ADMIN_EMAIL = 'stephenwu.0926@gmail.com';
+const OFFICIAL_SITE_URL = 'https://www.dabao.life';
 
 // --- 新手引導精靈元件 (Wizard) ---
 interface WizardProps {
@@ -434,19 +435,17 @@ export const Dashboard: React.FC = () => {
   if (loading) return <div className="flex h-screen items-center justify-center bg-slate-950"><Loader2 className="animate-spin text-slate-500" /></div>;
 
   return (
-    // [修改] 全局背景改為深色
     <div className="h-screen w-full bg-slate-950 flex flex-col font-sans overflow-hidden relative text-white">
         
         {/* 背景光暈特效 */}
         <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-purple-900/20 rounded-full blur-[100px] pointer-events-none"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-blue-900/10 rounded-full blur-[100px] pointer-events-none"></div>
 
-        {/* Header - [修改] 透明背景，文字改白，加入右側導航按鈕 (電腦版) */}
+        {/* Header */}
         <header className="shrink-0 px-6 py-4 flex justify-between items-center z-50">
             {/* 左側容器：包含漢堡選單 與 標題 */}
             <div className="flex items-center gap-4">
                 <div className="relative">
-                    {/* 漢堡選單：保留給管理功能，但隱藏主要入口 */}
                     <button 
                         onClick={() => setIsMenuOpen(!isMenuOpen)}
                         className="w-10 h-10 bg-white/10 hover:bg-white/20 text-slate-300 transition-colors rounded-xl flex items-center justify-center backdrop-blur-md"
@@ -499,7 +498,6 @@ export const Dashboard: React.FC = () => {
                     {isMenuOpen && <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)}></div>}
                 </div>
 
-                {/* 標題 - 在手機與電腦版皆顯示，並位於漢堡選單右側 */}
                 <h1 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-slate-200 to-slate-400 tracking-widest">
                     大寶 | 紫微斗數
                 </h1>
@@ -508,6 +506,16 @@ export const Dashboard: React.FC = () => {
             {/* 右側容器：電腦版導航按鈕 */}
             <div className="flex items-center gap-4">
                 <div className="hidden md:flex gap-3">
+                    {/* [修改] 電腦版右上角連結：大寶官方網站 */}
+                    <a 
+                        href={OFFICIAL_SITE_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-4 py-2 bg-slate-800/50 hover:bg-amber-600/30 text-slate-300 hover:text-amber-300 rounded-lg text-sm font-bold flex items-center gap-2 transition-all border border-slate-700/50 hover:border-amber-500/30"
+                    >
+                        <Globe size={16} /> 大寶官網
+                    </a>
+
                     <button 
                         onClick={() => navigate('/list')}
                         className="px-4 py-2 bg-slate-800/50 hover:bg-blue-600/30 text-slate-300 hover:text-blue-300 rounded-lg text-sm font-bold flex items-center gap-2 transition-all border border-slate-700/50 hover:border-blue-500/30"
@@ -534,7 +542,6 @@ export const Dashboard: React.FC = () => {
             <div className="max-w-7xl mx-auto p-4 flex flex-col items-center">
                 {meClient && !forceOnboarding ? (
                     <>
-                        {/* 今日運勢 Widget - 包含果凍圖與下方的指引卡片 */}
                         {dailyFortune && (
                             <div className="w-full animate-in fade-in duration-700">
                                 <FortuneWidget 
@@ -558,8 +565,7 @@ export const Dashboard: React.FC = () => {
             </div>
         </main>
         
-        {/* [新增] Bottom Tab Bar (手機版核心導航) - md:hidden */}
-        {/* [修改] justify-around -> justify-evenly 並移除空白 div */}
+        {/* [修改] Bottom Tab Bar (手機版核心導航) - md:hidden */}
         <div className="shrink-0 px-6 py-4 pb-8 bg-[#0f172a]/90 backdrop-blur-xl border-t border-white/5 flex justify-evenly items-center z-50 md:hidden">
             <button 
                 onClick={() => navigate('/list')}
@@ -571,6 +577,19 @@ export const Dashboard: React.FC = () => {
                 <span className="text-[10px] text-slate-500 group-hover:text-blue-400 font-bold">命盤列表</span>
             </button>
 
+            {/* [修正] 手機版底部中間按鈕：大寶官網 */}
+            <a 
+                href={OFFICIAL_SITE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex flex-col items-center gap-1 group w-16"
+            >
+                <div className="w-12 h-12 rounded-full flex items-center justify-center transition-all mb-[-10px] transform translate-y-[-8px] shadow-lg bg-slate-800/80 border border-slate-700/50 group-hover:bg-amber-900/30 group-hover:border-amber-500/50">
+                    <Globe size={22} className="text-slate-300 group-hover:text-amber-400" />
+                </div>
+                <span className="text-[10px] font-bold text-slate-500 group-hover:text-amber-400">大寶官網</span>
+            </a>
+
             <button 
                 onClick={() => {
                     if (canLuckyDivination === 'enabled') setIsLuckyDivinationOpen(true);
@@ -578,14 +597,14 @@ export const Dashboard: React.FC = () => {
                 disabled={canLuckyDivination === 'disabled'}
                 className="flex flex-col items-center gap-1 group w-16"
             >
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all mb-[-10px] transform translate-y-[-10px] shadow-lg
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-colors
                     ${canLuckyDivination === 'enabled' 
-                        ? 'bg-gradient-to-br from-purple-600 to-indigo-600 text-white shadow-purple-900/50 hover:scale-110' 
-                        : 'bg-slate-800 text-slate-600 cursor-not-allowed'}
+                        ? 'bg-slate-800/50 group-hover:bg-purple-600/20' 
+                        : 'bg-slate-800/30 cursor-not-allowed'}
                 `}>
-                    <Sparkles size={24} />
+                    <Sparkles size={20} className={`${canLuckyDivination === 'enabled' ? 'text-purple-400' : 'text-slate-600'}`} />
                 </div>
-                <span className={`text-[10px] font-bold ${canLuckyDivination === 'enabled' ? 'text-purple-400' : 'text-slate-600'}`}>吉凶占卜</span>
+                <span className={`text-[10px] font-bold ${canLuckyDivination === 'enabled' ? 'text-slate-500 group-hover:text-purple-400' : 'text-slate-700'}`}>吉凶占卜</span>
             </button>
         </div>
 
