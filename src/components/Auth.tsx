@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabase';
-import { Lock, Mail, Loader2, Cpu, CheckSquare, Square, ArrowLeft } from 'lucide-react';
+import { Lock, Mail, Loader2, Cpu, CheckSquare, Square, ArrowLeft, Globe } from 'lucide-react';
 import { APP_CONFIG } from '../config';
-import { getErrorMessage } from '../logic/errorMapping'; // 1. 引入翻譯功能
+import { getErrorMessage } from '../logic/errorMapping';
 
 type AuthMode = 'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD';
 
@@ -43,7 +43,6 @@ export const Auth = () => {
         setMsg('重設信已寄出！請檢查您的電子信箱');
       }
     } catch (err: any) {
-      // 2. 使用翻譯功能處理錯誤訊息
       const translatedMsg = getErrorMessage(err.message);
       setMsg(translatedMsg);
     } finally {
@@ -70,7 +69,7 @@ export const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative">
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative overflow-y-auto">
       <div className="bg-white w-full max-w-sm p-8 rounded-2xl shadow-xl border border-slate-100 relative overflow-hidden z-10">
         
         {/* 頂部裝飾條 */}
@@ -158,16 +157,30 @@ export const Auth = () => {
           </button>
         </form>
 
-        <div className="mt-6 flex items-center justify-center gap-4 text-sm font-medium">
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3 text-sm font-medium text-slate-400">
           {mode === 'LOGIN' && (
             <>
-              <button onClick={() => switchMode('REGISTER')} className="text-slate-500 hover:text-blue-600 transition-colors">
+              <button onClick={() => switchMode('REGISTER')} className="hover:text-blue-600 transition-colors">
                 註冊
               </button>
-              <span className="text-slate-300">|</span>
-              <button onClick={() => switchMode('FORGOT_PASSWORD')} className="text-slate-500 hover:text-blue-600 transition-colors">
+              
+              <span className="text-slate-200">|</span>
+              
+              <button onClick={() => switchMode('FORGOT_PASSWORD')} className="hover:text-blue-600 transition-colors">
                 忘記密碼
               </button>
+              
+              <span className="text-slate-200">|</span>
+
+              {/* [修正] 官網連結直接並列在此 */}
+              <a 
+                href="https://www.dabao.life" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-blue-500 hover:text-blue-700 transition-colors font-bold"
+              >
+                <Globe size={14} /> 大寶官網
+              </a>
             </>
           )}
 
@@ -184,9 +197,8 @@ export const Auth = () => {
 
       </div>
       
-      {/* 底部版權宣告 */}
-      <div className="absolute bottom-4 text-slate-400 text-xs font-mono">
-        © {new Date().getFullYear()} {APP_CONFIG.appName} | {APP_CONFIG.brand}
+      <div className="absolute bottom-4 text-slate-400 text-xs font-mono opacity-50">
+        © {new Date().getFullYear()} {APP_CONFIG.appName}
       </div>
     </div>
   );
