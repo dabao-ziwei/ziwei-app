@@ -13,10 +13,12 @@ import { Loader2 } from 'lucide-react';
 
 import { DualChart } from './components/Chart/DualChart';
 import { CompatibilitySetup } from './pages/CompatibilitySetup';
-import { LuckyPage } from './pages/LuckyPage'; // [新增] 引入 LuckyPage
+import { LuckyPage } from './pages/LuckyPage'; 
 
-// [新增] Vercel Speed Insights 效能監控
+// [效能監控] Vercel Speed Insights
 import { SpeedInsights } from "@vercel/speed-insights/react";
+// [新增] [流量分析] Vercel Analytics
+import { Analytics } from "@vercel/analytics/react";
 
 function App() {
   const [session, setSession] = useState<any>(null);
@@ -96,13 +98,15 @@ function App() {
 
   return (
     <>
-      {/* [新增] 效能監控元件，放在這裡可以在所有頁面生效 */}
+      {/* [效能監控] */}
       <SpeedInsights />
+      {/* [新增] [流量分析] 自動追蹤頁面瀏覽與訪客數 */}
+      <Analytics />
       
       <Routes>
         <Route path="/login" element={!session ? <Auth /> : <Navigate to="/" replace />} />
         
-        {/* [新增] 公開占卜頁面 - 放在 ProtectedLayout 之外 */}
+        {/* 公開占卜頁面 - 放在 ProtectedLayout 之外 */}
         <Route path="/lucky" element={<LuckyPage />} />
         
         <Route element={<ProtectedLayout />}>
