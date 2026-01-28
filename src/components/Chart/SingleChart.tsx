@@ -43,6 +43,21 @@ const getDivinationStem = (n: number): number => {
     return (n - 3 + 10) % 10;
 };
 
+// 【修正】區分早晚子的切換邏輯
+const calcNextHour = (currentHour: number, delta: number) => {
+    const hours = [0, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23];
+    let currentIndex = hours.indexOf(currentHour);
+    if (currentIndex === -1) {
+        currentIndex = hours.findIndex(h => h >= currentHour);
+    }
+    
+    let nextIndex = currentIndex + delta;
+    if (nextIndex < 0) nextIndex = hours.length - 1;
+    if (nextIndex >= hours.length) nextIndex = 0;
+    
+    return hours[nextIndex];
+};
+
 export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, onBack, mode = 'standard' }) => {
   const { id } = useParams<{ id?: string }>();
   const navigate = useNavigate();
@@ -70,16 +85,13 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const [liuNianYear, setLiuNianYear] = useState<number | null>(null);
   const [showXiaoXian, setShowXiaoXian] = useState<boolean>(false);
   const [isTwinMode, setIsTwinMode] = useState<boolean>(false);
-  // 指南針顯示狀態
   const [showCompass, setShowCompass] = useState<boolean>(false);
 
-  // 狀態持久化：使用 Map 記錄狀態，不隨便清空
   const [reverseMap, setReverseMap] = useState<Record<string, boolean>>({});
 
-  // 流月流日狀態
-  const [liuMonth, setLiuMonth] = useState<number | null>(null); // 1-12
+  const [liuMonth, setLiuMonth] = useState<number | null>(null); 
   const [isLiuMonthLeap, setIsLiuMonthLeap] = useState<boolean>(false);
-  const [liuDay, setLiuDay] = useState<number | null>(null); // 1-30
+  const [liuDay, setLiuDay] = useState<number | null>(null); 
 
   const divNum = location.state?.divNum || (client as any)?.divNum;
   const isDivinationReady = !!divNum;
@@ -215,8 +227,8 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         if (p) daGan = p.ganIndex;
     }
     if (liuNianYear) {
-      liuGan = (liuNianYear - 4) % 10;
-      liuZhi = (liuNianYear - 4) % 12;
+        liuGan = (liuNianYear - 4) % 10;
+        liuZhi = (liuNianYear - 4) % 12;
     }
     if (liuNianYear && showXiaoXian) {
        const virtualAge = liuNianYear - tempBaseData.lunarYear + 1;
@@ -300,15 +312,11 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     setDaXianSeq(-1); setLiuNianYear(null); setShowXiaoXian(false);
     setLiuMonth(null); setIsLiuMonthLeap(false); setLiuDay(null);
     setSelectedPalace(null); setFlyingPalace(null); setIsTwinMode(false);
-    setReverseMap({}); // 只有在換人或重置時間時，才清空狀態
+    setReverseMap({}); 
   };
   
   const changeHour = (delta: number) => {
-    const currentZhiIdx = Math.floor((currentHour + 1) / 2) % 12;
-    let nextZhiIdx = currentZhiIdx + delta;
-    if (nextZhiIdx < 0) nextZhiIdx = 11;
-    if (nextZhiIdx > 11) nextZhiIdx = 0;
-    let nextHour = nextZhiIdx === 0 ? 0 : nextZhiIdx * 2;
+    const nextHour = calcNextHour(currentHour, delta);
     setCurrentHour(nextHour);
     resetAllStates();
   };
@@ -342,12 +350,10 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       return palaceIdx === benMingPos;
   }
 
-  // 顛倒盤切換邏輯
   const handleToggleReverse = () => {
     if (canInvert === 'hidden' || canInvert === 'disabled') return;
     
     let key = '';
-    // 優先級：日 > 月 > 年 > 大限
     if (liuDay !== null && liuMonth !== null && liuNianYear !== null) {
         key = `ri-${liuNianYear}-${liuMonth}-${liuDay}`;
     } else if (liuMonth !== null && liuNianYear !== null) {
@@ -363,7 +369,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     setReverseMap(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  // 計算各層級旗標
   const isDaRev = daXianSeq >= 0 ? !!reverseMap[`da-${daXianSeq}`] : false;
   const isLiuRev = liuNianYear ? !!reverseMap[`liu-${liuNianYear}`] : false;
   const isYueRev = (liuNianYear && liuMonth) ? !!reverseMap[`yue-${liuNianYear}-${liuMonth}`] : false;
@@ -376,14 +381,12 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       ri: isRiRev
   };
 
-  // 計算按鈕亮燈狀態
   let isCurrentReverseOn = false;
   if (liuDay !== null) isCurrentReverseOn = isRiRev;
   else if (liuMonth !== null) isCurrentReverseOn = isYueRev;
   else if (liuNianYear !== null) isCurrentReverseOn = isLiuRev;
   else if (daXianSeq >= 0) isCurrentReverseOn = isDaRev;
 
-  // 切換大限與流年時，不呼叫 resetAllStates，也不清空 reverseMap
   const handleDaXianClick = (seq: number) => { 
       setDaXianSeq(daXianSeq === seq ? -1 : seq); 
       setLiuNianYear(null); 
@@ -457,7 +460,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   return (
     <div className="flex flex-col h-screen w-full bg-slate-100 overflow-hidden">
       <div className="flex justify-between items-center px-4 py-2 bg-white border-b border-gray-200 shadow-sm shrink-0 z-50 h-[56px]">
-        {/* 返回按鈕行為 */}
         <button onClick={handleBack} className="bg-white text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm">
             <ChevronLeft size={16} /> 列表
         </button>
@@ -465,7 +467,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         {mode === 'standard' && (
             <div className="flex gap-2">
                 
-                {/* [修正] 指南針 (方位) 按鈕 - 移除文字 */}
                 <button 
                     onClick={() => setShowCompass(!showCompass)}
                     className={`px-3 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all text-sm font-bold shadow-sm border
@@ -628,8 +629,8 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
                     const isRealTime = currentRealTime && currentRealTime.year === item.year;
                     return (
                         <button key={item.year} onClick={() => handleLiuNianClick(item.year)} className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs relative ${isActive ? 'bg-blue-600 text-white font-bold' : 'hover:bg-blue-100 text-gray-600'}`}>
-                        {isRealTime && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
-                        {item.label}
+                            {isRealTime && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
+                            {item.label}
                         </button>
                     );
                     })}
