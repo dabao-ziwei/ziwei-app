@@ -1,4 +1,4 @@
-import { RawAnalysisResult } from './types';
+import type { RawAnalysisResult } from './types';
 
 export const generateAnalysisContent = (result: RawAnalysisResult): string => {
     // 這裡實作固定文案模板，確保同一標籤產出穩定文字
