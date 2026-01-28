@@ -325,10 +325,8 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
 
     return (
         <div className="col-span-2 row-span-2 flex z-10 relative overflow-visible p-0.5 h-full w-full" onClick={closePickers}>
-            {/* [修正] 將 overflow-hidden 改為 overflow-visible，允許選單彈出容器外 */}
             <div className={`flex w-full h-full bg-white`}>
                 
-                {/* [修正] 左側面板：z-index 提高到 300，確保在所有線條和格子之上 */}
                 <div className={`h-full flex flex-col p-1 border-r border-gray-100 bg-white z-[300] relative transition-all duration-300 ${hasRelations ? 'basis-[35%] shrink-0' : 'w-full'}`}>
                     {historyStack.length > 0 && (
                           <div className="absolute top-0 left-0 w-full px-2 py-1 z-50 bg-white/90 backdrop-blur-sm border-b border-gray-100 flex items-center gap-1 overflow-hidden">
@@ -470,7 +468,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                             </div>
 
                                             {isMonthPickerOpen && onSetLiuMonth && (
-                                                // [修正] 提高 z-index 至 z-[400] 確保蓋過其他元素
                                                 <div className="absolute bottom-full left-0 mb-2 w-48 bg-white border border-amber-200 rounded-lg shadow-xl p-2 z-[400] grid grid-cols-3 gap-1 animate-in slide-in-from-bottom-2 fade-in duration-200" onClick={e => e.stopPropagation()}>
                                                     {Array.from({length: 12}, (_, i) => i + 1).map(m => {
                                                         const isReal = isCurrentYear && !realIsLeap && realLunarMonth === m;
@@ -552,13 +549,12 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                             </div>
 
                                             {isDayPickerOpen && onSetLiuDay && (
-                                                // [修正] 提高 z-index 至 z-[400] 確保蓋過其他元素
                                                 <div className="absolute bottom-full left-[-50px] mb-2 w-64 bg-white border border-green-200 rounded-lg shadow-xl p-2 z-[400] grid grid-cols-5 gap-1 animate-in slide-in-from-bottom-2 fade-in duration-200" onClick={e => e.stopPropagation()}>
                                                     {Array.from({length: maxDaysInLiuMonth}, (_, i) => i + 1).map(d => {
                                                         const isRealDay = isCurrentYear && 
-                                                                          realLunarMonth === liuMonth && 
-                                                                          realIsLeap === !!isLiuMonthLeap && 
-                                                                          realLunarDay === d;
+                                                                        realLunarMonth === liuMonth && 
+                                                                        realIsLeap === !!isLiuMonthLeap && 
+                                                                        realLunarDay === d;
                                                         
                                                         return (
                                                             <button 
@@ -609,8 +605,8 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                         >
                                             <div className={`relative px-3 py-1.5 rounded-md shadow-sm border transition-all duration-200 flex items-center justify-center
                                                 ${isCenter ? (client.gender === '男' ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white border-blue-600' : 'bg-gradient-to-r from-pink-500 to-pink-600 text-white border-pink-600') 
-                                                           : (isSelected ? 'bg-white border-blue-400 ring-2 ring-blue-200 scale-105' : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-md')}`}
-                                                style={{ minWidth: isCenter ? '80px' : 'auto', cursor: isCenter ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
+                                                            : (isSelected ? 'bg-white border-blue-400 ring-2 ring-blue-200 scale-105' : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-md')}`}
+                                                style={{ minWidth: 80, cursor: isCenter ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
                                             >
                                                 <span className={`text-xs font-bold ${isCenter ? 'text-white' : 'text-gray-700'}`}>{node.data.name}</span>
                                                 {!isCenter && (<span className={`ml-1 text-[10px] px-1 rounded ${node.data.gender === '男' ? 'bg-blue-50 text-blue-500' : 'bg-pink-50 text-pink-500'}`}>{node.data.gender}</span>)}

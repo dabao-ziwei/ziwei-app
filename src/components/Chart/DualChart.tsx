@@ -45,7 +45,7 @@ const getLiuNianList = (engine: ZiWeiEngine, chartData: any, daXianSeq: number) 
     return list;
 };
 
-// 輔助：計算當前大限 Index (修正為使用農曆年計算虛歲)
+// 輔助：計算當前大限 Index
 const getCurrentDaLimitIndex = (chartData: any, engine: ZiWeiEngine) => {
     if (!chartData || !engine) return 0;
     
@@ -68,12 +68,20 @@ const getCurrentDaLimitIndex = (chartData: any, engine: ZiWeiEngine) => {
     return 0;
 };
 
+// 【修正】區分早晚子的切換邏輯
 const calcNextHour = (currentHour: number, delta: number) => {
-    const currentZhiIdx = Math.floor((currentHour + 1) / 2) % 12;
-    let nextZhiIdx = currentZhiIdx + delta;
-    if (nextZhiIdx < 0) nextZhiIdx = 11;
-    if (nextZhiIdx > 11) nextZhiIdx = 0;
-    return nextZhiIdx === 0 ? 0 : nextZhiIdx * 2;
+    const hours = [0, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23];
+    let currentIndex = hours.indexOf(currentHour);
+    if (currentIndex === -1) {
+        // 如果輸入的是偶數小時（如2點），找最近的
+        currentIndex = hours.findIndex(h => h >= currentHour);
+    }
+    
+    let nextIndex = currentIndex + delta;
+    if (nextIndex < 0) nextIndex = hours.length - 1;
+    if (nextIndex >= hours.length) nextIndex = 0;
+    
+    return hours[nextIndex];
 };
 
 export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
@@ -93,26 +101,20 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   const [activeSide, setActiveSide] = useState<'A' | 'B' | null>(null);
   const [flyingPalace, setFlyingPalace] = useState<number | null>(null);
 
-  // Client A State
   const [hourA, setHourA] = useState(clientA?.birthHour || 0);
   const [daSeqA, setDaSeqA] = useState(-1);
   const [liuYearA, setLiuYearA] = useState<number | null>(null);
   const [showXiaoA, setShowXiaoA] = useState(false);
   const [isTwinA, setIsTwinA] = useState(false);
-  // [新增] A 的顛倒盤狀態
   const [reverseMapA, setReverseMapA] = useState<Record<string, boolean>>({});
 
-  // Client B State
   const [hourB, setHourB] = useState(clientB?.birthHour || 0);
   const [daSeqB, setDaSeqB] = useState(-1);
   const [liuYearB, setLiuYearB] = useState<number | null>(null);
   const [showXiaoB, setShowXiaoB] = useState(false);
   const [isTwinB, setIsTwinB] = useState(false);
-  // [新增] B 的顛倒盤狀態
   const [reverseMapB, setReverseMapB] = useState<Record<string, boolean>>({});
 
-
-  // --- Engines & Charts ---
   const engineA = useMemo(() => clientA ? new ZiWeiEngine(clientA.birthYear, clientA.birthMonth, clientA.birthDay, hourA, clientA.birthMinute, clientA.gender) : null, [clientA, hourA]);
   const engineB = useMemo(() => clientB ? new ZiWeiEngine(clientB.birthYear, clientB.birthMonth, clientB.birthDay, hourB, clientB.birthMinute, clientB.gender) : null, [clientB, hourB]);
 
@@ -180,7 +182,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       return engineB.getChartData();
   }, [engineB, daSeqB, liuYearB, showXiaoB]);
 
-  // --- Helper Lists ---
   const daListA = useMemo(() => {
       if (!engineA || !chartA) return [];
       const list = [];
@@ -229,7 +230,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       return list;
   }, [chartB, engineB]);
 
-  // --- Toggle Handlers ---
   const handleToggleReverseA = () => {
     let key = '';
     if (liuYearA !== null) key = `liu-${liuYearA}`;
@@ -246,7 +246,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
     setReverseMapB(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  // --- Derived Flags ---
   const isDaRevA = daSeqA >= 0 ? !!reverseMapA[`da-${daSeqA}`] : false;
   const isLiuRevA = liuYearA ? !!reverseMapA[`liu-${liuYearA}`] : false;
   const isCurrentRevA = liuYearA !== null ? isLiuRevA : (daSeqA >= 0 ? isDaRevA : false);
@@ -257,8 +256,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   const isCurrentRevB = liuYearB !== null ? isLiuRevB : (daSeqB >= 0 ? isDaRevB : false);
   const reverseFlagsB = { da: isDaRevB, liu: isLiuRevB, yue: false, ri: false };
 
-
-  // --- Interaction Logic ---
   const syncTime = (source: 'A' | 'B', year: number | null) => {
       if (!isLocked) return; 
 
@@ -274,7 +271,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
           if (year === null) {
               setLiuYearA(null);
           } else {
-              setLiuYearA(year);
+              setLiuYearA(year); 
               const targetDa = daListA.find(d => year >= d.startYear && year <= d.endYear);
               if (targetDa) setDaSeqA(targetDa.seq);
           }
@@ -355,7 +352,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   const getDummyCoords = () => ({ x: 0, y: 0 });
   const dummyNav = () => {};
 
-  // UI Helper: Render Control Bar
   const renderControlBar = (
       daList: any[], 
       daSeq: number, 
@@ -458,7 +454,11 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         externalGan={null}
                         flyingStarsLookup={flyMapBtoA}
                         benMingMajorStarsStr=""
-                        currentHourZhi={`${hourA}`}
+                        currentHourZhi={(() => {
+                            let zhi = ZHI[Math.floor((hourA + 1) / 2) % 12];
+                            if (Math.floor((hourA + 1) / 2) % 12 === 0) zhi = (hourA === 23 ? '晚子' : '早子');
+                            return zhi;
+                        })()}
                         isTimeModified={hourA !== clientA.birthHour}
                         connections={dummyConnections}
                         daXianList={daListA} 
@@ -508,7 +508,11 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         externalGan={null}
                         flyingStarsLookup={flyMapAtoB}
                         benMingMajorStarsStr=""
-                        currentHourZhi={`${hourB}`}
+                        currentHourZhi={(() => {
+                            let zhi = ZHI[Math.floor((hourB + 1) / 2) % 12];
+                            if (Math.floor((hourB + 1) / 2) % 12 === 0) zhi = (hourB === 23 ? '晚子' : '早子');
+                            return zhi;
+                        })()}
                         isTimeModified={hourB !== clientB.birthHour}
                         connections={dummyConnections}
                         daXianList={daListB} 
