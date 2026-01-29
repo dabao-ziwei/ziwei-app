@@ -1,5 +1,7 @@
+// FILE: src/db.ts
 import { supabase } from './supabase'; 
 import type { UserFeatures } from './logic/permissions'; 
+import type { YearAdviceRule } from './logic/types';
 
 // --- 設定 ---
 const SUPER_VIEW_EMAIL = 'stephenwu.0926@gmail.com';
@@ -49,7 +51,7 @@ export interface Relationship {
   inferred_from?: string;
 }
 
-// --- 輔助：關係稱謂反轉邏輯 (Strict) ---
+// --- 輔助：關係稱謂反轉邏輯 ---
 const getInverseRelationType = (type: string, fromGender: '男' | '女'): string => {
     if (['配偶'].includes(type)) return '配偶';
     if (['情侶'].includes(type)) return '情侶';
@@ -87,7 +89,6 @@ export const loadClients = async (): Promise<Client[]> => {
   }));
 };
 
-// --- 關係存取 ---
 export const getRelationships = async (clientId: string): Promise<Relationship[]> => {
     const { data, error } = await supabase
         .from('relationships')
@@ -122,7 +123,6 @@ export const getUserCustomRelationTypes = async (): Promise<string[]> => {
     return Array.from(types).filter(t => t) as string[]; 
 };
 
-// --- 雙向新增關係 ---
 export const addRelationship = async (fromId: string, toId: string, type: string): Promise<boolean> => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
@@ -250,13 +250,10 @@ export const addClient = async (client: any): Promise<string | null> => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
-    // [新增] 強制檢查配額：若非管理員且已達上限，禁止新增
-    // 這是一個後端的安全鎖，防止繞過前端 UI
     const profile = await getMyProfile();
     if (profile && profile.role !== 'admin') {
         const currentCount = await getUsedChartCount(user.id);
         if (currentCount >= profile.maxCharts) {
-            // 拋出錯誤，讓呼叫端的 try-catch (例如 AddChartModal) 捕捉並顯示 Alert
             throw new Error(`您的命盤數量已達上限 (${profile.maxCharts} 張)，無法再新增。`);
         }
     }
@@ -400,8 +397,6 @@ export const bulkUpdateAccessExpiry = async (ids: string[], expiryDate: string):
     return true;
 };
 
-// ... (保留原本的 code)
-
 // --- 占卜文案相關 API ---
 
 export interface DivinationContent {
@@ -412,7 +407,6 @@ export interface DivinationContent {
     luck: string;
 }
 
-// 1. 讀取單筆資料 (給前台 Modal 用)
 export const getDivinationResult = async (category: string, zhi: string, gan: string) => {
     const { data, error } = await supabase
         .from('divination_contents')
@@ -420,7 +414,7 @@ export const getDivinationResult = async (category: string, zhi: string, gan: st
         .eq('category', category)
         .eq('zhi', zhi)
         .eq('gan', gan)
-        .maybeSingle(); // 使用 maybeSingle，找不到不會噴錯，只會回傳 null
+        .maybeSingle();
 
     if (error) {
         console.error('Error fetching divination:', error);
@@ -429,7 +423,6 @@ export const getDivinationResult = async (category: string, zhi: string, gan: st
     return data;
 };
 
-// 2. 讀取所有資料 (給後台 AdminPanel 用)
 export const getAllDivinationContents = async () => {
     const { data, error } = await supabase
         .from('divination_contents')
@@ -437,7 +430,6 @@ export const getAllDivinationContents = async () => {
     
     if (error) return [];
     
-    // 轉換成矩陣需要的格式: { "感情-子-甲": { content: "...", luck: "..." } }
     const dbMap: Record<string, any> = {};
     data.forEach((row: any) => {
         const key = `${row.category}-${row.zhi}-${row.gan}`;
@@ -446,7 +438,6 @@ export const getAllDivinationContents = async () => {
     return dbMap;
 };
 
-// 3. 儲存/更新單筆資料
 export const saveDivinationContent = async (category: string, zhi: string, gan: string, content: string, luck: string) => {
     const { error } = await supabase
         .from('divination_contents')
@@ -457,12 +448,11 @@ export const saveDivinationContent = async (category: string, zhi: string, gan: 
             content, 
             luck,
             updated_at: new Date().toISOString()
-        }, { onConflict: 'category,zhi,gan' }); // 遇到重複組合就更新
+        }, { onConflict: 'category,zhi,gan' });
 
     return !error;
 };
 
-// 4. 刪除單筆資料
 export const deleteDivinationContent = async (category: string, zhi: string, gan: string) => {
     const { error } = await supabase
         .from('divination_contents')
@@ -474,7 +464,6 @@ export const deleteDivinationContent = async (category: string, zhi: string, gan
     return !error;
 };
 
-// 5. 批量上傳 (用於從 LocalStorage 遷移資料)
 export const bulkUploadDivination = async (items: DivinationContent[]) => {
     if (items.length === 0) return true;
     const { error } = await supabase
@@ -482,4 +471,59 @@ export const bulkUploadDivination = async (items: DivinationContent[]) => {
         .upsert(items, { onConflict: 'category,zhi,gan' });
     
     return !error;
+};
+
+// --- [Patch Spec v2.1] 流年建議規則 CRUD ---
+
+export const loadYearAdviceRules = async (): Promise<YearAdviceRule[]> => {
+    const { data, error } = await supabase
+        .from('year_advice_rules')
+        .select('*')
+        .order('priority', { ascending: true });
+
+    if (error) {
+        console.error('Error loading year advice rules:', error);
+        return [];
+    }
+    return data || [];
+};
+
+export const saveYearAdviceRule = async (rule: Partial<YearAdviceRule>) => {
+    // [Spec 6.2] is_default 唯一性
+    if (rule.is_default) {
+        let query = supabase.from('year_advice_rules').update({ is_default: false });
+        if (rule.id) {
+            query = query.neq('id', rule.id);
+        }
+        await query;
+    }
+
+    const payload = {
+        ...rule,
+        max_score: rule.max_score === undefined ? null : rule.max_score,
+        updated_at: new Date().toISOString()
+    };
+
+    const { error } = await supabase
+        .from('year_advice_rules')
+        .upsert(payload);
+
+    if (error) {
+        console.error('Error saving advice rule:', error);
+        return false;
+    }
+    return true;
+};
+
+export const deleteYearAdviceRule = async (id: string) => {
+    const { error } = await supabase
+        .from('year_advice_rules')
+        .delete()
+        .eq('id', id);
+
+    if (error) {
+        console.error('Error deleting advice rule:', error);
+        return false;
+    }
+    return true;
 };
