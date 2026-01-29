@@ -4,15 +4,15 @@ import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { toPng } from 'html-to-image';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { PalaceGrid } from './PalaceGrid';
-import { getClient, getRelationships, getMyProfile, type Client, type Relationship, type UserProfile } from '../../db';
+import { getClient, getRelationships, getMyProfile, loadYearAdviceRules, type Client, type Relationship, type UserProfile, type YearAdviceRule } from '../../db';
 import { ZiWeiEngine } from '../../logic/engine';
 import { GAN, ZHI, PALACE_NAMES, SIHUA_TABLE } from '../../logic/constants';
 import { Loader2, UserPlus, X, ChevronLeft, Camera, Users, Compass } from 'lucide-react';
 import { getFeaturePermission, type PermissionState } from '../../logic/permissions';
 import { Lunar, LunarYear } from 'lunar-typescript';
-
-// ✅ 硬關閉：年度分析功能（先全部不顯示，不做 email / auth 判斷）
-const DEV_YEARLY_ANALYSIS_ENABLED = false;
+import { YearlyAnalysisBoard } from './YearlyAnalysisBoard';
+import { YearlyAnalysisDrawer } from './YearlyAnalysisDrawer';
+import { scanYearlyAdvice } from '../../logic/advice/yearAdvice';
 
 interface SingleChartProps {
   client?: Client;
@@ -103,10 +103,17 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const [externalYearType, setExternalYearType] = useState<'west' | 'roc'>('roc');
   const [externalGan, setExternalGan] = useState<number | null>(null);
 
+  // [Patch] Yearly Analysis States
+  const [isYearlyDrawerOpen, setIsYearlyDrawerOpen] = useState(false);
+  const [analysisYear, setAnalysisYear] = useState<number>(new Date().getFullYear());
+  const [adviceRules, setAdviceRules] = useState<YearAdviceRule[]>([]);
+
   const chartRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     getMyProfile().then(setUserProfile);
+    loadYearAdviceRules().then(setAdviceRules); // [Patch] Load Advice Rules
+
     const fetchData = async () => {
       if (client) {
         setLoading(false);
@@ -250,6 +257,13 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     return displayEngine.getChartData();
   }, [client, currentHour, daXianSeq, liuNianYear, showXiaoXian, mode, isDivinationReady, divNum]);
 
+  // --- [Patch] Advice Logic ---
+  const adviceResult = useMemo(() => {
+      if (!chartData || !analysisYear) return undefined;
+      // We pass the fully computed chartData (which has Limit Stars)
+      return scanYearlyAdvice(chartData, analysisYear);
+  }, [chartData, analysisYear]);
+
   const { divMingIndex, divSiHuaMap } = useMemo(() => {
     if (mode !== 'divination' || !divNum || divNum.length !== 4) return { divMingIndex: -1, divSiHuaMap: undefined };
     const numAB = parseInt(divNum[0] + divNum[1]);
@@ -349,6 +363,15 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       navigate(-1);
     }
   };
+
+  // Sync LiuNian to Analysis Year
+  useEffect(() => {
+      if (liuNianYear) {
+          setAnalysisYear(liuNianYear);
+      } else {
+          setAnalysisYear(new Date().getFullYear());
+      }
+  }, [liuNianYear]);
 
   const isBenMingState = daXianSeq === -1 && liuNianYear === null;
   const isCleanState = isBenMingState && flyingPalace === null && selectedPalace === null && externalGan === null && mode !== 'divination';
@@ -679,9 +702,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
                 <span className="hidden sm:inline">截圖</span>
               </button>
             )}
-
-            {/* ✅ 硬關閉：年度分析入口（先整段不存在） */}
-            {DEV_YEARLY_ANALYSIS_ENABLED && null}
           </div>
         )}
       </div>
@@ -797,6 +817,11 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
           liuMonthIdx={liuMonthIdx}
           liuDayIdx={liuDayIdx}
           currentRealTime={currentRealTime}
+          // [Patch] Pass callback to open drawer
+          onOpenYearlyAnalysis={(year) => {
+              setAnalysisYear(year);
+              setIsYearlyDrawerOpen(true);
+          }}
         />
       </div>
 
@@ -844,6 +869,24 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
           </div>
         </div>
       )}
+
+      {/* [Patch] Yearly Analysis Drawer */}
+      <YearlyAnalysisDrawer
+        open={isYearlyDrawerOpen}
+        onClose={() => setIsYearlyDrawerOpen(false)}
+        title={`${analysisYear} 年度分析`}
+        adviceResult={adviceResult}
+        adviceRules={adviceRules}
+      >
+        {baseEngine && client && (
+            <YearlyAnalysisBoard 
+                engine={baseEngine} 
+                year={analysisYear} 
+                userId={userProfile?.id || 'guest'}
+                chartId={client.id}
+            />
+        )}
+      </YearlyAnalysisDrawer>
     </div>
   );
 };

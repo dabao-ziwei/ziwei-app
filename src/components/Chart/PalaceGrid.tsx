@@ -1,8 +1,7 @@
-// src/components/Chart/PalaceGrid.tsx
 import React, { forwardRef } from 'react';
 import { CenterInfoBoard } from '../CenterInfoBoard';
 import { PalaceCard } from '../PalaceCard';
-import { GAN } from '../../logic/constants';
+import { GAN, PALACE_NAMES } from '../../logic/constants';
 import type { Client, Relationship } from '../../db';
 import type { ChartData } from '../../logic/types';
 import type { PermissionState } from '../../logic/permissions';
@@ -12,7 +11,7 @@ interface PalaceGridProps {
   chartData: ChartData;
   relationships: Relationship[];
   historyStack: Client[];
-
+  
   mode: 'standard' | 'divination';
   selectedPalace: number | null;
   flyingPalace: number | null;
@@ -21,21 +20,22 @@ interface PalaceGridProps {
   showXiaoXian: boolean;
   isReverse: boolean;
   isTwinMode: boolean;
-
+  
+  // [新增] 接收指南針狀態
   showCompass: boolean;
 
   reverseFlags?: {
-    da: boolean;
-    liu: boolean;
-    yue: boolean;
-    ri: boolean;
+      da: boolean;
+      liu: boolean;
+      yue: boolean;
+      ri: boolean;
   };
   onToggleInverted?: () => void;
 
   divNum?: string[];
   isDivinationReady?: boolean;
   divSiHuaMap?: Record<string, '祿' | '權' | '科' | '忌'>;
-
+  
   externalGan: number | null;
   externalSiHuaMap?: Record<string, '祿' | '權' | '科' | '忌'>;
 
@@ -45,19 +45,10 @@ interface PalaceGridProps {
   connections: { self: number; tri1: number; tri2: number; opp: number };
   daXianList: any[];
   xiaoXianMingIdx: number;
-
+  
   flyingStarsLookup?: Record<string, '祿' | '權' | '科' | '忌'>;
 
-  getRelativeNames: (
-    idx: number
-  ) => {
-    daName?: string;
-    liuName?: string;
-    xiaoName?: string;
-    divinationName?: string;
-    yueName?: string;
-    riName?: string;
-  };
+  getRelativeNames: (idx: number) => { daName?: string; liuName?: string; xiaoName?: string; divinationName?: string; yueName?: string; riName?: string };
   getIsBenMingMing: (idx: number) => boolean;
   getAnchorCoord: (idx: number) => { x: number; y: number };
 
@@ -71,16 +62,12 @@ interface PalaceGridProps {
   onPalaceClick: (idx: number) => void;
   onTriggerClick: (idx: number) => void;
 
-  // ✅ 新增：抽屜開啟（年度分析）
-  onOpenYearlyAnalysis?: (year: number) => void;
-
   permissionFlags?: {
-    twin: PermissionState;
-    inverted: PermissionState;
-    xiao: PermissionState;
-    liu_month: PermissionState;
-    liu_day: PermissionState;
-    dual_chart?: PermissionState; // ✅ 改為 optional
+      twin: PermissionState;
+      inverted: PermissionState;
+      xiao: PermissionState;
+      liu_month: PermissionState;
+      liu_day: PermissionState;
   };
 
   liuMonth?: number | null;
@@ -90,261 +77,197 @@ interface PalaceGridProps {
   onSetLiuDay?: (d: number | null) => void;
   liuMonthGan?: number;
   liuDayGan?: number;
-
+  liuNianYear?: number | null;
+  
   currentRealTime?: {
-    year: number;
-    daSeq: number;
+      year: number;      
+      daSeq: number;     
   };
-
+  
   liuMonthIdx?: number;
   liuDayIdx?: number;
 }
 
-// ✅ 安全 Mod：統一處理 % 12 的負數情況
-const mod12 = (n: number) => ((n % 12) + 12) % 12;
+export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(({
+  client, chartData, relationships, historyStack,
+  mode, selectedPalace, flyingPalace, daXianSeq, liuNianYear, showXiaoXian, isReverse, isTwinMode,
+  showCompass, // [新增]
+  reverseFlags, onToggleInverted,
+  divNum, isDivinationReady, divSiHuaMap,
+  externalGan, externalSiHuaMap,
+  benMingMajorStarsStr, currentHourZhi, isTimeModified, connections, daXianList, xiaoXianMingIdx,
+  flyingStarsLookup,
+  getRelativeNames, getIsBenMingMing, getAnchorCoord,
+  onHistoryBack, onNavigate, onCompatibility, onChangeHour, onResetTime,
+  onToggleTwin, onToggleSmallLimit, onPalaceClick, onTriggerClick,
+  permissionFlags,
+  liuMonth, isLiuMonthLeap, liuDay, onSetLiuMonth, onSetLiuDay, liuMonthGan, liuDayGan,
+  currentRealTime,
+  liuMonthIdx = -1, liuDayIdx = -1
+}, ref) => {
 
-export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
-  (
-    {
-      client,
-      chartData,
-      relationships,
-      historyStack,
-      mode,
-      selectedPalace,
-      flyingPalace,
-      daXianSeq,
-      liuNianYear,
-      showXiaoXian,
-      isReverse,
-      isTwinMode,
-      showCompass,
-      reverseFlags,
-      onToggleInverted,
-      divNum,
-      isDivinationReady,
-      divSiHuaMap,
-      externalGan,
-      externalSiHuaMap,
-      benMingMajorStarsStr,
-      currentHourZhi,
-      isTimeModified,
-      connections,
-      daXianList,
-      xiaoXianMingIdx,
-      flyingStarsLookup,
-      getRelativeNames,
-      getIsBenMingMing,
-      getAnchorCoord,
-      onHistoryBack,
-      onNavigate,
-      onCompatibility,
-      onChangeHour,
-      onResetTime,
-      onToggleTwin,
-      onToggleSmallLimit,
-      onPalaceClick,
-      onTriggerClick,
-      onOpenYearlyAnalysis,
-      permissionFlags,
-      liuMonth,
-      isLiuMonthLeap,
-      liuDay,
-      onSetLiuMonth,
-      onSetLiuDay,
-      liuMonthGan,
-      liuDayGan,
-      currentRealTime,
-      liuMonthIdx = -1,
-      liuDayIdx = -1,
-    },
-    ref
-  ) => {
-    const gridLayout = [5, 6, 7, 8, 4, null, null, 9, 3, null, null, 10, 2, 1, 0, 11];
+  const gridLayout = [5, 6, 7, 8, 4, null, null, 9, 3, null, null, 10, 2, 1, 0, 11];
 
-    const { highlightIdx, highlightClass } = React.useMemo(() => {
-      const baseClass = 'absolute inset-0 z-0 pointer-events-none';
+  const { highlightIdx, highlightClass } = React.useMemo(() => {
+      const baseClass = "absolute inset-0 z-0 pointer-events-none"; 
 
       if (liuDay !== null && liuDayIdx >= 0) {
-        return { highlightIdx: liuDayIdx, highlightClass: `${baseClass} bg-purple-100/50 animate-pulse` };
+          return { highlightIdx: liuDayIdx, highlightClass: `${baseClass} bg-purple-100/50 animate-pulse` };
       }
       if (liuMonth !== null && liuMonthIdx >= 0) {
-        return { highlightIdx: liuMonthIdx, highlightClass: `${baseClass} bg-amber-100/50 animate-pulse` };
+          return { highlightIdx: liuMonthIdx, highlightClass: `${baseClass} bg-amber-100/50 animate-pulse` };
       }
-
+      
       if (showXiaoXian && xiaoXianMingIdx >= 0) {
-        return { highlightIdx: xiaoXianMingIdx, highlightClass: `${baseClass} bg-green-100/50 animate-pulse` };
+          return { highlightIdx: xiaoXianMingIdx, highlightClass: `${baseClass} bg-green-100/50 animate-pulse` };
       }
-
+      
       if (liuNianYear !== null) {
-        const liuZhi = mod12(liuNianYear - 4);
-        const liuMingIdx = chartData.palaces.findIndex((p) => p.zhiIndex === liuZhi);
-        if (liuMingIdx >= 0) {
-          return { highlightIdx: liuMingIdx, highlightClass: `${baseClass} bg-blue-100/50 animate-pulse` };
-        }
+          const liuZhi = (liuNianYear - 4) % 12;
+          const liuMingIdx = chartData.palaces.findIndex(p => p.zhiIndex === liuZhi);
+          if (liuMingIdx >= 0) {
+              return { highlightIdx: liuMingIdx, highlightClass: `${baseClass} bg-blue-100/50 animate-pulse` };
+          }
       }
-
       if (daXianSeq >= 0 && daXianList[daXianSeq]) {
-        return { highlightIdx: daXianList[daXianSeq].palaceIdx, highlightClass: `${baseClass} bg-gray-200/70` };
+          return { highlightIdx: daXianList[daXianSeq].palaceIdx, highlightClass: `${baseClass} bg-gray-200/70` };
       }
-
-      const benMingIdx = chartData.palaces.findIndex((p) => getIsBenMingMing(p.index));
+      const benMingIdx = chartData.palaces.findIndex(p => getIsBenMingMing(p.index));
       if (benMingIdx >= 0) {
-        return { highlightIdx: benMingIdx, highlightClass: `${baseClass} bg-red-50/60` };
+          return { highlightIdx: benMingIdx, highlightClass: `${baseClass} bg-red-50/60` };
       }
-
+      
       return { highlightIdx: -1, highlightClass: '' };
-    }, [
-      liuDay,
-      liuDayIdx,
-      liuMonth,
-      liuMonthIdx,
-      showXiaoXian,
-      xiaoXianMingIdx,
-      liuNianYear,
-      daXianSeq,
-      daXianList,
-      chartData,
-      getIsBenMingMing,
-    ]);
 
-    return (
-      <div ref={ref} className="w-full h-full bg-white border-2 border-gray-800 shadow-xl z-10 relative pt-2">
-        <div className="relative w-full h-full grid grid-cols-4 grid-rows-4">
-          <svg className="absolute inset-0 w-full h-full pointer-events-none z-[200]">
-            {selectedPalace !== null &&
-              (() => {
-                const pSelf = getAnchorCoord(connections.self);
-                const pTri1 = getAnchorCoord(connections.tri1);
-                const pTri2 = getAnchorCoord(connections.tri2);
-                const pOpp = getAnchorCoord(connections.opp);
-                return (
-                  <>
-                    <line x1={`${pSelf.x}%`} y1={`${pSelf.y}%`} x2={`${pTri1.x}%`} y2={`${pTri1.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
-                    <line x1={`${pTri1.x}%`} y1={`${pTri1.y}%`} x2={`${pTri2.x}%`} y2={`${pTri2.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
-                    <line x1={`${pTri2.x}%`} y1={`${pTri2.y}%`} x2={`${pSelf.x}%`} y2={`${pSelf.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
-                    <line x1={`${pSelf.x}%`} y1={`${pSelf.y}%`} x2={`${pOpp.x}%`} y2={`${pOpp.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
-                  </>
-                );
-              })()}
-          </svg>
+  }, [liuDay, liuDayIdx, liuMonth, liuMonthIdx, showXiaoXian, xiaoXianMingIdx, liuNianYear, daXianSeq, daXianList, chartData, getIsBenMingMing]);
 
-          {gridLayout.map((palaceIdx, gridPos) => {
+
+  return (
+    <div ref={ref} className="w-full h-full bg-white border-2 border-gray-800 shadow-xl z-10 relative pt-2">
+      
+      {/* 內部容器：作為實際的 Grid 和 SVG 舞台 */}
+      <div className="relative w-full h-full grid grid-cols-4 grid-rows-4">
+
+        {/* SVG 相對於內部容器定位，與 Grid 完美重疊 */}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none z-[200]">
+            {selectedPalace !== null && (() => { const pSelf = getAnchorCoord(connections.self); const pTri1 = getAnchorCoord(connections.tri1); const pTri2 = getAnchorCoord(connections.tri2); const pOpp = getAnchorCoord(connections.opp); return ( <> <line x1={`${pSelf.x}%`} y1={`${pSelf.y}%`} x2={`${pTri1.x}%`} y2={`${pTri1.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> <line x1={`${pTri1.x}%`} y1={`${pTri1.y}%`} x2={`${pTri2.x}%`} y2={`${pTri2.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> <line x1={`${pTri2.x}%`} y1={`${pTri2.y}%`} x2={`${pSelf.x}%`} y2={`${pSelf.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> <line x1={`${pSelf.x}%`} y1={`${pSelf.y}%`} x2={`${pOpp.x}%`} y2={`${pOpp.y}%`} stroke="#4b5563" strokeWidth="1.5" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/> </> ); })()}
+        </svg>
+
+        {/* Grid Items */}
+        {gridLayout.map((palaceIdx, gridPos) => {
             if (gridPos === 5) {
-              return (
-                <div key="center-board" className="col-span-2 row-span-2 z-50 relative h-full w-full">
-                  <CenterInfoBoard
-                    key="center"
-                    client={client}
-                    chartData={chartData}
-                    relationships={relationships}
-                    historyStack={historyStack}
-                    onHistoryBack={onHistoryBack}
-                    onNavigate={onNavigate}
-                    onCompatibility={onCompatibility}
-                    benMingMajorStarsStr={benMingMajorStarsStr}
-                    onChangeHour={onChangeHour}
-                    onResetTime={onResetTime}
-                    currentHourZhi={currentHourZhi}
-                    isTimeModified={isTimeModified}
-                    isDivinationMode={mode === 'divination'}
-                    divNum={divNum}
-                    isDivinationReady={isDivinationReady}
-                    onToggleTwin={onToggleTwin}
-                    onToggleInverted={onToggleInverted || (() => {})}
-                    onToggleSmallLimit={onToggleSmallLimit}
-                    showTwin={isTwinMode}
-                    showInverted={isReverse}
-                    showSmallLimit={showXiaoXian}
-                    isDaXian={daXianSeq >= 0}
-                    isLiuNian={liuNianYear !== null}
-                    permissionFlags={permissionFlags}
-                    liuMonth={liuMonth}
-                    isLiuMonthLeap={isLiuMonthLeap}
-                    liuDay={liuDay}
-                    onSetLiuMonth={onSetLiuMonth}
-                    onSetLiuDay={onSetLiuDay}
-                    liuNianYear={liuNianYear}
-                    liuMonthGan={liuMonthGan}
-                    liuDayGan={liuDayGan}
-                    currentRealTime={currentRealTime}
-                    // ✅ 抽屜開啟 callback 往下傳
-                    onOpenYearlyAnalysis={onOpenYearlyAnalysis}
-                  />
-                </div>
-              );
-            }
+                return (
+                    <div key="center-board" className="col-span-2 row-span-2 z-50 relative h-full w-full">
+                          <CenterInfoBoard 
+                            key="center"
+                            client={client}
+                            chartData={chartData}
+                            relationships={relationships}
+                            historyStack={historyStack}
+                            onHistoryBack={onHistoryBack}
+                            onNavigate={onNavigate}
+                            onCompatibility={onCompatibility}
+                            benMingMajorStarsStr={benMingMajorStarsStr}
+                            onChangeHour={onChangeHour}
+                            onResetTime={onResetTime}
+                            currentHourZhi={currentHourZhi}
+                            isTimeModified={isTimeModified}
+                            isDivinationMode={mode === 'divination'}
+                            divNum={divNum}
+                            isDivinationReady={isDivinationReady}
+                            
+                            onToggleTwin={onToggleTwin}
+                            onToggleInverted={onToggleInverted || (() => {})}
+                            onToggleSmallLimit={onToggleSmallLimit}
+                            showTwin={isTwinMode}
+                            showInverted={isReverse}
+                            showSmallLimit={showXiaoXian}
+                            isDaXian={daXianSeq >= 0}
+                            isLiuNian={liuNianYear !== null}
+                            
+                            permissionFlags={permissionFlags}
 
+                            liuMonth={liuMonth}
+                            isLiuMonthLeap={isLiuMonthLeap}
+                            liuDay={liuDay}
+                            onSetLiuMonth={onSetLiuMonth}
+                            onSetLiuDay={onSetLiuDay}
+                            liuNianYear={liuNianYear}
+                            liuMonthGan={liuMonthGan}
+                            liuDayGan={liuDayGan}
+                            
+                            currentRealTime={currentRealTime}
+                        />
+                    </div>
+                );
+            }
+            
             if (gridPos === 6 || gridPos === 9 || gridPos === 10) return null;
             if (palaceIdx === null) return null;
 
             const relNames = getRelativeNames(palaceIdx);
             const isBenMingMing = getIsBenMingMing(palaceIdx);
-
-            const isDaXianActive = daXianSeq >= 0;
-            const isLiuNianActive = liuNianYear !== null;
+            
+            const isDaXianActive = daXianSeq >= 0; 
+            const isLiuNianActive = liuNianYear !== null; 
             const isXiaoXianActive = showXiaoXian;
 
-            const isDaXianMing = daXianSeq >= 0 && daXianList[daXianSeq]?.palaceIdx === palaceIdx;
-            const isLiuNianMing = liuNianYear !== null && chartData.palaces[palaceIdx].zhiIndex === mod12(liuNianYear - 4);
+            const isDaXianMing = daXianSeq >= 0 && daXianList[daXianSeq].palaceIdx === palaceIdx;
+            const isLiuNianMing = liuNianYear !== null && chartData.palaces[palaceIdx].zhiIndex === (liuNianYear - 4) % 12;
             const isXiaoXianMingPalace = liuNianYear !== null && palaceIdx === xiaoXianMingIdx;
-
+            
             const isConnected = selectedPalace !== null && Object.values(connections).includes(palaceIdx);
-
+            
             const showXiaoXianSeal = isXiaoXianMingPalace && !showXiaoXian;
             const isFlyingSource = flyingPalace === palaceIdx;
-
+            
             const isHighlight = palaceIdx === highlightIdx;
 
             return (
-              <div
-                key={palaceIdx}
-                onClick={() => onPalaceClick(palaceIdx)}
-                className={`relative cursor-pointer transition-all duration-200 border border-gray-300 box-border overflow-visible
-                  ${isConnected ? 'bg-red-50' : 'hover:bg-gray-50'}
-                  ${isFlyingSource ? 'ring-4 ring-purple-400 z-50 animate-pulse' : ''}
-                `}
-                style={isFlyingSource ? { animationIterationCount: 3 } : {}}
-              >
-                {isHighlight && <div className={highlightClass}></div>}
+                <div key={palaceIdx} onClick={() => onPalaceClick(palaceIdx)} 
+                     className={`relative cursor-pointer transition-all duration-200 border border-gray-300 box-border overflow-visible 
+                     ${isConnected ? 'bg-red-50' : 'hover:bg-gray-50'} 
+                     ${isFlyingSource ? 'ring-4 ring-purple-400 z-50 animate-pulse' : ''}
+                     `} 
+                     style={isFlyingSource ? { animationIterationCount: 3 } : {}}
+                >
+                    {isHighlight && <div className={highlightClass}></div>}
+                    
+                    {isFlyingSource && <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-purple-600 text-white text-[11px] font-bold px-2 py-0.5 rounded-full shadow-lg z-50 whitespace-nowrap tracking-wide border border-white">{GAN[chartData.palaces[palaceIdx].ganIndex]}干飛化</div>}
+                    
+                    <PalaceCard
+                        palace={chartData.palaces[palaceIdx]}
+                        daName={relNames.daName}
+                        liuName={relNames.liuName}
+                        xiaoName={relNames.xiaoName}
+                        yueName={relNames.yueName}
+                        riName={relNames.riName}
 
-                {isFlyingSource && (
-                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-purple-600 text-white text-[11px] font-bold px-2 py-0.5 rounded-full shadow-lg z-50 whitespace-nowrap tracking-wide border border-white">
-                    {GAN[chartData.palaces[palaceIdx].ganIndex]}干飛化
-                  </div>
-                )}
+                        isBody={mode !== 'divination' && chartData.palaces[palaceIdx].isBody}
+                        isXiaoXianMing={showXiaoXianSeal}
+                        isBenMingMing={isBenMingMing}
+                        isDaXianMing={isDaXianMing && isDaXianActive}
+                        isLiuNianMing={isLiuNianMing && isLiuNianActive}
+                        isXiaoXianMingPalace={isXiaoXianMingPalace && (isLiuNianActive || isXiaoXianActive)}
+                        onTriggerClick={() => onTriggerClick(palaceIdx)}
+                        flyingStars={flyingStarsLookup}
+                        isTwinMode={isTwinMode}
+                        isReverse={isReverse}
+                        
+                        // [新增] 傳遞指南針狀態
+                        showCompass={showCompass}
 
-                <PalaceCard
-                  palace={chartData.palaces[palaceIdx]}
-                  daName={relNames.daName}
-                  liuName={relNames.liuName}
-                  xiaoName={relNames.xiaoName}
-                  yueName={relNames.yueName}
-                  riName={relNames.riName}
-                  isBody={mode !== 'divination' && chartData.palaces[palaceIdx].isBody}
-                  isXiaoXianMing={showXiaoXianSeal}
-                  isBenMingMing={isBenMingMing}
-                  isDaXianMing={isDaXianMing && isDaXianActive}
-                  isLiuNianMing={isLiuNianMing && isLiuNianActive}
-                  isXiaoXianMingPalace={isXiaoXianMingPalace && (isLiuNianActive || isXiaoXianActive)}
-                  onTriggerClick={() => onTriggerClick(palaceIdx)}
-                  flyingStars={flyingStarsLookup}
-                  isTwinMode={isTwinMode}
-                  isReverse={isReverse}
-                  showCompass={showCompass}
-                  reverseFlags={reverseFlags}
-                  divinationName={relNames.divinationName}
-                  // ✅ 修正：PalaceCard 這裡要用 divinationSiHua
-                  divinationSiHua={mode === 'divination' ? divSiHuaMap : undefined}
-                  externalSiHua={externalSiHuaMap}
-                />
+                        reverseFlags={reverseFlags}
 
-                {isConnected && <div className="absolute inset-0 border-2 border-red-500 pointer-events-none z-30"></div>}
-              </div>
+                        divinationName={relNames.divinationName}
+                        divinationSiHua={mode === 'divination' ? divSiHuaMap : undefined}
+                        externalSiHua={externalSiHuaMap}
+                    />
+                    {isConnected && <div className="absolute inset-0 border-2 border-red-500 pointer-events-none z-30"></div>}
+                </div>
             );
-          })}
-        </div>
+        })}
       </div>
-    );
-  }
-);
+    </div>
+  );
+});

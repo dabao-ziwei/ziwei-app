@@ -1,12 +1,18 @@
-// src/components/Chart/YearlyAnalysisDrawer.tsx
+// FILE: src/components/Chart/YearlyAnalysisDrawer.tsx
 import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
+import { YearAdvicePanel } from './YearAdvicePanel';
+import type { YearAdviceResult, YearAdviceRule } from '../../logic/types';
 
 type YearlyAnalysisDrawerProps = {
   open: boolean;
   title?: string;
   onClose: () => void;
   children: React.ReactNode;
+  
+  // New Props for Advice Panel
+  adviceResult?: YearAdviceResult;
+  adviceRules?: YearAdviceRule[];
 };
 
 export const YearlyAnalysisDrawer: React.FC<YearlyAnalysisDrawerProps> = ({
@@ -14,6 +20,8 @@ export const YearlyAnalysisDrawer: React.FC<YearlyAnalysisDrawerProps> = ({
   title = '年度分析',
   onClose,
   children,
+  adviceResult,
+  adviceRules
 }) => {
   useEffect(() => {
     if (!open) return;
@@ -52,8 +60,21 @@ export const YearlyAnalysisDrawer: React.FC<YearlyAnalysisDrawerProps> = ({
           </button>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto p-4">
-          {children}
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-6">
+          {/* 1. Original Analysis Content */}
+          <div>
+             {children}
+          </div>
+
+          {/* 2. [New] Year Advice Panel */}
+          {adviceResult && adviceRules && (
+             <div className="border-t border-gray-100 pt-6 animate-in slide-in-from-bottom-4 duration-500">
+                 <YearAdvicePanel 
+                    result={adviceResult}
+                    rules={adviceRules}
+                 />
+             </div>
+          )}
         </div>
       </div>
     </>
