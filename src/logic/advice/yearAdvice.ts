@@ -2,8 +2,7 @@
 import type { ChartData, YearAdviceResult, PalaceEventLog, AdviceTokens } from '../types';
 import { 
     MATCH_SHEEP, MATCH_DALA, 
-    PALACE_NAMES, LINE_DEFINITIONS, LINE_PRIORITY, FOCUS_PRIORITY,
-    PALACE_CONTEXTS, FIRE_BELL_PHRASES
+    PALACE_NAMES, LINE_DEFINITIONS, LINE_PRIORITY, FOCUS_PRIORITY
 } from '../constants';
 
 // 安全 Mod
@@ -28,26 +27,21 @@ const createDefaultLog = (): PalaceEventLog => ({
 export const scanYearlyAdvice = (chart: ChartData, year: number): YearAdviceResult => {
     const palaces = chart.palaces;
     
-    // 1. 找出流年命宮位置 (Offset Anchor)
+    // 1. 找出流年命宮位置
     const flowMingIdx = getFlowMingIndex(chart, year);
 
-    // Fallback: 回傳保底物件 (防止 UI Crash)
+    // Fallback
     if (flowMingIdx === -1) {
         return {
             year,
             topLineId: LINE_PRIORITY[0],
             topLineScore: 0,
             focusPalaceOffset: 0,
-            focusPalaceName: '流年命宮',
+            focusPalaceName: '年度焦點：命宮',
             focusPalaceScore: 0,
             palaceScores: new Array(12).fill(0),
-            // 修正：回傳長度 12 的預設物件陣列
             palaceEvents: Array.from({ length: 12 }, createDefaultLog),
-            tokens: {
-                focus_palace: '流年命宮', focus_score: '0', line_score: '0', top_line: '未知',
-                sheep_count: '0', sheep_word: '', toro_count: '0', toro_word: '',
-                huo_phrase: '', huo_block: '', ling_phrase: '', ling_block: ''
-            }
+            tokens: { year: year.toString() }
         };
     }
 
@@ -93,19 +87,19 @@ export const scanYearlyAdvice = (chart: ChartData, year: number): YearAdviceResu
             }
         });
 
-        // 3.1.3 火星 (僅靜態)
+        // 3.1.3 火星
         if (staticStars.some(s => s.name === '火星')) {
             score += 1;
             log.huoHits = 1;
         }
 
-        // 3.1.4 鈴星 (僅靜態)
+        // 3.1.4 鈴星
         if (staticStars.some(s => s.name === '鈴星')) {
             score += 1;
             log.lingHits = 1;
         }
 
-        // 3.2 化忌 (泛化, 全星曜, 全scope, 疊加)
+        // 3.2 化忌
         allStars.forEach(star => {
             if (star.sihua && star.sihua.length > 0) {
                 star.sihua.forEach(sh => {
@@ -137,11 +131,11 @@ export const scanYearlyAdvice = (chart: ChartData, year: number): YearAdviceResu
         if (lineScore > maxLineScore) {
             isBetter = true;
         } else if (lineScore === maxLineScore) {
-            // Tie-break #1: 最高單宮分
+            // Tie-break #1
             if (singleMax > maxSinglePalaceScoreInLine) {
                 isBetter = true;
             } else if (singleMax === maxSinglePalaceScoreInLine) {
-                // Tie-break #2: Priority Index
+                // Tie-break #2
                 const currentPriority = LINE_PRIORITY.indexOf(lineDef.id);
                 const prevPriority = LINE_PRIORITY.indexOf(topLineId);
                 if (currentPriority < prevPriority) {
@@ -175,46 +169,15 @@ export const scanYearlyAdvice = (chart: ChartData, year: number): YearAdviceResu
         }
     }
 
-    // [Patch Spec 3.3.3] Focus Palace 顯示名稱補正
-    // 嚴格規定：流年${PALACE_NAMES[offset]}，不自行補「宮」
-    const focusPalaceName = `流年${PALACE_NAMES[focusOffset]}`;
-
-    const focusEvent = palaceEvents[focusOffset];
+    // [Spec 3.0.1 C] 去命理化名稱 (如：流年命宮 -> 年度焦點：命宮)
+    // 檢查 PALACE_NAMES 是否含「宮」
+    const rawName = PALACE_NAMES[focusOffset];
+    const normalizedName = rawName.includes('宮') ? rawName : `${rawName}宮`;
+    const focusPalaceName = `年度焦點：${normalizedName}`;
 
     // 6. Token Generation
-    const contextType = PALACE_CONTEXTS[focusOffset] || 'WORK';
-    
-    const sheepCount = focusEvent.sheepHits.length;
-    let sheepWord = '';
-    if (sheepCount === 1) sheepWord = '衝動';
-    else if (sheepCount === 2) sheepWord = '很衝動';
-    else if (sheepCount >= 3) sheepWord = '異常衝動';
-
-    const toroCount = focusEvent.toroHits.length;
-    let toroWord = '';
-    if (toroCount === 1) toroWord = '糾結';
-    else if (toroCount === 2) toroWord = '很糾結';
-    else if (toroCount >= 3) toroWord = '異常糾結';
-
-    const huoPhrase = FIRE_BELL_PHRASES.HUO[contextType];
-    const huoBlock = focusEvent.huoHits > 0 ? `、${huoPhrase}` : '';
-    
-    const lingPhrase = FIRE_BELL_PHRASES.LING[contextType];
-    const lingBlock = focusEvent.lingHits > 0 ? `、${lingPhrase}` : '';
-
     const tokens: AdviceTokens = {
-        focus_palace: focusPalaceName,
-        focus_score: palaceScores[focusOffset].toString(),
-        line_score: maxLineScore.toString(),
-        top_line: targetLineDef.name,
-        sheep_count: sheepCount.toString(),
-        sheep_word: sheepWord,
-        toro_count: toroCount.toString(),
-        toro_word: toroWord,
-        huo_phrase: huoPhrase,
-        huo_block: huoBlock,
-        ling_phrase: lingPhrase,
-        ling_block: lingBlock
+        year: year.toString(),
     };
 
     return {

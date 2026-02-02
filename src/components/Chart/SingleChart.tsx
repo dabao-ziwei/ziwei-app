@@ -1,18 +1,21 @@
 // FILE: src/components/Chart/SingleChart.tsx
-
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { toPng } from 'html-to-image';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { PalaceGrid } from './PalaceGrid';
-import { getClient, getRelationships, getMyProfile, loadYearAdviceRules, type Client, type Relationship, type UserProfile, type YearAdviceRule } from '../../db';
+import { getClient, getRelationships, getMyProfile, loadYearAdviceRules, type Client, type Relationship, type UserProfile, type YearAdviceRule, consumeDivinationV2, issueGuestToken } from '../../db';
 import { ZiWeiEngine } from '../../logic/engine';
 import { GAN, ZHI, PALACE_NAMES, SIHUA_TABLE } from '../../logic/constants';
-import { Loader2, UserPlus, X, ChevronLeft, Camera, Users, Compass } from 'lucide-react';
-import { getFeaturePermission, type PermissionState } from '../../logic/permissions';
+import { Loader2, UserPlus, X, ChevronLeft, Camera, Users, Compass, Sparkles, MessageCircle } from 'lucide-react';
+import { getFeaturePermission } from '../../logic/permissions';
 import { Lunar, LunarYear } from 'lunar-typescript';
 import { YearlyAnalysisBoard } from './YearlyAnalysisBoard';
 import { YearlyAnalysisDrawer } from './YearlyAnalysisDrawer';
 import { scanYearlyAdvice } from '../../logic/advice/yearAdvice';
+import { usePaywall, type PaywallMode, FEATURE_YEARLY_ADVICE_ENABLED, DIVINATION_COST } from '../../hooks/usePaywall';
+import PaywallModal from '../Paywall/PaywallModal';
+
+const OFFICIAL_SITE_URL = 'https://www.dabao.life';
 
 interface SingleChartProps {
   client?: Client;
@@ -103,16 +106,20 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const [externalYearType, setExternalYearType] = useState<'west' | 'roc'>('roc');
   const [externalGan, setExternalGan] = useState<number | null>(null);
 
-  // [Patch] Yearly Analysis States
+  // Yearly Analysis States
   const [isYearlyDrawerOpen, setIsYearlyDrawerOpen] = useState(false);
   const [analysisYear, setAnalysisYear] = useState<number>(new Date().getFullYear());
   const [adviceRules, setAdviceRules] = useState<YearAdviceRule[]>([]);
+
+  const [isPaywallOpen, setIsPaywallOpen] = useState(false);
+  const [paywallMode, setPaywallMode] = useState<PaywallMode>('CONFIRM_DEDUCT');
+  const { checkAccess } = usePaywall(userProfile);
 
   const chartRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     getMyProfile().then(setUserProfile);
-    loadYearAdviceRules().then(setAdviceRules); // [Patch] Load Advice Rules
+    loadYearAdviceRules().then(setAdviceRules); 
 
     const fetchData = async () => {
       if (client) {
@@ -257,10 +264,8 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     return displayEngine.getChartData();
   }, [client, currentHour, daXianSeq, liuNianYear, showXiaoXian, mode, isDivinationReady, divNum]);
 
-  // --- [Patch] Advice Logic ---
   const adviceResult = useMemo(() => {
       if (!chartData || !analysisYear) return undefined;
-      // We pass the fully computed chartData (which has Limit Stars)
       return scanYearlyAdvice(chartData, analysisYear);
   }, [chartData, analysisYear]);
 
@@ -364,7 +369,77 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     }
   };
 
-  // Sync LiuNian to Analysis Year
+  // [P0 Fix] Atomic Handler for Guest (Retry) & Member
+  const handleDivinationClick = async () => {
+    const access = checkAccess();
+    if (access.canAccess) {
+      // 1. SOFT_NOTICE (First time prompt)
+      if (access.mode === 'SOFT_NOTICE') {
+        setPaywallMode('SOFT_NOTICE');
+        setIsPaywallOpen(true);
+        return;
+      }
+      
+      // 2. FULL_PAYWALL with Credits -> Open Modal for Confirmation
+      // (This is the flow ChatGPT warned about: we must not skip confirmation)
+      if (access.mode === 'CONFIRM_DEDUCT') {
+        setPaywallMode('CONFIRM_DEDUCT');
+        setIsPaywallOpen(true);
+        return;
+      }
+
+      // 3. ALLOW or FREE flows
+      // [Guest Flow]
+      if (access.mode === 'GUEST_FREE') {
+          let token = localStorage.getItem('dabao_guest_token');
+          let result = await consumeDivinationV2(0, token);
+
+          // Retry logic: if token missing or invalid
+          if (!result.success && (result.message === 'MISSING_GUEST_TOKEN' || result.message === 'INVALID_GUEST_TOKEN')) {
+               const newToken = await issueGuestToken();
+               if (newToken) {
+                   localStorage.setItem('dabao_guest_token', newToken);
+                   token = newToken;
+                   result = await consumeDivinationV2(0, newToken);
+               }
+          }
+
+          if (result.success) {
+               navigate('/lucky');
+          } else if (result.message === 'GUEST_ALREADY_USED') {
+               setPaywallMode('GUEST_ALREADY_USED');
+               setIsPaywallOpen(true);
+          } else {
+               alert(result.message || '系統忙碌，請重試');
+          }
+          return;
+      }
+
+      // [Member Flow - Free]
+      if (access.mode === 'MEMBER_FREE' && userProfile?.id) {
+          // [P0 Fix] Pass 0 for semantic correctness
+          const result = await consumeDivinationV2(0);
+          if (result.success) {
+              // Refresh Profile
+              const updatedProfile = await getMyProfile();
+              setUserProfile(updatedProfile);
+              navigate('/lucky');
+          } else {
+              alert(result.message || '免費次數使用失敗');
+          }
+          return;
+      }
+
+      // [Member Flow - Allowed by Phase (ANNOUNCE_ONLY)]
+      navigate('/lucky');
+
+    } else {
+      // 4. Blocked (INSUFFICIENT or MUST_LOGIN)
+      setPaywallMode(access.mode);
+      setIsPaywallOpen(true);
+    }
+  };
+
   useEffect(() => {
       if (liuNianYear) {
           setAnalysisYear(liuNianYear);
@@ -628,7 +703,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   }
 
   return (
-    <div className="flex flex-col h-screen w-full bg-slate-100 overflow-hidden">
+    <div className="flex flex-col h-screen w-full bg-slate-100 overflow-hidden relative">
       <div className="flex justify-between items-center px-4 py-2 bg-white border-b border-gray-200 shadow-sm shrink-0 z-50 h-[56px]">
         <button
           onClick={handleBack}
@@ -648,6 +723,31 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
             >
               <Compass size={16} />
             </button>
+
+            {/* [Mod] Insert Divination Button */}
+            <button
+              onClick={handleDivinationClick}
+              className="px-3 py-1.5 rounded-lg border flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700"
+            >
+              <MessageCircle size={16} />
+              <span className="hidden sm:inline">吉凶占卜</span>
+              <span className="sm:hidden">占卜</span>
+            </button>
+
+            {FEATURE_YEARLY_ADVICE_ENABLED && (
+              <button
+                onClick={() => {
+                  setAnalysisYear(new Date().getFullYear());
+                  setIsYearlyDrawerOpen(true);
+                }}
+                className="px-3 py-1.5 rounded-lg border flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                title="查看年度建議"
+              >
+                <Sparkles size={16} />
+                <span className="hidden sm:inline">年度建議</span>
+                <span className="sm:hidden">年度</span>
+              </button>
+            )}
 
             {canDual !== 'hidden' && (
               <button
@@ -817,7 +917,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
           liuMonthIdx={liuMonthIdx}
           liuDayIdx={liuDayIdx}
           currentRealTime={currentRealTime}
-          // [Patch] Pass callback to open drawer
+          // Pass callback to open drawer
           onOpenYearlyAnalysis={(year) => {
               setAnalysisYear(year);
               setIsYearlyDrawerOpen(true);
@@ -825,52 +925,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         />
       </div>
 
-      {mode !== 'divination' && (
-        <div className="w-full shrink-0 border-t-2 border-gray-800 bg-gray-100 z-50">
-          <div className="w-full">
-            <div className="flex w-full overflow-x-auto scrollbar-hide border-b border-gray-300">
-              {daXianList.map((limit: any) => {
-                const isActive = daXianSeq === limit.seq;
-                const isRealTime = currentRealTime && currentRealTime.daSeq === limit.seq;
-                return (
-                  <button
-                    key={limit.seq}
-                    onClick={() => handleDaXianClick(limit.seq)}
-                    className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs relative ${
-                      isActive ? 'bg-gray-600 text-white font-bold' : 'hover:bg-gray-200 text-gray-700'
-                    }`}
-                  >
-                    {isRealTime && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
-                    <div>
-                      {limit.name} {limit.ganZhi}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="flex w-full overflow-x-auto scrollbar-hide">
-              {liuNianList.map((item: any) => {
-                const isActive = liuNianYear === item.year;
-                const isRealTime = currentRealTime && currentRealTime.year === item.year;
-                return (
-                  <button
-                    key={item.year}
-                    onClick={() => handleLiuNianClick(item.year)}
-                    className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs relative ${
-                      isActive ? 'bg-blue-600 text-white font-bold' : 'hover:bg-blue-100 text-gray-600'
-                    }`}
-                  >
-                    {isRealTime && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
-                    {item.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* [Patch] Yearly Analysis Drawer */}
       <YearlyAnalysisDrawer
         open={isYearlyDrawerOpen}
         onClose={() => setIsYearlyDrawerOpen(false)}
@@ -887,6 +941,33 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
             />
         )}
       </YearlyAnalysisDrawer>
+
+      <PaywallModal
+        isOpen={isPaywallOpen}
+        mode={paywallMode}
+        balance={(userProfile as any)?.credits ?? 0}
+        onDeductConfirm={async () => {
+            // [P0 Fix] Atomic Deduction & UI Refresh
+            if (userProfile?.id) {
+                const result = await consumeDivinationV2(DIVINATION_COST);
+                if (result.success) {
+                    const updatedProfile = await getMyProfile();
+                    setUserProfile(updatedProfile);
+                    setIsPaywallOpen(false);
+                    navigate('/lucky');
+                } else {
+                    alert(result.message || '扣點失敗');
+                }
+            }
+        }}
+        onSoftProceed={() => {
+            setIsPaywallOpen(false);
+            navigate('/lucky');
+        }}
+        onGoToTopup={() => window.open(OFFICIAL_SITE_URL, '_blank')} // [P0 Fix] Redirect to Official Site
+        onLogin={() => navigate('/login')}
+        onClose={() => setIsPaywallOpen(false)}
+      />
     </div>
   );
 };

@@ -1,12 +1,12 @@
 // FILE: src/db.ts
 import { supabase } from './supabase'; 
+export { supabase };
+
 import type { UserFeatures } from './logic/permissions'; 
 import type { YearAdviceRule } from './logic/types';
 
-// --- 設定 ---
 const SUPER_VIEW_EMAIL = 'stephenwu.0926@gmail.com';
 
-// --- 介面定義 ---
 export interface UserProfile {
   id: string;
   email: string;
@@ -19,7 +19,9 @@ export interface UserProfile {
   feature_flags?: UserFeatures; 
   activeCount?: number;
   deletedCount?: number;
-  joinDate?: string; 
+  joinDate?: string;
+  credits?: number;
+  free_divination_used?: boolean;
 }
 
 export interface Client {
@@ -51,7 +53,27 @@ export interface Relationship {
   inferred_from?: string;
 }
 
-// --- 輔助：關係稱謂反轉邏輯 ---
+export const getPaywallPhase = async (): Promise<string> => {
+  const { data, error } = await supabase.rpc('get_paywall_phase');
+  if (error || !data) return 'ANNOUNCE_ONLY';
+  return data;
+};
+
+export const issueGuestToken = async (): Promise<string | null> => {
+  const { data, error } = await supabase.rpc('issue_guest_token');
+  if (error || !data?.success) return null;
+  return data.token as string;
+};
+
+export const consumeDivinationV2 = async (cost: number, guestToken?: string | null) => {
+  const { data, error } = await supabase.rpc('consume_divination_v2', {
+    p_cost: cost,
+    p_guest_token: guestToken ?? null,
+  });
+  if (error) return { success: false, message: error.message };
+  return data;
+};
+
 const getInverseRelationType = (type: string, fromGender: '男' | '女'): string => {
     if (['配偶'].includes(type)) return '配偶';
     if (['情侶'].includes(type)) return '情侶';
@@ -63,7 +85,6 @@ const getInverseRelationType = (type: string, fromGender: '男' | '女'): string
     return '朋友'; 
 };
 
-// --- 核心載入邏輯 ---
 export const loadClients = async (): Promise<Client[]> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
@@ -227,7 +248,9 @@ export const getMyProfile = async (): Promise<UserProfile | null> => {
     isBanned: data.is_banned || false,
     can_use_divination: data.can_use_divination ?? true,
     accessExpiry: data.access_expiry,
-    feature_flags: data.feature_flags 
+    feature_flags: data.feature_flags,
+    credits: data.credits || 0,
+    free_divination_used: data.free_divination_used || false
   };
 };
 
@@ -325,7 +348,9 @@ export const getAllProfilesWithStats = async (): Promise<UserProfile[]> => {
     accessExpiry: p.access_expiry,
     feature_flags: p.feature_flags, 
     activeCount: p.active_count, deletedCount: p.deleted_count,
-    joinDate: p.created_at 
+    joinDate: p.created_at,
+    credits: p.credits || 0,
+    free_divination_used: p.free_divination_used || false
   }));
 };
 
@@ -473,7 +498,7 @@ export const bulkUploadDivination = async (items: DivinationContent[]) => {
     return !error;
 };
 
-// --- [Patch Spec v2.1] 流年建議規則 CRUD ---
+// --- 流年建議規則 CRUD ---
 
 export const loadYearAdviceRules = async (): Promise<YearAdviceRule[]> => {
     const { data, error } = await supabase
@@ -489,7 +514,6 @@ export const loadYearAdviceRules = async (): Promise<YearAdviceRule[]> => {
 };
 
 export const saveYearAdviceRule = async (rule: Partial<YearAdviceRule>) => {
-    // [Spec 6.2] is_default 唯一性
     if (rule.is_default) {
         let query = supabase.from('year_advice_rules').update({ is_default: false });
         if (rule.id) {

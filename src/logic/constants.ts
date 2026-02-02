@@ -151,15 +151,15 @@ export const PALACE_REVERSE_MAP: Record<string, string> = {
   '父母': '疾厄',
 };
 
-// --- [Patch Spec v2.1] 流年建議相關定義 ---
+// --- 流年建議相關定義 ---
 
 // 火星、鈴星：僅計算靜態盤
 export const SHA_STARS_STATIC = ['火星', '鈴星'];
 
-// 擎羊比對清單 (Spec 1.1: 兼容 擎羊/大羊/年羊/流羊/小羊)
+// 擎羊比對清單
 export const MATCH_SHEEP = ['擎羊', '大羊', '年羊', '流羊', '小羊'];
 
-// 陀羅比對清單 (Spec 1.1: 兼容 陀羅/大陀/年陀/流陀/小陀)
+// 陀羅比對清單
 export const MATCH_DALA = ['陀羅', '大陀', '年陀', '流陀', '小陀'];
 
 // 2. 六條線定義
@@ -192,34 +192,10 @@ export const FOCUS_PRIORITY: Record<string, number[]> = {
     'fu-ji': [5, 11]     
 };
 
-// 5. DB 儲存的宮位 Offset 對照 (修正名稱: 流僕)
+// 5. DB 儲存的宮位 Offset 對照
 export const ADVICE_PALACE_OFFSETS = [
     { id: 0, name: '流命' }, { id: 1, name: '流兄' }, { id: 2, name: '流夫' },
     { id: 3, name: '流子' }, { id: 4, name: '流財' }, { id: 5, name: '流疾' },
     { id: 6, name: '流遷' }, { id: 7, name: '流僕' }, { id: 8, name: '流官' },
     { id: 9, name: '流田' }, { id: 10, name: '流福' }, { id: 11, name: '流父' }
 ];
-
-// 6. 宮位語境映射
-export const PALACE_CONTEXTS: Record<number, 'RELATION' | 'WORK' | 'WEALTH' | 'HEALTH'> = {
-    2: 'RELATION', 1: 'RELATION', 7: 'RELATION', 
-    8: 'WORK', 6: 'WORK',                        
-    4: 'WEALTH', 10: 'WEALTH', 9: 'WEALTH',      
-    0: 'HEALTH', 5: 'HEALTH', 11: 'HEALTH', 3: 'HEALTH' 
-};
-
-// 7. 火鈴片語
-export const FIRE_BELL_PHRASES = {
-    HUO: {
-        RELATION: '情緒起伏大、忽冷忽熱',
-        WORK: '三分鐘熱度、衝太快',
-        WEALTH: '花費衝動、熱情來得快去得也快',
-        HEALTH: '情緒波動牽動狀態，容易累積壓力'
-    },
-    LING: {
-        RELATION: '容易放大細節、斤斤計較',
-        WORK: '容易陷入算計與比較，影響決策手感',
-        WEALTH: '對得失很敏感，容易為小事耗心力',
-        HEALTH: '容易過度思考，讓自己更緊繃'
-    }
-};
