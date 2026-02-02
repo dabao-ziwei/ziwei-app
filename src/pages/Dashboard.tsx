@@ -1,8 +1,10 @@
+// FILE: src/pages/Dashboard.tsx
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles, ArrowRight, Menu, LogOut, UserCog, Loader2, PlusCircle, Database, FileText, Calendar, Clock, HelpCircle, ArrowLeft, Globe } from 'lucide-react';
 import { supabase } from '../supabase';
-import { loadClients, saveClient, getMyProfile, getUsedChartCount, type Client, type UserProfile } from '../db';
+// [P2 Fix] Remove unused 'getUsedChartCount'
+import { loadClients, saveClient, getMyProfile, type Client, type UserProfile, consumeDivinationV2, issueGuestToken } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
 import { calculateDailyFortune, type DailyFortune } from '../logic/fortune';
 import { FortuneWidget } from '../components/FortuneWidget';
@@ -10,6 +12,8 @@ import { UserManagementModal } from '../components/UserManagementModal';
 import { LuckyDivinationModal } from '../components/LuckyDivinationModal';
 import { ZHI } from '../logic/constants';
 import { getFeaturePermission } from '../logic/permissions';
+import { usePaywall, type PaywallMode, DIVINATION_COST } from '../hooks/usePaywall';
+import PaywallModal from '../components/Paywall/PaywallModal';
 
 const SUPER_ADMIN_EMAIL = 'stephenwu.0926@gmail.com';
 const OFFICIAL_SITE_URL = 'https://www.dabao.life';
@@ -323,7 +327,7 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
                     <div className="absolute top-0 left-0 w-20 h-20 border-4 border-blue-100 rounded-full border-t-blue-500 animate-spin" />
                 </div>
 
-                <h3 className="text-xl font-bold text-slate-800 mb-2 animate-in slide-in-from-bottom-2 fade-in duration-300 key={loadingText}">
+                <h3 className="text-xl font-bold text-slate-800 mb-2 animate-in slide-in-from-bottom-2 fade-in duration-300">
                     {loadingText}
                 </h3>
                 <p className="text-slate-400 text-sm">正在為您繪製專屬命盤...</p>
@@ -349,6 +353,14 @@ export const Dashboard: React.FC = () => {
   const [isLuckyDivinationOpen, setIsLuckyDivinationOpen] = useState(false);
 
   const [forceOnboarding, setForceOnboarding] = useState(false);
+
+  // [P0] Paywall States
+  const [isPaywallOpen, setIsPaywallOpen] = useState(false);
+  const [paywallMode, setPaywallMode] = useState<PaywallMode>('CONFIRM_DEDUCT');
+  const { checkAccess } = usePaywall(userProfile);
+  
+  // [P0 Fix] Define permission before handler use
+  const canLuckyDivination = useMemo(() => getFeaturePermission(userProfile, 'lucky_divination'), [userProfile]);
 
   const initDashboard = async () => {
     setLoading(true);
@@ -430,7 +442,78 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const canLuckyDivination = useMemo(() => getFeaturePermission(userProfile, 'lucky_divination'), [userProfile]);
+  // [P0] Atomic Handler for Dashboard Entry
+  const handleDivinationClick = async () => {
+    if (canLuckyDivination !== 'enabled') return;
+
+    const access = checkAccess();
+    if (access.canAccess) {
+      if (access.mode === 'SOFT_NOTICE') {
+        setPaywallMode('SOFT_NOTICE');
+        setIsPaywallOpen(true);
+        return; // [P1 Fix] Ensure flow stops here
+      }
+      
+      // CONFIRM_DEDUCT: Must confirm via Modal first
+      if (access.mode === 'CONFIRM_DEDUCT') {
+        setPaywallMode('CONFIRM_DEDUCT');
+        setIsPaywallOpen(true);
+        return;
+      }
+
+      // [Guest Flow]
+      if (access.mode === 'GUEST_FREE') {
+          let token = localStorage.getItem('dabao_guest_token');
+          let result = await consumeDivinationV2(0, token);
+
+          // Retry logic
+          if (!result.success && (result.message === 'MISSING_GUEST_TOKEN' || result.message === 'INVALID_GUEST_TOKEN')) {
+               const newToken = await issueGuestToken();
+               if (newToken) {
+                   localStorage.setItem('dabao_guest_token', newToken);
+                   token = newToken;
+                   result = await consumeDivinationV2(0, newToken);
+               }
+          }
+
+          if (result.success) {
+               setIsLuckyDivinationOpen(true);
+          } else if (result.message === 'GUEST_ALREADY_USED') {
+               setPaywallMode('GUEST_ALREADY_USED');
+               setIsPaywallOpen(true);
+          } else {
+               alert(result.message || '系統忙碌，請重試');
+          }
+          return;
+      }
+
+      // [Member Flow - Free]
+      if (access.mode === 'MEMBER_FREE') {
+          // [P0 Fix] Pass 0 for semantic correctness; NO userProfile.id gating
+          const result = await consumeDivinationV2(0);
+          if (result.success) {
+              const updatedProfile = await getMyProfile();
+              setUserProfile(updatedProfile);
+              setIsLuckyDivinationOpen(true);
+          } else {
+              if (result.message === 'PROFILE_NOT_FOUND') {
+                  alert('帳號資料尚未建立，請登出再登入一次');
+              } else {
+                  alert(result.message || '免費次數使用失敗');
+              }
+          }
+          return;
+      }
+
+      // [Allowed by Phase (ANNOUNCE_ONLY)]
+      setIsLuckyDivinationOpen(true);
+
+    } else {
+      // Blocked (INSUFFICIENT or MUST_LOGIN)
+      setPaywallMode(access.mode);
+      setIsPaywallOpen(true);
+    }
+  };
 
   if (loading) return <div className="flex h-screen items-center justify-center bg-slate-950"><Loader2 className="animate-spin text-slate-500" /></div>;
 
@@ -523,7 +606,7 @@ export const Dashboard: React.FC = () => {
                         <FileText size={16} /> 命盤列表
                     </button>
                     <button 
-                        onClick={() => { if (canLuckyDivination === 'enabled') setIsLuckyDivinationOpen(true); }}
+                        onClick={handleDivinationClick}
                         disabled={canLuckyDivination === 'disabled'}
                         className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all border border-slate-700/50
                             ${canLuckyDivination === 'enabled' 
@@ -591,9 +674,7 @@ export const Dashboard: React.FC = () => {
             </a>
 
             <button 
-                onClick={() => {
-                    if (canLuckyDivination === 'enabled') setIsLuckyDivinationOpen(true);
-                }}
+                onClick={handleDivinationClick}
                 disabled={canLuckyDivination === 'disabled'}
                 className="flex flex-col items-center gap-1 group w-16"
             >
@@ -616,6 +697,36 @@ export const Dashboard: React.FC = () => {
         <LuckyDivinationModal 
             isOpen={isLuckyDivinationOpen} 
             onClose={() => setIsLuckyDivinationOpen(false)} 
+        />
+
+        {/* [P0 Fix] Mount Paywall Modal with Profile Refresh */}
+        <PaywallModal
+            isOpen={isPaywallOpen}
+            mode={paywallMode}
+            balance={(userProfile as any)?.credits ?? 0}
+            onDeductConfirm={async () => {
+                // [P0 Fix] Remove userProfile?.id gating to prevent dead clicks
+                const result = await consumeDivinationV2(DIVINATION_COST);
+                if (result.success) {
+                    const updatedProfile = await getMyProfile();
+                    setUserProfile(updatedProfile);
+                    setIsPaywallOpen(false);
+                    setIsLuckyDivinationOpen(true);
+                } else {
+                    if (result.message === 'PROFILE_NOT_FOUND') {
+                        alert('帳號資料尚未建立，請登出再登入一次');
+                    } else {
+                        alert(result.message || '扣點失敗');
+                    }
+                }
+            }}
+            onSoftProceed={() => {
+                setIsPaywallOpen(false);
+                setIsLuckyDivinationOpen(true);
+            }}
+            onGoToTopup={() => window.open(OFFICIAL_SITE_URL, '_blank')}
+            onLogin={() => navigate('/login')}
+            onClose={() => setIsPaywallOpen(false)}
         />
     </div>
   );

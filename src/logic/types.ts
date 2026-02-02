@@ -53,7 +53,16 @@ export interface ChartData {
   direction: number;    // 陰陽順逆 (1 or -1)
 }
 
-// --- [Patch Spec v2.1] 流年建議相關型別 ---
+// --- 流年建議相關型別 ---
+
+// Block A/B/C/D 結構化文案
+export interface AdviceContentV3 {
+    anchor: string;        // Block A: 年度一句話定錨 (Max 25字)
+    scenario: string;      // Block B: 情境式說明
+    todo: string[];        // Block C1: 適合做的事
+    avoid: string[];       // Block C2: 今年要避免的事
+    extension: string;     // Block D: 延伸引導
+}
 
 // 後台規則
 export interface YearAdviceRule {
@@ -61,39 +70,30 @@ export interface YearAdviceRule {
     palace: number; // 0-11
     min_score: number;
     max_score: number | null; 
-    content: string;
+    content: string; // v2 Fallback
+    content_struct?: AdviceContentV3; // v3 Struct
     priority: number;
     is_default: boolean;
     updated_at?: string;
 }
 
-// 事件紀錄
+// 事件紀錄 (僅供內部 Debug 或 Logic 使用，不前台顯示)
 export interface PalaceEventLog {
-    sheepHits: string[];  // 擎羊/大羊/年羊
-    toroHits: string[];   // 陀羅/大陀/年陀
-    huoHits: number;      // 0/1
-    lingHits: number;     // 0/1
-    jiHits: { star: string; scope?: string }[]; // 化忌明細
+    sheepHits: string[];  
+    toroHits: string[];   
+    huoHits: number;      
+    lingHits: number;     
+    jiHits: { star: string; scope?: string }[];
     totalScore: number;
 }
 
-// Token 輸出
+// Token 輸出 (僅支援語義型，目前預留擴充，v3 不使用結構型)
 export interface AdviceTokens {
-    focus_palace: string;
-    focus_score: string;
-    line_score: string;
-    top_line: string;
-    sheep_count: string;
-    sheep_word: string;
-    toro_count: string;
-    toro_word: string;
-    huo_phrase: string;
-    huo_block: string;
-    ling_phrase: string;
-    ling_block: string;
+    year: string;
+    [key: string]: string;
 }
 
-// 分析結果 v2.1 (移除 starsFound)
+// 分析結果
 export interface YearAdviceResult {
     year: number;
     topLineId: string;
