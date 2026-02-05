@@ -117,6 +117,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const [externalYearType, setExternalYearType] = useState<'west' | 'roc'>('roc');
   const [externalGan, setExternalGan] = useState<number | null>(null);
 
+  // Yearly Analysis States
   const [isYearlyDrawerOpen, setIsYearlyDrawerOpen] = useState(false);
   const [analysisYear, setAnalysisYear] = useState<number>(new Date().getFullYear());
   const [adviceRules, setAdviceRules] = useState<YearAdviceRule[]>([]);
@@ -225,7 +226,12 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     const naturalDayObj = Lunar.fromYmd(liuNianYear, effectiveMonth, liuDay);
     const dGan = naturalDayObj.getDayGanIndex();
 
-    return { liuMonthIdx: flowMonthIdx, liuDayIdx: flowDayIdx, liuMonthGan: mGan, liuDayGan: dGan };
+    return {
+      liuMonthIdx: flowMonthIdx,
+      liuDayIdx: flowDayIdx,
+      liuMonthGan: mGan,
+      liuDayGan: dGan,
+    };
   }, [baseChartData, liuNianYear, liuMonth, isLiuMonthLeap, liuDay]);
 
   const chartData = useMemo(() => {
@@ -239,17 +245,19 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
     if (mode === 'divination') return displayEngine.getChartData();
 
+    // ✅ 關鍵：未選大限時，計算用「第一大限」的 daGan（不是 -1）
+    const effectiveDaXianSeq = daXianSeq === -1 ? 0 : daXianSeq;
+
     let daGan = -1,
       liuGan = -1,
       liuZhi = -1,
       xiaoGan = -1;
-
     const tempBaseData = displayEngine.getChartData();
     const startPos = displayEngine.getMingPos();
     const direction = tempBaseData.direction || 1;
 
-    if (daXianSeq >= 0) {
-      const offset = daXianSeq * direction;
+    if (effectiveDaXianSeq >= 0) {
+      const offset = effectiveDaXianSeq * direction;
       const daXianPalaceIdx = (startPos + offset + 120) % 12;
       const p = tempBaseData.palaces[daXianPalaceIdx];
       if (p) daGan = p.ganIndex;
@@ -310,19 +318,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     setIsExternalInputOpen(false);
   };
 
-  const resetAllStates = () => {
-    setDaXianSeq(-1);
-    setLiuNianYear(null);
-    setShowXiaoXian(false);
-    setLiuMonth(null);
-    setIsLiuMonthLeap(false);
-    setLiuDay(null);
-    setSelectedPalace(null);
-    setFlyingPalace(null);
-    setIsTwinMode(false);
-    setReverseMap({});
-  };
-
   const handleNavigateToRelation = (target: Client) => {
     if (client) {
       setHistoryStack((prev) => [...prev, client]);
@@ -357,22 +352,38 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     return '(無主星)';
   }, [baseEngine, baseChartData, mode, chartData, divMingIndex]);
 
+  const resetAllStates = () => {
+    setDaXianSeq(-1);
+    setLiuNianYear(null);
+    setShowXiaoXian(false);
+    setLiuMonth(null);
+    setIsLiuMonthLeap(false);
+    setLiuDay(null);
+    setSelectedPalace(null);
+    setFlyingPalace(null);
+    setIsTwinMode(false);
+    setReverseMap({});
+  };
+
   const changeHour = (delta: number) => {
     const nextHour = calcNextHour(currentHour, delta);
     setCurrentHour(nextHour);
     resetAllStates();
   };
-
   const resetTime = () => {
     setCurrentHour(client!.birthHour);
     resetAllStates();
   };
 
   const handleBack = () => {
-    if (onBack) onBack();
-    else navigate(-1);
+    if (onBack) {
+      onBack();
+    } else {
+      navigate(-1);
+    }
   };
 
+  // [P0 Fix] Atomic Handler for Guest (Retry) & Member
   const handleDivinationClick = async () => {
     const access = checkAccess();
     if (access.canAccess) {
@@ -417,7 +428,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         if (result.success) {
           const updatedProfile = await getMyProfile();
           setUserProfile(updatedProfile);
-          setIsPaywallOpen(false);
           navigate('/lucky');
         } else {
           alert(result.message || '免費次數使用失敗');
@@ -499,10 +509,12 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     return list;
   }, [baseChartData, baseEngine, mode]);
 
+  // ✅ 永遠使用「有效大限」：未選 = 0
+  const effectiveDaXianSeq = daXianSeq === -1 ? 0 : daXianSeq;
+
   const liuNianList = useMemo(() => {
     if (mode === 'divination') return [];
-    const targetSeq = daXianSeq === -1 ? 0 : daXianSeq;
-    const targetDaXian = daXianList[targetSeq];
+    const targetDaXian = daXianList[effectiveDaXianSeq];
     if (!targetDaXian) return [];
     const list: { year: number; age: number; label: string }[] = [];
     for (let i = 0; i < 10; i++) {
@@ -510,10 +522,10 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       const age = targetDaXian.startAge + i;
       const gan = (year - 4) % 10;
       const zhi = (year - 4) % 12;
-      list.push({ year, age, label: `${year}${GAN[gan]}${ZHI[zhi]}·${age}` });
+      list.push({ year, age, label: `${year}${GAN[gan]}${ZHI[zhi]} ${age}` });
     }
     return list;
-  }, [daXianSeq, daXianList, mode]);
+  }, [effectiveDaXianSeq, daXianList, mode]);
 
   const xiaoXianMingIdx = useMemo(() => {
     if (!liuNianYear || !baseChartData || !baseEngine) return -1;
@@ -565,6 +577,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   };
 
   const handleLiuNianClick = (year: number) => {
+    // ✅ 若目前未選大限，仍可直接點流年：視覺上不一定要強制選，但計算已用 effectiveDaXianSeq
     setLiuNianYear(liuNianYear === year ? null : year);
     setLiuMonth(null);
     setLiuDay(null);
@@ -599,7 +612,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       mode === 'divination' && divMingIndex !== -1
         ? divMingIndex
         : daXianSeq >= 0
-        ? daXianList[daXianSeq].palaceIdx
+        ? daXianList[daXianSeq]?.palaceIdx
         : liuNianYear
         ? chartData!.palaces.findIndex((p) => p.zhiIndex === (liuNianYear - 4) % 12)
         : benMingPos;
@@ -616,7 +629,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       yueName = undefined,
       riName = undefined;
 
-    if (daXianSeq >= 0) {
+    if (daXianSeq >= 0 && daXianList[daXianSeq]) {
       const daMingIdx = daXianList[daXianSeq].palaceIdx;
       const offset = (daMingIdx - currentIdx + 12) % 12;
       daName = `大${PALACE_NAMES[offset].substring(0, 1)}`;
@@ -688,10 +701,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     <div className="flex flex-col h-screen w-full bg-slate-100 overflow-hidden relative">
       <div className="flex justify-between items-center px-4 py-2 bg-white border-b border-gray-200 shadow-sm shrink-0 z-50 h-[56px]">
         <button
-          onClick={() => {
-            if (onBack) onBack();
-            else navigate(-1);
-          }}
+          onClick={handleBack}
           className="bg-white text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm"
         >
           <ChevronLeft size={16} /> 列表
@@ -914,10 +924,10 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         />
       </div>
 
-      {/* ✅ 大限列：兩行顯示，但每顆高度固定一致，不會「有人長高」 */}
+      {/* --- 底部：大限列 --- */}
       {mode !== 'divination' && daXianList.length > 0 && (
-        <div className="shrink-0 bg-white border-t border-gray-200 w-full z-40">
-          <div className="flex overflow-x-auto no-scrollbar w-full touch-pan-x" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <div className="shrink-0 bg-white border-t border-gray-200 w-full z-40 overflow-hidden">
+          <div className="flex overflow-x-auto no-scrollbar w-full">
             {daXianList.map((item: any) => {
               const isActive = daXianSeq === item.seq;
               const isRealTime = currentRealTime && currentRealTime.daSeq === item.seq;
@@ -925,14 +935,14 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
                 <button
                   key={item.seq}
                   onClick={() => handleDaXianClick(item.seq)}
-                  className={`flex-none min-w-[84px] h-[52px] px-2 border-r border-gray-300 last:border-r-0 transition-colors text-xs relative ${
-                    isActive ? 'bg-indigo-600 text-white font-bold' : 'hover:bg-indigo-50 text-gray-700'
+                  className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs relative ${
+                    isActive ? 'bg-indigo-600 text-white font-bold' : 'hover:bg-indigo-50 text-gray-600'
                   }`}
                 >
-                  {isRealTime && <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
-                  <div className="h-full flex flex-col items-center justify-center leading-[1.05]">
-                    <span className="whitespace-nowrap">{item.name}</span>
-                    <span className="whitespace-nowrap text-[11px] opacity-80">{item.ganZhi}</span>
+                  {isRealTime && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
+                  <div className="flex flex-col items-center">
+                    <span>{item.name}</span>
+                    <span className="scale-75 opacity-80">{item.ganZhi}</span>
                   </div>
                 </button>
               );
@@ -941,10 +951,10 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         </div>
       )}
 
-      {/* ✅ 流年列：手機可滑；高度固定；文字不亂換行 */}
+      {/* --- 底部：流年列（永遠顯示；未選大限 = 第一大限） --- */}
       {mode !== 'divination' && daXianList.length > 0 && (
-        <div className="shrink-0 bg-slate-50 border-t border-gray-200 w-full z-40">
-          <div className="flex overflow-x-auto no-scrollbar w-full touch-pan-x" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <div className="shrink-0 bg-slate-50 border-t border-gray-200 w-full z-40 overflow-hidden">
+          <div className="flex overflow-x-auto no-scrollbar w-full">
             {liuNianList.map((item) => {
               const isActive = liuNianYear === item.year;
               const isRealTime = currentRealTime && currentRealTime.year === item.year;
@@ -952,12 +962,12 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
                 <button
                   key={item.year}
                   onClick={() => handleLiuNianClick(item.year)}
-                  className={`flex-none min-w-[120px] h-[40px] px-3 border-r border-gray-300 last:border-r-0 transition-colors text-xs relative whitespace-nowrap ${
-                    isActive ? 'bg-blue-600 text-white font-bold' : 'hover:bg-blue-100 text-gray-700'
+                  className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs relative ${
+                    isActive ? 'bg-blue-600 text-white font-bold' : 'hover:bg-blue-100 text-gray-600'
                   }`}
                 >
-                  {isRealTime && <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
-                  <span className="whitespace-nowrap">{item.label}</span>
+                  {isRealTime && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
+                  {item.label}
                 </button>
               );
             })}
@@ -965,8 +975,16 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         </div>
       )}
 
-      <YearlyAnalysisDrawer open={isYearlyDrawerOpen} onClose={() => setIsYearlyDrawerOpen(false)} title={`${analysisYear} 年度分析`} adviceResult={adviceResult} adviceRules={adviceRules}>
-        {baseEngine && client && <YearlyAnalysisBoard engine={baseEngine} year={analysisYear} userId={userProfile?.id || 'guest'} chartId={client.id} />}
+      <YearlyAnalysisDrawer
+        open={isYearlyDrawerOpen}
+        onClose={() => setIsYearlyDrawerOpen(false)}
+        title={`${analysisYear} 年度分析`}
+        adviceResult={adviceResult}
+        adviceRules={adviceRules}
+      >
+        {baseEngine && client && (
+          <YearlyAnalysisBoard engine={baseEngine} year={analysisYear} userId={userProfile?.id || 'guest'} chartId={client.id} />
+        )}
       </YearlyAnalysisDrawer>
 
       <PaywallModal
