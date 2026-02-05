@@ -3,7 +3,18 @@ import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { toPng } from 'html-to-image';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { PalaceGrid } from './PalaceGrid';
-import { getClient, getRelationships, getMyProfile, loadYearAdviceRules, type Client, type Relationship, type UserProfile, type YearAdviceRule, consumeDivinationV2, issueGuestToken } from '../../db';
+import {
+  getClient,
+  getRelationships,
+  getMyProfile,
+  loadYearAdviceRules,
+  type Client,
+  type Relationship,
+  type UserProfile,
+  type YearAdviceRule,
+  consumeDivinationV2,
+  issueGuestToken,
+} from '../../db';
 import { ZiWeiEngine } from '../../logic/engine';
 import { GAN, ZHI, PALACE_NAMES, SIHUA_TABLE } from '../../logic/constants';
 import { Loader2, UserPlus, X, ChevronLeft, Camera, Users, Compass, Sparkles, MessageCircle } from 'lucide-react';
@@ -119,7 +130,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
   useEffect(() => {
     getMyProfile().then(setUserProfile);
-    loadYearAdviceRules().then(setAdviceRules); 
+    loadYearAdviceRules().then(setAdviceRules);
 
     const fetchData = async () => {
       if (client) {
@@ -265,8 +276,8 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   }, [client, currentHour, daXianSeq, liuNianYear, showXiaoXian, mode, isDivinationReady, divNum]);
 
   const adviceResult = useMemo(() => {
-      if (!chartData || !analysisYear) return undefined;
-      return scanYearlyAdvice(chartData, analysisYear);
+    if (!chartData || !analysisYear) return undefined;
+    return scanYearlyAdvice(chartData, analysisYear);
   }, [chartData, analysisYear]);
 
   const { divMingIndex, divSiHuaMap } = useMemo(() => {
@@ -379,7 +390,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         setIsPaywallOpen(true);
         return;
       }
-      
+
       // 2. FULL_PAYWALL with Credits -> Open Modal for Confirmation
       // (This is the flow ChatGPT warned about: we must not skip confirmation)
       if (access.mode === 'CONFIRM_DEDUCT') {
@@ -391,48 +402,47 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       // 3. ALLOW or FREE flows
       // [Guest Flow]
       if (access.mode === 'GUEST_FREE') {
-          let token = localStorage.getItem('dabao_guest_token');
-          let result = await consumeDivinationV2(0, token);
+        let token = localStorage.getItem('dabao_guest_token');
+        let result = await consumeDivinationV2(0, token);
 
-          // Retry logic: if token missing or invalid
-          if (!result.success && (result.message === 'MISSING_GUEST_TOKEN' || result.message === 'INVALID_GUEST_TOKEN')) {
-               const newToken = await issueGuestToken();
-               if (newToken) {
-                   localStorage.setItem('dabao_guest_token', newToken);
-                   token = newToken;
-                   result = await consumeDivinationV2(0, newToken);
-               }
+        // Retry logic: if token missing or invalid
+        if (!result.success && (result.message === 'MISSING_GUEST_TOKEN' || result.message === 'INVALID_GUEST_TOKEN')) {
+          const newToken = await issueGuestToken();
+          if (newToken) {
+            localStorage.setItem('dabao_guest_token', newToken);
+            token = newToken;
+            result = await consumeDivinationV2(0, newToken);
           }
+        }
 
-          if (result.success) {
-               navigate('/lucky');
-          } else if (result.message === 'GUEST_ALREADY_USED') {
-               setPaywallMode('GUEST_ALREADY_USED');
-               setIsPaywallOpen(true);
-          } else {
-               alert(result.message || '系統忙碌，請重試');
-          }
-          return;
+        if (result.success) {
+          navigate('/lucky');
+        } else if (result.message === 'GUEST_ALREADY_USED') {
+          setPaywallMode('GUEST_ALREADY_USED');
+          setIsPaywallOpen(true);
+        } else {
+          alert(result.message || '系統忙碌，請重試');
+        }
+        return;
       }
 
       // [Member Flow - Free]
       if (access.mode === 'MEMBER_FREE' && userProfile?.id) {
-          // [P0 Fix] Pass 0 for semantic correctness
-          const result = await consumeDivinationV2(0);
-          if (result.success) {
-              // Refresh Profile
-              const updatedProfile = await getMyProfile();
-              setUserProfile(updatedProfile);
-              navigate('/lucky');
-          } else {
-              alert(result.message || '免費次數使用失敗');
-          }
-          return;
+        // [P0 Fix] Pass 0 for semantic correctness
+        const result = await consumeDivinationV2(0);
+        if (result.success) {
+          // Refresh Profile
+          const updatedProfile = await getMyProfile();
+          setUserProfile(updatedProfile);
+          navigate('/lucky');
+        } else {
+          alert(result.message || '免費次數使用失敗');
+        }
+        return;
       }
 
       // [Member Flow - Allowed by Phase (ANNOUNCE_ONLY)]
       navigate('/lucky');
-
     } else {
       // 4. Blocked (INSUFFICIENT or MUST_LOGIN)
       setPaywallMode(access.mode);
@@ -441,11 +451,11 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   };
 
   useEffect(() => {
-      if (liuNianYear) {
-          setAnalysisYear(liuNianYear);
-      } else {
-          setAnalysisYear(new Date().getFullYear());
-      }
+    if (liuNianYear) {
+      setAnalysisYear(liuNianYear);
+    } else {
+      setAnalysisYear(new Date().getFullYear());
+    }
   }, [liuNianYear]);
 
   const isBenMingState = daXianSeq === -1 && liuNianYear === null;
@@ -768,7 +778,13 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
               (externalGan !== null ? (
                 <div className="flex items-center gap-1 bg-purple-100 border border-purple-200 px-3 py-1.5 rounded-lg animate-in fade-in">
                   <span className="text-sm font-bold text-purple-700">{GAN[externalGan]}干飛化</span>
-                  <button onClick={() => { setExternalGan(null); setExternalYearStr(''); }} className="text-purple-400 hover:text-purple-600 ml-1">
+                  <button
+                    onClick={() => {
+                      setExternalGan(null);
+                      setExternalYearStr('');
+                    }}
+                    className="text-purple-400 hover:text-purple-600 ml-1"
+                  >
                     <X size={16} />
                   </button>
                 </div>
@@ -919,11 +935,66 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
           currentRealTime={currentRealTime}
           // Pass callback to open drawer
           onOpenYearlyAnalysis={(year) => {
-              setAnalysisYear(year);
-              setIsYearlyDrawerOpen(true);
+            setAnalysisYear(year);
+            setIsYearlyDrawerOpen(true);
           }}
         />
       </div>
+
+      {/* =========================
+          RE-ADDED: 底部大限 / 流年導航列
+         ========================= */}
+
+      {/* 1) 大限列：非占卜模式顯示 */}
+      {mode !== 'divination' && (
+        <div className="shrink-0 bg-white border-t border-gray-200 w-full z-40 overflow-hidden">
+          <div className="flex overflow-x-auto no-scrollbar w-full">
+            {daXianList.map((item) => {
+              const isActive = daXianSeq === item.seq;
+              const isRealTime = currentRealTime && currentRealTime.daSeq === item.seq;
+              return (
+                <button
+                  key={item.seq}
+                  onClick={() => handleDaXianClick(item.seq)}
+                  className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs relative ${
+                    isActive ? 'bg-indigo-600 text-white font-bold' : 'hover:bg-indigo-50 text-gray-600'
+                  }`}
+                >
+                  {isRealTime && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
+                  <div className="flex flex-col items-center">
+                    <span>{item.name}</span>
+                    <span className="scale-75 opacity-80">{item.ganZhi}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 2) 流年列：非占卜模式 + 已選大限才顯示 */}
+      {mode !== 'divination' && daXianSeq >= 0 && (
+        <div className="shrink-0 bg-slate-50 border-t border-gray-200 w-full z-40 overflow-hidden">
+          <div className="flex overflow-x-auto no-scrollbar w-full">
+            {liuNianList.map((item) => {
+              const isActive = liuNianYear === item.year;
+              const isRealTime = currentRealTime && currentRealTime.year === item.year;
+              return (
+                <button
+                  key={item.year}
+                  onClick={() => handleLiuNianClick(item.year)}
+                  className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs relative ${
+                    isActive ? 'bg-blue-600 text-white font-bold' : 'hover:bg-blue-100 text-gray-600'
+                  }`}
+                >
+                  {isRealTime && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <YearlyAnalysisDrawer
         open={isYearlyDrawerOpen}
@@ -933,12 +1004,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         adviceRules={adviceRules}
       >
         {baseEngine && client && (
-            <YearlyAnalysisBoard 
-                engine={baseEngine} 
-                year={analysisYear} 
-                userId={userProfile?.id || 'guest'}
-                chartId={client.id}
-            />
+          <YearlyAnalysisBoard engine={baseEngine} year={analysisYear} userId={userProfile?.id || 'guest'} chartId={client.id} />
         )}
       </YearlyAnalysisDrawer>
 
@@ -947,22 +1013,22 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         mode={paywallMode}
         balance={(userProfile as any)?.credits ?? 0}
         onDeductConfirm={async () => {
-            // [P0 Fix] Atomic Deduction & UI Refresh
-            if (userProfile?.id) {
-                const result = await consumeDivinationV2(DIVINATION_COST);
-                if (result.success) {
-                    const updatedProfile = await getMyProfile();
-                    setUserProfile(updatedProfile);
-                    setIsPaywallOpen(false);
-                    navigate('/lucky');
-                } else {
-                    alert(result.message || '扣點失敗');
-                }
+          // [P0 Fix] Atomic Deduction & UI Refresh
+          if (userProfile?.id) {
+            const result = await consumeDivinationV2(DIVINATION_COST);
+            if (result.success) {
+              const updatedProfile = await getMyProfile();
+              setUserProfile(updatedProfile);
+              setIsPaywallOpen(false);
+              navigate('/lucky');
+            } else {
+              alert(result.message || '扣點失敗');
             }
+          }
         }}
         onSoftProceed={() => {
-            setIsPaywallOpen(false);
-            navigate('/lucky');
+          setIsPaywallOpen(false);
+          navigate('/lucky');
         }}
         onGoToTopup={() => window.open(OFFICIAL_SITE_URL, '_blank')} // [P0 Fix] Redirect to Official Site
         onLogin={() => navigate('/login')}
