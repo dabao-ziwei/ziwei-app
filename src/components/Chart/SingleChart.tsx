@@ -245,6 +245,9 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
     if (mode === 'divination') return displayEngine.getChartData();
 
+    // ✅ 關鍵：未選大限時，計算用「第一大限」的 daGan（不是 -1）
+    const effectiveDaXianSeq = daXianSeq === -1 ? 0 : daXianSeq;
+
     let daGan = -1,
       liuGan = -1,
       liuZhi = -1,
@@ -253,8 +256,8 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     const startPos = displayEngine.getMingPos();
     const direction = tempBaseData.direction || 1;
 
-    if (daXianSeq >= 0) {
-      const offset = daXianSeq * direction;
+    if (effectiveDaXianSeq >= 0) {
+      const offset = effectiveDaXianSeq * direction;
       const daXianPalaceIdx = (startPos + offset + 120) % 12;
       const p = tempBaseData.palaces[daXianPalaceIdx];
       if (p) daGan = p.ganIndex;
@@ -384,28 +387,22 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const handleDivinationClick = async () => {
     const access = checkAccess();
     if (access.canAccess) {
-      // 1. SOFT_NOTICE (First time prompt)
       if (access.mode === 'SOFT_NOTICE') {
         setPaywallMode('SOFT_NOTICE');
         setIsPaywallOpen(true);
         return;
       }
 
-      // 2. FULL_PAYWALL with Credits -> Open Modal for Confirmation
-      // (This is the flow ChatGPT warned about: we must not skip confirmation)
       if (access.mode === 'CONFIRM_DEDUCT') {
         setPaywallMode('CONFIRM_DEDUCT');
         setIsPaywallOpen(true);
         return;
       }
 
-      // 3. ALLOW or FREE flows
-      // [Guest Flow]
       if (access.mode === 'GUEST_FREE') {
         let token = localStorage.getItem('dabao_guest_token');
         let result = await consumeDivinationV2(0, token);
 
-        // Retry logic: if token missing or invalid
         if (!result.success && (result.message === 'MISSING_GUEST_TOKEN' || result.message === 'INVALID_GUEST_TOKEN')) {
           const newToken = await issueGuestToken();
           if (newToken) {
@@ -426,12 +423,9 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         return;
       }
 
-      // [Member Flow - Free]
       if (access.mode === 'MEMBER_FREE' && userProfile?.id) {
-        // [P0 Fix] Pass 0 for semantic correctness
         const result = await consumeDivinationV2(0);
         if (result.success) {
-          // Refresh Profile
           const updatedProfile = await getMyProfile();
           setUserProfile(updatedProfile);
           navigate('/lucky');
@@ -441,21 +435,16 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         return;
       }
 
-      // [Member Flow - Allowed by Phase (ANNOUNCE_ONLY)]
       navigate('/lucky');
     } else {
-      // 4. Blocked (INSUFFICIENT or MUST_LOGIN)
       setPaywallMode(access.mode);
       setIsPaywallOpen(true);
     }
   };
 
   useEffect(() => {
-    if (liuNianYear) {
-      setAnalysisYear(liuNianYear);
-    } else {
-      setAnalysisYear(new Date().getFullYear());
-    }
+    if (liuNianYear) setAnalysisYear(liuNianYear);
+    else setAnalysisYear(new Date().getFullYear());
   }, [liuNianYear]);
 
   const isBenMingState = daXianSeq === -1 && liuNianYear === null;
@@ -497,7 +486,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
   const daXianList = useMemo(() => {
     if (!baseChartData || !baseEngine || mode === 'divination') return [];
-    const list = [];
+    const list: any[] = [];
     const startPos = baseEngine.getMingPos();
     const direction = baseChartData.direction || 1;
     for (let i = 0; i < 10; i++) {
@@ -510,22 +499,24 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
           seq: i,
           name: `${['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'][i]}限`,
           ganZhi: `${GAN[palace.ganIndex]}${ZHI[palace.zhiIndex]}`,
-          palaceIdx: palaceIdx,
+          palaceIdx,
           startAge: palace.ages[0],
           endAge: palace.ages[1],
-          startYear: startYear,
+          startYear,
         });
       }
     }
     return list;
   }, [baseChartData, baseEngine, mode]);
 
+  // ✅ 永遠使用「有效大限」：未選 = 0
+  const effectiveDaXianSeq = daXianSeq === -1 ? 0 : daXianSeq;
+
   const liuNianList = useMemo(() => {
     if (mode === 'divination') return [];
-    const targetSeq = daXianSeq === -1 ? 0 : daXianSeq; // ✅ 未選大限時：用第一大限
-    const targetDaXian = daXianList[targetSeq];
+    const targetDaXian = daXianList[effectiveDaXianSeq];
     if (!targetDaXian) return [];
-    const list = [];
+    const list: { year: number; age: number; label: string }[] = [];
     for (let i = 0; i < 10; i++) {
       const year = targetDaXian.startYear + i;
       const age = targetDaXian.startAge + i;
@@ -534,7 +525,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       list.push({ year, age, label: `${year}${GAN[gan]}${ZHI[zhi]} ${age}` });
     }
     return list;
-  }, [daXianSeq, daXianList, mode]);
+  }, [effectiveDaXianSeq, daXianList, mode]);
 
   const xiaoXianMingIdx = useMemo(() => {
     if (!liuNianYear || !baseChartData || !baseEngine) return -1;
@@ -553,17 +544,11 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     if (canInvert === 'hidden' || canInvert === 'disabled') return;
 
     let key = '';
-    if (liuDay !== null && liuMonth !== null && liuNianYear !== null) {
-      key = `ri-${liuNianYear}-${liuMonth}-${liuDay}`;
-    } else if (liuMonth !== null && liuNianYear !== null) {
-      key = `yue-${liuNianYear}-${liuMonth}`;
-    } else if (liuNianYear !== null) {
-      key = `liu-${liuNianYear}`;
-    } else if (daXianSeq >= 0) {
-      key = `da-${daXianSeq}`;
-    } else {
-      return;
-    }
+    if (liuDay !== null && liuMonth !== null && liuNianYear !== null) key = `ri-${liuNianYear}-${liuMonth}-${liuDay}`;
+    else if (liuMonth !== null && liuNianYear !== null) key = `yue-${liuNianYear}-${liuMonth}`;
+    else if (liuNianYear !== null) key = `liu-${liuNianYear}`;
+    else if (daXianSeq >= 0) key = `da-${daXianSeq}`;
+    else return;
 
     setReverseMap((prev) => ({ ...prev, [key]: !prev[key] }));
   };
@@ -573,12 +558,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const isYueRev = liuNianYear && liuMonth ? !!reverseMap[`yue-${liuNianYear}-${liuMonth}`] : false;
   const isRiRev = liuNianYear && liuMonth && liuDay ? !!reverseMap[`ri-${liuNianYear}-${liuMonth}-${liuDay}`] : false;
 
-  const reverseFlags = {
-    da: isDaRev,
-    liu: isLiuRev,
-    yue: isYueRev,
-    ri: isRiRev,
-  };
+  const reverseFlags = { da: isDaRev, liu: isLiuRev, yue: isYueRev, ri: isRiRev };
 
   let isCurrentReverseOn = false;
   if (liuDay !== null) isCurrentReverseOn = isRiRev;
@@ -596,10 +576,8 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     setSelectedPalace(null);
   };
 
-  // ✅ 修正：未選大限時點流年 => 視為選第一大限（避免 daGan = -1 影響流限計算）
   const handleLiuNianClick = (year: number) => {
-    if (daXianSeq === -1) setDaXianSeq(0);
-
+    // ✅ 若目前未選大限，仍可直接點流年：視覺上不一定要強制選，但計算已用 effectiveDaXianSeq
     setLiuNianYear(liuNianYear === year ? null : year);
     setLiuMonth(null);
     setLiuDay(null);
@@ -613,9 +591,11 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     setFlyingPalace(null);
     setSelectedPalace(null);
   };
+
   const handlePalaceClick = (palaceIdx: number) => {
     setSelectedPalace(selectedPalace === palaceIdx ? null : palaceIdx);
   };
+
   const handleTriggerClick = (palaceIdx: number) => {
     setFlyingPalace(flyingPalace === palaceIdx ? null : palaceIdx);
   };
@@ -632,7 +612,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       mode === 'divination' && divMingIndex !== -1
         ? divMingIndex
         : daXianSeq >= 0
-        ? daXianList[daXianSeq].palaceIdx
+        ? daXianList[daXianSeq]?.palaceIdx
         : liuNianYear
         ? chartData!.palaces.findIndex((p) => p.zhiIndex === (liuNianYear - 4) % 12)
         : benMingPos;
@@ -649,7 +629,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       yueName = undefined,
       riName = undefined;
 
-    if (daXianSeq >= 0) {
+    if (daXianSeq >= 0 && daXianList[daXianSeq]) {
       const daMingIdx = daXianList[daXianSeq].palaceIdx;
       const offset = (daMingIdx - currentIdx + 12) % 12;
       daName = `大${PALACE_NAMES[offset].substring(0, 1)}`;
@@ -739,7 +719,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
               <Compass size={16} />
             </button>
 
-            {/* [Mod] Insert Divination Button */}
             <button
               onClick={handleDivinationClick}
               className="px-3 py-1.5 rounded-lg border flex items-center gap-1.5 transition-all text-sm font-bold shadow-sm bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700"
@@ -868,10 +847,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
                   autoFocus
                 />
               </div>
-              <button
-                onClick={handleExternalYearSubmit}
-                className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 rounded-lg shadow-md transition-all"
-              >
+              <button onClick={handleExternalYearSubmit} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 rounded-lg shadow-md transition-all">
                 顯示四化
               </button>
             </div>
@@ -941,7 +917,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
           liuMonthIdx={liuMonthIdx}
           liuDayIdx={liuDayIdx}
           currentRealTime={currentRealTime}
-          // Pass callback to open drawer
           onOpenYearlyAnalysis={(year) => {
             setAnalysisYear(year);
             setIsYearlyDrawerOpen(true);
@@ -949,11 +924,11 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         />
       </div>
 
-      {/* 1) 大限列（非占卜模式顯示） */}
-      {mode !== 'divination' && (
+      {/* --- 底部：大限列 --- */}
+      {mode !== 'divination' && daXianList.length > 0 && (
         <div className="shrink-0 bg-white border-t border-gray-200 w-full z-40 overflow-hidden">
           <div className="flex overflow-x-auto no-scrollbar w-full">
-            {daXianList.map((item) => {
+            {daXianList.map((item: any) => {
               const isActive = daXianSeq === item.seq;
               const isRealTime = currentRealTime && currentRealTime.daSeq === item.seq;
               return (
@@ -976,7 +951,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         </div>
       )}
 
-      {/* ✅ 2) 流年列：非占卜模式永遠顯示（未選大限時顯示第一大限的流年區間） */}
+      {/* --- 底部：流年列（永遠顯示；未選大限 = 第一大限） --- */}
       {mode !== 'divination' && daXianList.length > 0 && (
         <div className="shrink-0 bg-slate-50 border-t border-gray-200 w-full z-40 overflow-hidden">
           <div className="flex overflow-x-auto no-scrollbar w-full">
@@ -1017,7 +992,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         mode={paywallMode}
         balance={(userProfile as any)?.credits ?? 0}
         onDeductConfirm={async () => {
-          // [P0 Fix] Atomic Deduction & UI Refresh
           if (userProfile?.id) {
             const result = await consumeDivinationV2(DIVINATION_COST);
             if (result.success) {
@@ -1034,7 +1008,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
           setIsPaywallOpen(false);
           navigate('/lucky');
         }}
-        onGoToTopup={() => window.open(OFFICIAL_SITE_URL, '_blank')} // [P0 Fix] Redirect to Official Site
+        onGoToTopup={() => window.open(OFFICIAL_SITE_URL, '_blank')}
         onLogin={() => navigate('/login')}
         onClose={() => setIsPaywallOpen(false)}
       />
