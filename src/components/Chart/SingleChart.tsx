@@ -522,7 +522,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
   const liuNianList = useMemo(() => {
     if (mode === 'divination') return [];
-    const targetSeq = daXianSeq === -1 ? 0 : daXianSeq;
+    const targetSeq = daXianSeq === -1 ? 0 : daXianSeq; // ✅ 未選大限時：用第一大限
     const targetDaXian = daXianList[targetSeq];
     if (!targetDaXian) return [];
     const list = [];
@@ -595,7 +595,11 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     setFlyingPalace(null);
     setSelectedPalace(null);
   };
+
+  // ✅ 修正：未選大限時點流年 => 視為選第一大限（避免 daGan = -1 影響流限計算）
   const handleLiuNianClick = (year: number) => {
+    if (daXianSeq === -1) setDaXianSeq(0);
+
     setLiuNianYear(liuNianYear === year ? null : year);
     setLiuMonth(null);
     setLiuDay(null);
@@ -603,6 +607,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     setFlyingPalace(null);
     setSelectedPalace(null);
   };
+
   const toggleXiaoXian = () => {
     setShowXiaoXian(!showXiaoXian);
     setFlyingPalace(null);
@@ -863,7 +868,10 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
                   autoFocus
                 />
               </div>
-              <button onClick={handleExternalYearSubmit} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 rounded-lg shadow-md transition-all">
+              <button
+                onClick={handleExternalYearSubmit}
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 rounded-lg shadow-md transition-all"
+              >
                 顯示四化
               </button>
             </div>
@@ -941,11 +949,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         />
       </div>
 
-      {/* =========================
-          RE-ADDED: 底部大限 / 流年導航列
-         ========================= */}
-
-      {/* 1) 大限列：非占卜模式顯示 */}
+      {/* 1) 大限列（非占卜模式顯示） */}
       {mode !== 'divination' && (
         <div className="shrink-0 bg-white border-t border-gray-200 w-full z-40 overflow-hidden">
           <div className="flex overflow-x-auto no-scrollbar w-full">
@@ -972,8 +976,8 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         </div>
       )}
 
-      {/* 2) 流年列：非占卜模式 + 已選大限才顯示 */}
-      {mode !== 'divination' && daXianSeq >= 0 && (
+      {/* ✅ 2) 流年列：非占卜模式永遠顯示（未選大限時顯示第一大限的流年區間） */}
+      {mode !== 'divination' && daXianList.length > 0 && (
         <div className="shrink-0 bg-slate-50 border-t border-gray-200 w-full z-40 overflow-hidden">
           <div className="flex overflow-x-auto no-scrollbar w-full">
             {liuNianList.map((item) => {
