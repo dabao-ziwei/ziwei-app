@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PalaceGrid } from './PalaceGrid';
 import { ZiWeiEngine } from '../../logic/engine';
-import { GAN, SIHUA_TABLE } from '../../logic/constants';
+import { GAN, SIHUA_TABLE, ZHI } from '../../logic/constants';
 import { Loader2, ChevronLeft, Lock, Unlock, ArrowRightLeft } from 'lucide-react';
 import { Solar } from 'lunar-typescript';
 import type { Client } from '../../db';
