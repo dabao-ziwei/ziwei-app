@@ -1,11 +1,26 @@
-// FILE: src/db.ts
 import { supabase } from './supabase'; 
 export { supabase };
 
-import type { UserFeatures } from './logic/permissions'; 
 import type { YearAdviceRule } from './logic/types';
+import type { PointPack, PointsLedger, PointTransaction, FeatureConfig } from './types/store';
 
-const SUPER_VIEW_EMAIL = 'stephenwu.0926@gmail.com';
+export const SUPER_VIEW_EMAIL = 'stephenwu.0926@gmail.com';
+
+// [修正] 僅作內部最後防線，不 Export，避免外部依賴
+const FALLBACK_COST = 50; 
+
+export interface UserFeatures {
+  twin?: boolean;
+  inverted?: boolean;
+  xiao_limit?: boolean;
+  flying_star?: boolean;
+  dual_chart?: boolean;
+  screenshot?: boolean;
+  divination?: boolean;
+  liu_month?: boolean;
+  liu_day?: boolean;
+  lucky_divination?: boolean;
+}
 
 export interface UserProfile {
   id: string;
@@ -20,8 +35,8 @@ export interface UserProfile {
   activeCount?: number;
   deletedCount?: number;
   joinDate?: string;
-  credits?: number;
-  free_divination_used?: boolean;
+  points_balance: number;
+  has_claimed_welcome_gift?: boolean; // 新增欄位
 }
 
 export interface Client {
@@ -53,186 +68,13 @@ export interface Relationship {
   inferred_from?: string;
 }
 
-export const getPaywallPhase = async (): Promise<string> => {
-  const { data, error } = await supabase.rpc('get_paywall_phase');
-  if (error || !data) return 'ANNOUNCE_ONLY';
-  return data;
+// --- Helper Functions ---
+
+export const checkIsSuperAdmin = (email: string | undefined | null) => {
+    return email?.trim().toLowerCase() === SUPER_VIEW_EMAIL;
 };
 
-export const issueGuestToken = async (): Promise<string | null> => {
-  const { data, error } = await supabase.rpc('issue_guest_token');
-  if (error || !data?.success) return null;
-  return data.token as string;
-};
-
-export const consumeDivinationV2 = async (cost: number, guestToken?: string | null) => {
-  const { data, error } = await supabase.rpc('consume_divination_v2', {
-    p_cost: cost,
-    p_guest_token: guestToken ?? null,
-  });
-  if (error) return { success: false, message: error.message };
-  return data;
-};
-
-const getInverseRelationType = (type: string, fromGender: '男' | '女'): string => {
-    if (['配偶'].includes(type)) return '配偶';
-    if (['情侶'].includes(type)) return '情侶';
-    if (['子女'].includes(type)) return fromGender === '男' ? '父親' : '母親';
-    if (['父親', '母親'].includes(type)) return '子女';
-    if (['哥哥', '姐姐', '弟弟', '妹妹'].includes(type)) return '親戚'; 
-    if (['親戚'].includes(type)) return '親戚';
-    if (['朋友'].includes(type)) return '朋友';
-    return '朋友'; 
-};
-
-export const loadClients = async (): Promise<Client[]> => {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
-  const isSuperViewer = user.email === SUPER_VIEW_EMAIL;
-  
-  let query = supabase.from('clients').select('*').order('created_at', { ascending: false });
-  if (!isSuperViewer) {
-      query = query.eq('user_id', user.id).eq('is_deleted', false);
-  }
-  const { data, error } = await query;
-  if (error) return [];
-  
-  let userIdToEmailMap: Record<string, string> = {};
-  if (isSuperViewer) {
-      const { data: profiles } = await supabase.from('profiles').select('id, email');
-      if (profiles) profiles.forEach(p => userIdToEmailMap[p.id] = p.email);
-  }
-
-  return data.map((item: any) => ({
-    ...mapClientToEntity(item),
-    creatorEmail: userIdToEmailMap[item.user_id] || '',
-    is_deleted: item.is_deleted
-  }));
-};
-
-export const getRelationships = async (clientId: string): Promise<Relationship[]> => {
-    const { data, error } = await supabase
-        .from('relationships')
-        .select(`*, to_c:clients!to_client_id (*)`)
-        .eq('from_client_id', clientId);
-
-    if (error || !data) return [];
-
-    return data.map((r: any) => ({
-        id: r.id,
-        from_client_id: r.from_client_id,
-        to_client_id: r.to_client_id,
-        relation_type: r.relation_type,
-        is_reverse: false, 
-        is_inferred: false,
-        related_client: mapClientToEntity(r.to_c)
-    }));
-};
-
-export const getUserCustomRelationTypes = async (): Promise<string[]> => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return [];
-
-    const { data, error } = await supabase
-        .from('relationships')
-        .select('relation_type')
-        .eq('user_id', user.id);
-
-    if (error || !data) return [];
-
-    const types = new Set(data.map((r: any) => r.relation_type));
-    return Array.from(types).filter(t => t) as string[]; 
-};
-
-export const addRelationship = async (fromId: string, toId: string, type: string): Promise<boolean> => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return false;
-
-    const { data: fromClient } = await supabase.from('clients').select('gender').eq('id', fromId).single();
-    if (!fromClient) return false;
-
-    const inverseType = getInverseRelationType(type, fromClient.gender as '男' | '女');
-
-    const { data: exists } = await supabase.from('relationships')
-        .select('id')
-        .eq('from_client_id', fromId).eq('to_client_id', toId);
-    
-    if (exists && exists.length > 0) return true;
-
-    const payloadForward = { user_id: user.id, from_client_id: fromId, to_client_id: toId, relation_type: type };
-    const payloadReverse = { user_id: user.id, from_client_id: toId, to_client_id: fromId, relation_type: inverseType };
-
-    const { error: err1 } = await supabase.from('relationships').insert(payloadForward);
-    const { error: err2 } = await supabase.from('relationships').insert(payloadReverse);
-    if (err2) console.warn("Reverse link failed", err2);
-
-    if (!err1) {
-        autoLinkFamily(user.id, fromId, toId, type);
-    }
-
-    return !err1;
-};
-
-const autoLinkFamily = async (user_id: string, fromId: string, toId: string, type: string) => {
-    if (['子女'].includes(type)) {
-        const { data: spouses } = await supabase.from('relationships')
-            .select('to_client_id')
-            .eq('from_client_id', fromId)
-            .in('relation_type', ['配偶']);
-        
-        if (spouses) {
-            for (const spouse of spouses) {
-                const { data: exists } = await supabase.from('relationships').select('id')
-                    .eq('from_client_id', spouse.to_client_id).eq('to_client_id', toId);
-                
-                if (!exists || exists.length === 0) {
-                    await addRelationship(spouse.to_client_id, toId, '子女'); 
-                }
-            }
-        }
-    }
-
-    if (['配偶'].includes(type)) {
-        const { data: children } = await supabase.from('relationships')
-            .select('to_client_id')
-            .eq('from_client_id', fromId)
-            .in('relation_type', ['子女']);
-        
-        if (children) {
-            for (const child of children) {
-                const { data: exists } = await supabase.from('relationships').select('id')
-                    .eq('from_client_id', toId).eq('to_client_id', child.to_client_id);
-                
-                if (!exists || exists.length === 0) {
-                    await addRelationship(toId, child.to_client_id, '子女');
-                }
-            }
-        }
-    }
-};
-
-export const deleteRelationship = async (relId: string): Promise<boolean> => {
-    const { data: rel } = await supabase.from('relationships').select('from_client_id, to_client_id').eq('id', relId).single();
-    if (!rel) return false;
-    const { error } = await supabase.from('relationships')
-        .delete()
-        .or(`and(from_client_id.eq.${rel.from_client_id},to_client_id.eq.${rel.to_client_id}),and(from_client_id.eq.${rel.to_client_id},to_client_id.eq.${rel.from_client_id})`);
-    return !error;
-};
-
-const mapClientToEntity = (data: any): Client => ({
-    id: data.id,
-    user_id: data.user_id,
-    name: data.name,
-    gender: data.gender,
-    birthYear: data.birth_year ?? data.birthYear,
-    birthMonth: data.birth_month ?? data.birthMonth,
-    birthDay: data.birth_day ?? data.birthDay,
-    birthHour: data.birth_hour ?? data.birthHour,
-    birthMinute: data.birth_minute ?? data.birthMinute,
-    type: data.type,
-    majorStars: data.major_stars
-});
+// --- User & Profile ---
 
 export const getMyProfile = async (): Promise<UserProfile | null> => {
   const { data: { user } } = await supabase.auth.getUser();
@@ -249,97 +91,14 @@ export const getMyProfile = async (): Promise<UserProfile | null> => {
     can_use_divination: data.can_use_divination ?? true,
     accessExpiry: data.access_expiry,
     feature_flags: data.feature_flags,
-    credits: data.credits || 0,
-    free_divination_used: data.free_divination_used || false
+    activeCount: 0, 
+    points_balance: data.points_balance || 0,
+    has_claimed_welcome_gift: data.has_claimed_welcome_gift // 對應資料庫
   };
 };
 
-export const getClient = async (id: string): Promise<Client | null> => {
-  const { data, error } = await supabase.from('clients').select('*').eq('id', id).single();
-  if (error) return null;
-  return { ...mapClientToEntity(data), is_deleted: data.is_deleted };
-};
-
-export const saveClient = async (clientData: any): Promise<string | null> => {
-    if (clientData.id && !clientData.id.toString().startsWith('temp-') && clientData.id !== '') {
-        const success = await updateClient(clientData.id, clientData);
-        return success ? clientData.id : null;
-    } else {
-        return await addClient(clientData);
-    }
-};
-
-export const addClient = async (client: any): Promise<string | null> => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
-
-    const profile = await getMyProfile();
-    if (profile && profile.role !== 'admin') {
-        const currentCount = await getUsedChartCount(user.id);
-        if (currentCount >= profile.maxCharts) {
-            throw new Error(`您的命盤數量已達上限 (${profile.maxCharts} 張)，無法再新增。`);
-        }
-    }
-
-    const dbPayload = {
-        user_id: user.id,
-        name: client.name,
-        gender: client.gender,
-        birth_year: client.birthYear,
-        birth_month: client.birthMonth,
-        birth_day: client.birthDay,
-        birth_hour: client.birthHour,
-        birth_minute: client.birthMinute,
-        type: client.type,
-        major_stars: client.majorStars
-    };
-    const { data, error } = await supabase.from('clients').insert(dbPayload).select().single();
-    if (error) throw error;
-
-    if (client.linkRequest && data?.id) {
-        try {
-            await addRelationship(data.id, client.linkRequest.targetId, client.linkRequest.type);
-        } catch (e) {
-            console.error("Auto link failed", e);
-        }
-    }
-    return data.id;
-};
-
-export const updateClient = async (id: string, client: any): Promise<boolean> => {
-    const dbPayload: any = {};
-    if (client.name) dbPayload.name = client.name;
-    if (client.gender) dbPayload.gender = client.gender;
-    if (client.birthYear !== undefined) dbPayload.birth_year = client.birthYear;
-    if (client.birthMonth !== undefined) dbPayload.birth_month = client.birthMonth;
-    if (client.birthDay !== undefined) dbPayload.birth_day = client.birthDay;
-    if (client.birthHour !== undefined) dbPayload.birth_hour = client.birthHour;
-    if (client.birthMinute !== undefined) dbPayload.birth_minute = client.birthMinute;
-    if (client.type) dbPayload.type = client.type;
-    if (client.majorStars) dbPayload.major_stars = client.majorStars;
-    const { error } = await supabase.from('clients').update(dbPayload).eq('id', id);
-    return !error;
-};
-
-export const deleteClient = async (id: string): Promise<boolean> => {
-    const { data: { user } } = await supabase.auth.getUser();
-    const isSuperAdmin = user?.email === SUPER_VIEW_EMAIL;
-    if (isSuperAdmin) {
-        const res = await supabase.from('clients').delete().eq('id', id);
-        return !res.error;
-    } else {
-        const res = await supabase.from('clients').update({ is_deleted: true }).eq('id', id);
-        return !res.error;
-    }
-};
-
-export const getUsedChartCount = async (userId: string): Promise<number> => {
-    const { count, error } = await supabase.from('clients').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('is_deleted', false);
-    return count || 0;
-};
-
 export const getAllProfilesWithStats = async (): Promise<UserProfile[]> => {
-  const { data, error } = await supabase.from('user_statistics').select('*').order('created_at', { ascending: false });
+  const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
   if (error) return [];
   return data.map((p: any) => ({
     id: p.id, email: p.email, role: p.role, maxCharts: p.max_charts,
@@ -347,16 +106,11 @@ export const getAllProfilesWithStats = async (): Promise<UserProfile[]> => {
     can_use_divination: p.can_use_divination ?? true,
     accessExpiry: p.access_expiry,
     feature_flags: p.feature_flags, 
-    activeCount: p.active_count, deletedCount: p.deleted_count,
+    points_balance: p.points_balance || 0,
+    activeCount: 0, 
     joinDate: p.created_at,
-    credits: p.credits || 0,
-    free_divination_used: p.free_divination_used || false
+    has_claimed_welcome_gift: p.has_claimed_welcome_gift
   }));
-};
-
-export const toggleUserBan = async (id: string, currentStatus: boolean): Promise<boolean> => {
-  const { error } = await supabase.from('profiles').update({ is_banned: !currentStatus }).eq('id', id);
-  return !error;
 };
 
 export const updateProfile = async (id: string, updates: Partial<UserProfile>): Promise<boolean> => {
@@ -372,32 +126,15 @@ export const updateProfile = async (id: string, updates: Partial<UserProfile>): 
   return !error;
 };
 
+export const toggleUserBan = async (id: string, currentStatus: boolean): Promise<boolean> => {
+  const { error } = await supabase.from('profiles').update({ is_banned: !currentStatus }).eq('id', id);
+  return !error;
+};
+
 export const deleteUserProfile = async (targetUserId: string): Promise<boolean> => {
     const { data: { user: currentUser } } = await supabase.auth.getUser();
     if (currentUser?.email !== SUPER_VIEW_EMAIL) return false;
-
-    const { data: targetUser } = await supabase.from('profiles').select('email').eq('id', targetUserId).single();
-    const sourceLabel = targetUser?.email || '未知使用者';
-
-    const { data: clients } = await supabase.from('clients').select('id, name').eq('user_id', targetUserId);
-
-    if (clients && clients.length > 0) {
-        const updates = clients.map(client => ({
-            id: client.id,
-            user_id: currentUser.id, 
-            name: `${client.name} (來源: ${sourceLabel})` 
-        }));
-
-        const { error: transferError } = await supabase.from('clients').upsert(updates);
-        
-        if (transferError) {
-            console.error("Transfer failed:", transferError);
-            return false;
-        }
-    }
-
     const { error: deleteError } = await supabase.from('profiles').delete().eq('id', targetUserId);
-    
     return !deleteError;
 };
 
@@ -409,145 +146,321 @@ export const inviteUserByEmail = async (email: string): Promise<{ success: boole
 
 export const bulkUpdateAccessExpiry = async (ids: string[], expiryDate: string): Promise<boolean> => {
     const timestamp = `${expiryDate} 23:59:59`; 
-    
-    const { error } = await supabase
-        .from('profiles')
-        .update({ access_expiry: timestamp })
-        .in('id', ids);
-
-    if (error) {
-        console.error('Bulk update failed:', error);
-        return false;
-    }
-    return true;
-};
-
-// --- 占卜文案相關 API ---
-
-export interface DivinationContent {
-    category: string;
-    zhi: string;
-    gan: string;
-    content: string;
-    luck: string;
-}
-
-export const getDivinationResult = async (category: string, zhi: string, gan: string) => {
-    const { data, error } = await supabase
-        .from('divination_contents')
-        .select('*')
-        .eq('category', category)
-        .eq('zhi', zhi)
-        .eq('gan', gan)
-        .maybeSingle();
-
-    if (error) {
-        console.error('Error fetching divination:', error);
-        return null;
-    }
-    return data;
-};
-
-export const getAllDivinationContents = async () => {
-    const { data, error } = await supabase
-        .from('divination_contents')
-        .select('*');
-    
-    if (error) return [];
-    
-    const dbMap: Record<string, any> = {};
-    data.forEach((row: any) => {
-        const key = `${row.category}-${row.zhi}-${row.gan}`;
-        dbMap[key] = { content: row.content, luck: row.luck };
-    });
-    return dbMap;
-};
-
-export const saveDivinationContent = async (category: string, zhi: string, gan: string, content: string, luck: string) => {
-    const { error } = await supabase
-        .from('divination_contents')
-        .upsert({ 
-            category, 
-            zhi, 
-            gan, 
-            content, 
-            luck,
-            updated_at: new Date().toISOString()
-        }, { onConflict: 'category,zhi,gan' });
-
+    const { error } = await supabase.from('profiles').update({ access_expiry: timestamp }).in('id', ids);
     return !error;
 };
 
-export const deleteDivinationContent = async (category: string, zhi: string, gan: string) => {
-    const { error } = await supabase
-        .from('divination_contents')
-        .delete()
-        .eq('category', category)
-        .eq('zhi', zhi)
-        .eq('gan', gan);
-        
-    return !error;
+export const issueGuestToken = async (): Promise<string | null> => {
+  const { data, error } = await supabase.rpc('issue_guest_token');
+  if (error || !data?.success) return null;
+  return data.token as string;
 };
 
-export const bulkUploadDivination = async (items: DivinationContent[]) => {
-    if (items.length === 0) return true;
-    const { error } = await supabase
-        .from('divination_contents')
-        .upsert(items, { onConflict: 'category,zhi,gan' });
-    
-    return !error;
+export const getPaywallPhase = async (): Promise<string> => {
+  const { data, error } = await supabase.rpc('get_paywall_phase');
+  if (error || !data) return 'ANNOUNCE_ONLY';
+  return data;
 };
 
-// --- 流年建議規則 CRUD ---
+export const getFeatureRuntime = async (featureKey: string): Promise<FeatureConfig | null> => {
+    const { data } = await supabase.from('feature_configs').select('*').eq('feature_key', featureKey).single();
+    if (data) return data as FeatureConfig;
+    return { 
+        feature_key: featureKey, 
+        name: '未知功能', 
+        is_active: true, 
+        is_paid: true, 
+        price: FALLBACK_COST, 
+        announcement: '' 
+    };
+};
 
-export const loadYearAdviceRules = async (): Promise<YearAdviceRule[]> => {
-    const { data, error } = await supabase
-        .from('year_advice_rules')
-        .select('*')
-        .order('priority', { ascending: true });
-
-    if (error) {
-        console.error('Error loading year advice rules:', error);
-        return [];
-    }
+export const getFeatureConfigs = async (): Promise<FeatureConfig[]> => {
+    const { data } = await supabase.from('feature_configs').select('*').order('feature_key');
     return data || [];
 };
 
-export const saveYearAdviceRule = async (rule: Partial<YearAdviceRule>) => {
-    if (rule.is_default) {
-        let query = supabase.from('year_advice_rules').update({ is_default: false });
-        if (rule.id) {
-            query = query.neq('id', rule.id);
-        }
-        await query;
-    }
-
-    const payload = {
-        ...rule,
-        max_score: rule.max_score === undefined ? null : rule.max_score,
+export const updateFeatureConfig = async (config: Partial<FeatureConfig>) => {
+    if (!config.feature_key) return false;
+    const { error } = await supabase.from('feature_configs').update({
+        is_active: config.is_active,
+        is_paid: config.is_paid,
+        price: config.price,
+        announcement: config.announcement,
         updated_at: new Date().toISOString()
-    };
-
-    const { error } = await supabase
-        .from('year_advice_rules')
-        .upsert(payload);
-
-    if (error) {
-        console.error('Error saving advice rule:', error);
-        return false;
-    }
-    return true;
+    }).eq('feature_key', config.feature_key);
+    return !error;
 };
 
-export const deleteYearAdviceRule = async (id: string) => {
-    const { error } = await supabase
-        .from('year_advice_rules')
-        .delete()
-        .eq('id', id);
+// --- Client CRUD ---
 
-    if (error) {
-        console.error('Error deleting advice rule:', error);
-        return false;
+const mapClientToEntity = (data: any): Client => ({
+    id: data.id,
+    user_id: data.user_id,
+    name: data.name,
+    gender: data.gender,
+    birthYear: data.birth_year ?? data.birthYear,
+    birthMonth: data.birth_month ?? data.birthMonth,
+    birthDay: data.birth_day ?? data.birthDay,
+    birthHour: data.birth_hour ?? data.birthHour,
+    birthMinute: data.birth_minute ?? data.birthMinute,
+    type: data.type,
+    majorStars: data.major_stars
+});
+
+export const loadClients = async (): Promise<Client[]> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const isSuperViewer = user.email === SUPER_VIEW_EMAIL;
+  let query = supabase.from('clients').select('*').order('created_at', { ascending: false });
+  if (!isSuperViewer) {
+      query = query.eq('user_id', user.id).eq('is_deleted', false);
+  }
+  const { data, error } = await query;
+  if (error) return [];
+  return data.map((item: any) => ({
+    ...mapClientToEntity(item),
+    is_deleted: item.is_deleted
+  }));
+};
+
+export const getClient = async (id: string): Promise<Client | null> => {
+  const { data, error } = await supabase.from('clients').select('*').eq('id', id).single();
+  if (error) return null;
+  return { ...mapClientToEntity(data), is_deleted: data.is_deleted };
+};
+
+export const saveClient = async (clientData: any): Promise<string | null> => {
+    if (clientData.id && !clientData.id.toString().startsWith('temp-') && clientData.id !== '') {
+        return clientData.id;
+    } else {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return null;
+        const dbPayload = {
+            user_id: user.id,
+            name: clientData.name,
+            gender: clientData.gender,
+            birth_year: clientData.birthYear,
+            birth_month: clientData.birthMonth,
+            birth_day: clientData.birthDay,
+            birth_hour: clientData.birthHour,
+            birth_minute: clientData.birthMinute,
+            type: clientData.type,
+            major_stars: clientData.majorStars
+        };
+        const { data, error } = await supabase.from('clients').insert(dbPayload).select().single();
+        if (error) throw error;
+        return data.id;
     }
-    return true;
+};
+
+export const deleteClient = async (id: string): Promise<boolean> => {
+    const { error } = await supabase.from('clients').update({ is_deleted: true }).eq('id', id);
+    return !error;
+};
+
+export const getUsedChartCount = async (userId: string): Promise<number> => {
+    const { count, error } = await supabase.from('clients').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('is_deleted', false);
+    return count || 0;
+};
+
+// --- Relationship ---
+export const getRelationships = async (clientId: string): Promise<Relationship[]> => {
+    const { data, error } = await supabase.from('relationships').select(`*, to_c:clients!to_client_id (*)`).eq('from_client_id', clientId);
+    if (error || !data) return [];
+    return data.map((r: any) => ({
+        id: r.id,
+        from_client_id: r.from_client_id,
+        to_client_id: r.to_client_id,
+        relation_type: r.relation_type,
+        related_client: mapClientToEntity(r.to_c)
+    }));
+};
+export const addRelationship = async (fromId: string, toId: string, type: string): Promise<boolean> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+    const { error } = await supabase.from('relationships').insert({ user_id: user.id, from_client_id: fromId, to_client_id: toId, relation_type: type });
+    return !error;
+};
+export const deleteRelationship = async (relId: string): Promise<boolean> => {
+    const { error } = await supabase.from('relationships').delete().eq('id', relId);
+    return !error;
+};
+export const getUserCustomRelationTypes = async (): Promise<string[]> => {
+    return [];
+};
+
+// --- Points & Store Logic ---
+
+export const getPointPacks = async (showInactive = false): Promise<PointPack[]> => {
+    let query = supabase.from('point_packs').select('*').order('price_ntd', { ascending: true });
+    if (!showInactive) {
+        query = query.eq('is_active', true);
+    }
+    const { data, error } = await query;
+    return data || [];
+};
+
+export const getPointsLedger = async (userId: string): Promise<PointsLedger[]> => {
+    const { data, error } = await supabase.from('points_ledger').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+    return data || [];
+};
+
+export const getPointTransactions = async (userId: string): Promise<PointTransaction[]> => {
+    const { data, error } = await supabase.from('point_transactions')
+        .select(`*, pack:point_packs(name)`)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+    
+    if (error || !data) return [];
+    return data.map((t: any) => ({
+        ...t,
+        pack_name: t.pack?.name
+    }));
+};
+
+export const createPointTransaction = async (packId: string): Promise<string | null> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    const { data: pack } = await supabase.from('point_packs').select('*').eq('id', packId).single();
+    if (!pack) return null;
+
+    const { data, error } = await supabase.from('point_transactions').insert({
+        user_id: user.id,
+        point_pack_id: pack.id,
+        price_ntd_snapshot: pack.price_ntd,
+        base_points_snapshot: pack.base_points,
+        bonus_points_snapshot: pack.bonus_points,
+        status: 'PENDING',
+        provider: 'ECPAY'
+    }).select().single();
+
+    if (error) return null;
+    return data.id;
+};
+
+export const adminAdjustPoints = async (targetUserId: string, delta: number, reason: string): Promise<boolean> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+
+    const { error } = await supabase.rpc('admin_adjust_points', {
+        p_target_user_id: targetUserId,
+        p_delta: delta,
+        p_reason: reason,
+        p_admin_id: user.id
+    });
+    return !error;
+};
+
+// [新功能] 領取迎新禮 (99點)
+export const claimWelcomeGift = async (): Promise<boolean> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+
+    // 直接呼叫調整點數邏輯
+    const { error } = await supabase.rpc('admin_adjust_points', {
+        p_target_user_id: user.id,
+        p_delta: 99,
+        p_reason: '會員迎新禮 (Welcome Gift)',
+        p_admin_id: user.id // 自己領取，記錄自己的ID
+    });
+
+    if (!error) {
+        // 更新狀態為已領取
+        await supabase.from('profiles').update({ has_claimed_welcome_gift: true }).eq('id', user.id);
+        return true;
+    }
+    return false;
+};
+
+export const consumeDivinationV2 = async (options?: any, guestToken?: string | null): Promise<{ success: boolean; message?: string; newBalance?: number; ok?: boolean; skipped?: boolean }> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (typeof options === 'number' && guestToken) {
+         return { success: false, message: '請先登入' };
+    }
+
+    if (!user) return { success: false, message: '請先登入' };
+
+    // 1. 讀取 DB 設定 (即時)
+    const config = await getFeatureRuntime('lucky_divination');
+    
+    // 2. 判斷是否免費
+    if (config && !config.is_paid) {
+        return { success: true, message: '目前免費', skipped: true };
+    }
+
+    // 3. 取得價格 (DB設定優先)
+    const cost = config?.price ?? FALLBACK_COST; 
+
+    // 4. 執行扣點
+    const { data, error } = await supabase.rpc('deduct_points_for_divination', {
+        p_user_id: user.id,
+        p_cost: cost
+    });
+
+    if (error) return { success: false, message: error.message };
+    if (!data.success) return { success: false, message: data.message };
+    
+    return { success: true, newBalance: data.new_balance };
+};
+
+export const consumeFeature = async (featureKey: string, cost: number) => {
+    return await consumeDivinationV2({});
+};
+
+export const simulatePaymentSuccess = async (transactionId: string): Promise<boolean> => {
+    const { error } = await supabase.rpc('simulate_payment_success', {
+        p_transaction_id: transactionId
+    });
+    return !error;
+};
+
+// --- Divination Content ---
+export const getDivinationResult = async (category: string, zhi: string, gan: string) => {
+    const { data } = await supabase.from('divination_contents').select('*').eq('category', category).eq('zhi', zhi).eq('gan', gan).maybeSingle();
+    return data;
+};
+export const getAllDivinationContents = async () => {
+    const { data } = await supabase.from('divination_contents').select('*');
+    const dbMap: any = {};
+    data?.forEach((row: any) => { dbMap[`${row.category}-${row.zhi}-${row.gan}`] = row; });
+    return dbMap;
+};
+export const saveDivinationContent = async (category: string, zhi: string, gan: string, content: string, luck: string) => {
+    const { error } = await supabase.from('divination_contents').upsert({ category, zhi, gan, content, luck }, { onConflict: 'category,zhi,gan' });
+    return !error;
+};
+export const deleteDivinationContent = async (category: string, zhi: string, gan: string) => {
+    const { error } = await supabase.from('divination_contents').delete().eq('category', category).eq('zhi', zhi).eq('gan', gan);
+    return !error;
+};
+export const bulkUploadDivination = async (items: any[]) => {
+    const { error } = await supabase.from('divination_contents').upsert(items, { onConflict: 'category,zhi,gan' });
+    return !error;
+};
+
+// --- Year Advice ---
+export const loadYearAdviceRules = async (): Promise<YearAdviceRule[]> => {
+    const { data } = await supabase.from('year_advice_rules').select('*');
+    return data || [];
+};
+export const saveYearAdviceRule = async (rule: any) => {
+    const { error } = await supabase.from('year_advice_rules').upsert(rule);
+    return !error;
+};
+export const deleteYearAdviceRule = async (id: string) => {
+    const { error } = await supabase.from('year_advice_rules').delete().eq('id', id);
+    return !error;
+};
+
+// --- [新功能] 批次修改命盤上限 ---
+export const adminBulkUpdateMaxCharts = async (userIds: string[], value: number, mode: 'add' | 'set'): Promise<boolean> => {
+    const { error } = await supabase.rpc('admin_bulk_update_max_charts', {
+        p_user_ids: userIds,
+        p_value: value,
+        p_mode: mode
+    });
+    return !error;
 };

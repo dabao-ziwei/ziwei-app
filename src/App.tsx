@@ -6,7 +6,6 @@ import { Auth } from './components/Auth';
 import { UpdatePassword } from './components/UpdatePassword';
 import { ClientList } from './pages/ClientList'; 
 import { Dashboard } from './pages/Dashboard';
-import { DivinationAdminPanel } from './components/DivinationAdminPanel';
 import { saveClient, type Client } from './db';
 import { supabase } from './supabase';
 import { Loader2 } from 'lucide-react';
@@ -14,6 +13,8 @@ import { Loader2 } from 'lucide-react';
 import { DualChart } from './components/Chart/DualChart';
 import { CompatibilitySetup } from './pages/CompatibilitySetup';
 import { LuckyPage } from './pages/LuckyPage'; 
+import { StorePage } from './pages/StorePage';
+import { SystemAdmin } from './pages/SystemAdmin'; // ✅ 正確引入剛剛建立的檔案
 
 // [效能監控] Vercel Speed Insights
 import { SpeedInsights } from "@vercel/speed-insights/react";
@@ -106,7 +107,7 @@ function App() {
       <Routes>
         <Route path="/login" element={!session ? <Auth /> : <Navigate to="/" replace />} />
         
-        {/* 公開占卜頁面 - 放在 ProtectedLayout 之外 */}
+        {/* 公開占卜頁面 */}
         <Route path="/lucky" element={<LuckyPage />} />
         
         <Route element={<ProtectedLayout />}>
@@ -129,13 +130,15 @@ function App() {
           />
           
           <Route path="/chart/:id" element={<ChartBoard />} />
-          
           <Route path="/compatibility" element={<CompatibilitySetup />} />
           <Route path="/dual-chart" element={<DualChart />} />
-
           <Route path="/divination" element={<ChartBoard mode="divination" />} />
           
-          <Route path="/admin" element={<DivinationAdminPanel />} />
+          {/* 後台管理 (整合頁面) */}
+          <Route path="/admin" element={<SystemAdmin />} />
+          
+          {/* 點數商城頁面 */}
+          <Route path="/store" element={<StorePage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

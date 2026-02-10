@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import { X, Heart, Briefcase, Wallet, Activity, Users, Sparkles, Share2, AlertCircle, Loader2, Zap, MessageCircle, ArrowRight, Download, Smartphone } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toPng } from 'html-to-image';
-import { getDivinationResult } from '../db';
+// ✅ [修正] 引入 checkIsSuperAdmin 以配合新版 db.ts
+import { getDivinationResult, checkIsSuperAdmin } from '../db';
 import { supabase } from '../supabase';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Environment, ContactShadows, Float, PerspectiveCamera, useGLTF, Center, useProgress, Html } from '@react-three/drei';
@@ -57,7 +58,6 @@ const CATEGORIES: { id: Category; icon: any; color: string; desc: string }[] = [
 ];
 
 const LINE_OA_URL = "https://line.me/R/ti/p/@653jrxjt?oat_content=url&ts=03241123";
-const SUPER_ADMIN_EMAIL = 'stephenwu.0926@gmail.com';
 
 const LUCK_PHRASES: Record<string, string> = {
     '吉': '順運',
@@ -325,11 +325,6 @@ const HiddenCaptureCard = React.forwardRef<HTMLDivElement, { selectedCat: string
             <div className="w-full px-5 py-4 z-10 flex items-end justify-between mt-auto bg-[#09090b] shrink-0">
                 <div className="flex items-center gap-2">
                     <div className="bg-white p-1 rounded-md shadow-lg opacity-90 relative overflow-hidden flex items-center justify-center">
-                        {/* [終極修正] 
-                            1. data-qr="true": 讓 handleShare 可以抓到這個元素
-                            2. transform: translateZ(0): 強制 GPU 渲染
-                            3. decoding="sync": 強制同步解碼
-                        */}
                         <img 
                             data-qr="true"
                             src={qrCodeDataUrl} 
@@ -415,7 +410,8 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
 
         const checkAdmin = async () => {
             const { data: { user } } = await supabase.auth.getUser();
-            if (user?.email === SUPER_ADMIN_EMAIL) setIsAdmin(true);
+            // ✅ [修正] 使用 checkIsSuperAdmin 替代硬編碼
+            if (checkIsSuperAdmin(user?.email)) setIsAdmin(true);
         };
         checkAdmin();
     }, []);
@@ -526,25 +522,22 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                 }));
 
                 // 3. [ChatGPT 建議] 強制觸發一次 Layout 和 Decode
-                // 這是針對 iOS Safari "懶加載" 的核心破解法
                 const qrImg = hiddenCaptureRef.current.querySelector('img[data-qr="true"]');
                 if (qrImg) {
-                    qrImg.getBoundingClientRect(); // 強制 Layout 計算
-                    (qrImg as HTMLElement).style.transform = 'translateZ(0)'; // 強制 GPU 層
+                    qrImg.getBoundingClientRect(); 
+                    (qrImg as HTMLElement).style.transform = 'translateZ(0)'; 
                 }
 
                 const options = {
                     pixelRatio: 2, 
                     backgroundColor: '#09090b',
                     width: 380, 
-                    // [關鍵] 強制移除陰影和濾鏡，避免紅底問題。同時確保 opacity 為 1
                     style: {
                         boxShadow: 'none',
                         filter: 'none',
                         opacity: '1',
                         transform: 'scale(1)',
                     },
-                    // [關鍵] 開啟 skipAutoScale 修復 iOS 繪圖位移
                     skipAutoScale: true,
                     cacheBust: false,
                 };
@@ -603,12 +596,7 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                 onSystemShare={handleSystemShare} 
             />
             
-            {/* [iOS 終極修正] 
-               1. left: 0, top: 0: 確保在視窗內
-               2. opacity: 0.01: "看得到"但人類看不到，騙過 iOS 的懶加載
-               3. pointerEvents: none: 不擋按鈕
-               4. zIndex: -9999: 藏在最下面
-            */}
+            {/* [iOS 終極修正] */}
             <div style={{ 
                 position: 'fixed', 
                 left: 0, 
@@ -616,7 +604,7 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                 width: '100%', 
                 height: '100%', 
                 zIndex: -9999, 
-                opacity: 0.01,            
+                opacity: 0.01,                    
                 pointerEvents: 'none', 
                 display: 'flex',
                 alignItems: 'center',
@@ -705,7 +693,7 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                 
                 {step === 'RESULT' && result && (
                     <div className="w-full h-full flex flex-col items-center animate-in fade-in duration-1000 relative pt-[calc(env(safe-area-inset-top)+0.5rem)]">
-                        {/* 原本顯示給使用者看的卡片 (使用靜態圖) */}
+                        {/* 顯示給使用者的卡片 (使用靜態圖，確保視覺一致性) */}
                         <div 
                             ref={resultRef} 
                             className="bg-[#09090b] w-full max-w-sm mx-auto rounded-xl border border-white/20 flex flex-col items-center relative overflow-hidden shadow-2xl shrink-0 bg-noise"
@@ -724,8 +712,7 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                             </div>
 
                             <div className="relative z-10 w-full h-32 shrink-0 -my-2">
-                                {/* 這裡顯示靜態圖 */}
-                                <JiaoResultImage luck={finalLuck} />
+                                <SacredJiaoScene3D luck={finalLuck} />
                             </div>
                             
                             <div className="z-10 flex flex-col items-center justify-center shrink-0 mb-3">
