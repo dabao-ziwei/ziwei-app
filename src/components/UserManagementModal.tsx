@@ -1,46 +1,25 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import { X, Search, ChevronLeft, ChevronRight, Loader2, Shield, Trash2, UserPlus, CalendarClock, Settings, Sliders, Save, RotateCcw, ArrowUp, ArrowDown, Filter, ChevronDown, Users, Repeat, Clock, RefreshCw, Calendar, UserPlus as UserPlusIcon, Sparkles } from 'lucide-react';
-import { getAllProfilesWithStats, updateProfile, toggleUserBan, deleteUserProfile, inviteUserByEmail, bulkUpdateAccessExpiry, type UserProfile, type UserFeatures } from '../db';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { Search, ChevronLeft, ChevronRight, Loader2, Trash2, UserPlus, CalendarClock, Settings, Save, RotateCcw, ArrowUp, ArrowDown, Filter, ChevronDown, Coins, X, History, FileText, CreditCard, RefreshCcw, MoreHorizontal, Grid, ChevronUp, CheckCircle } from 'lucide-react';
+// ✅ [修正] 引入 adminBulkUpdateMaxCharts
+import { getAllProfilesWithStats, updateProfile, toggleUserBan, deleteUserProfile, inviteUserByEmail, adminAdjustPoints, getPointsLedger, getPointTransactions, bulkUpdateAccessExpiry, adminBulkUpdateMaxCharts, type UserProfile, type UserFeatures } from '../db';
 import { FEATURE_NAMES } from '../logic/permissions';
-
-interface Props {
-  isOpen: boolean;
-  onClose: () => void;
-}
 
 const ITEMS_PER_PAGE = 10;
 const SUPER_ADMIN_EMAIL = 'stephenwu.0926@gmail.com';
 
 type SortConfig = {
-    key: keyof UserProfile | 'activeCount';
+    key: keyof UserProfile | 'activeCount' | 'points_balance';
     direction: 'asc' | 'desc';
 };
 
 const DEFAULT_FLAGS_BY_ROLE: Record<string, Partial<UserFeatures>> = {
-    general: {
-        liu_month: false, liu_day: false, twin: false, inverted: false,
-        xiao_limit: false, flying_star: false, dual_chart: false,
-        screenshot: false, divination: false, lucky_divination: false
-    },
-    student: {
-        liu_month: true, liu_day: true, twin: true, inverted: true,
-        xiao_limit: true, flying_star: true, dual_chart: true,
-        screenshot: true, divination: false, lucky_divination: false
-    },
-    admin: {
-        liu_month: true, liu_day: true, twin: true, inverted: true,
-        xiao_limit: true, flying_star: true, dual_chart: true,
-        screenshot: true, divination: true, lucky_divination: true
-    },
-    competitor: {
-        liu_month: true, liu_day: true, twin: true, inverted: true,
-        xiao_limit: true, flying_star: false, dual_chart: false,
-        screenshot: false, divination: false, lucky_divination: false
-    }
+    general: { liu_month: false, liu_day: false, twin: false, inverted: false, xiao_limit: false, flying_star: false, dual_chart: false, screenshot: false, divination: false, lucky_divination: false },
+    student: { liu_month: true, liu_day: true, twin: true, inverted: true, xiao_limit: true, flying_star: true, dual_chart: true, screenshot: true, divination: false, lucky_divination: false },
+    admin: { liu_month: true, liu_day: true, twin: true, inverted: true, xiao_limit: true, flying_star: true, dual_chart: true, screenshot: true, divination: true, lucky_divination: true },
+    competitor: { liu_month: true, liu_day: true, twin: true, inverted: true, xiao_limit: true, flying_star: false, dual_chart: false, screenshot: false, divination: false, lucky_divination: false }
 };
 
-export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
-  // --- List State ---
+export const UserManagementModal: React.FC = () => {
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -49,51 +28,67 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   
-  // --- Drawer State ---
+  // 編輯與新增
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [editForm, setEditForm] = useState<Partial<UserProfile>>({});
-  const [hasChanges, setHasChanges] = useState(false);
-
-  // --- Bulk / Invite State ---
+  const [activeTab, setActiveTab] = useState<'profile' | 'history'>('profile');
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [isInviting, setIsInviting] = useState(false);
-  const [bulkDate, setBulkDate] = useState('');
+  
+  // 歷史資料
+  const [userLedger, setUserLedger] = useState<any[]>([]);
+  const [userTransactions, setUserTransactions] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  // --- 批次操作 UI 狀態 ---
+  const [isBulkMenuOpen, setIsBulkMenuOpen] = useState(false);
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+  
+  // 批次展延 Modal
+  const [showBulkExpiryModal, setShowBulkExpiryModal] = useState(false);
+  const [bulkDate, setBulkDate] = useState('');
 
-  useEffect(() => {
-    if (isOpen) {
-      loadData();
-      setCurrentPage(1);
-      setSearchTerm('');
-      setFilterRole('all');
-      setSelectedIds(new Set());
-      setEditingUser(null);
-    }
-  }, [isOpen]);
+  // 批次修改盤數 Modal
+  const [showBulkChartsModal, setShowBulkChartsModal] = useState(false);
+  const [bulkChartValue, setBulkChartValue] = useState(0);
+  const [bulkChartMode, setBulkChartMode] = useState<'add' | 'set'>('add');
 
+  const bulkMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { loadData(); }, []);
+
+  // 點擊外部關閉選單
   useEffect(() => {
-    const handleEsc = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && isOpen) {
-        if (editingUser) setEditingUser(null);
-        else if (isInviteOpen) setIsInviteOpen(false);
-        else onClose();
-      }
-    };
-    window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
-  }, [isOpen, onClose, editingUser, isInviteOpen]);
+      const handleClickOutside = (event: MouseEvent) => {
+          if (bulkMenuRef.current && !bulkMenuRef.current.contains(event.target as Node)) {
+              setIsBulkMenuOpen(false);
+          }
+      };
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
     try {
       const data = await getAllProfilesWithStats();
       setProfiles(data);
-    } catch (err) {
-      alert('讀取失敗');
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { alert('讀取失敗'); } 
+    finally { setLoading(false); }
+  };
+
+  const loadUserHistory = async (userId: string) => {
+      setHistoryLoading(true);
+      try {
+          const [ledger, trans] = await Promise.all([
+              getPointsLedger(userId),
+              getPointTransactions(userId)
+          ]);
+          setUserLedger(ledger);
+          setUserTransactions(trans);
+      } catch (e) { console.error(e); }
+      finally { setHistoryLoading(false); }
   };
 
   const checkIsSuperAdmin = (email: string) => email?.trim().toLowerCase() === SUPER_ADMIN_EMAIL;
@@ -127,17 +122,13 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
       const newSet = new Set(selectedIds);
       const validItems = paginatedData.filter(p => !checkIsSuperAdmin(p.email));
       const allSelected = validItems.length > 0 && validItems.every(p => newSet.has(p.id));
-      
       if (allSelected) validItems.forEach(p => newSet.delete(p.id));
       else validItems.forEach(p => newSet.add(p.id));
       setSelectedIds(newSet);
   };
 
-  const handleSort = (key: keyof UserProfile | 'activeCount') => {
-      setSortConfig(prev => ({
-          key,
-          direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
-      }));
+  const handleSort = (key: keyof UserProfile | 'activeCount' | 'points_balance') => {
+      setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc' }));
   };
 
   const handleBanToggle = async (user: UserProfile) => {
@@ -146,89 +137,35 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
     loadData();
   };
 
-  const openEditDrawer = (user: UserProfile) => {
+  const openEditModal = (user: UserProfile) => {
       setEditingUser(user);
       setEditForm({
           role: user.role || 'general',
           maxCharts: user.maxCharts ?? 5,
           maxEditsPerChart: user.maxEditsPerChart ?? 3,
-          accessExpiry: user.accessExpiry ? user.accessExpiry.split('T')[0] : '', // 處理 null
+          accessExpiry: user.accessExpiry ? user.accessExpiry.split('T')[0] : '',
           can_use_divination: user.can_use_divination,
           feature_flags: { ...user.feature_flags } || {}
       });
-      setHasChanges(false);
-  };
-
-  const handleFormChange = (key: keyof UserProfile, value: any) => {
-      setEditForm(prev => ({ ...prev, [key]: value }));
-      setHasChanges(true);
-  };
-
-  const handleFeatureToggle = (key: keyof UserFeatures, value: boolean | undefined) => {
-      setEditForm(prev => {
-          const currentFlags = prev.feature_flags || {};
-          const newFlags = { ...currentFlags };
-          
-          if (value === undefined) {
-              delete newFlags[key]; 
-          } else {
-              newFlags[key] = value;
-              if (key === 'liu_month' && value === false) {
-                  newFlags['liu_day'] = false;
-              }
-          }
-          return { ...prev, feature_flags: newFlags };
-      });
-      setHasChanges(true);
-  };
-
-  const handleRoleChange = (newRole: any) => {
-      setEditForm(prev => ({
-          ...prev, 
-          role: newRole,
-          feature_flags: {} 
-      }));
-      setHasChanges(true);
+      setActiveTab('profile');
+      loadUserHistory(user.id);
   };
 
   const handleSaveProfile = async () => {
       if (!editingUser) return;
-      const isDivinationEnabled = editForm.feature_flags?.divination === true;
-      const finalForm = { ...editForm, can_use_divination: isDivinationEnabled }; 
       try {
-          await updateProfile(editingUser.id, finalForm);
+          await updateProfile(editingUser.id, editForm);
           setEditingUser(null);
           loadData();
-      } catch(e) {
-          alert('儲存失敗');
-      }
+      } catch(e) { alert('儲存失敗'); }
   };
 
   const handleDeleteUser = async () => {
       if (!editingUser || checkIsSuperAdmin(editingUser.email)) return;
-      const chartCount = editingUser.activeCount || 0;
-      if (confirm(`確定要刪除使用者 ${editingUser.email} 嗎？\n他擁有的 ${chartCount} 張命盤將移轉給您。\n此操作無法復原。`)) {
+      if (confirm(`確定要刪除使用者 ${editingUser.email} 嗎？\n資料將移轉給您，此操作無法復原。`)) {
           const success = await deleteUserProfile(editingUser.id);
-          if (success) {
-              alert('使用者已刪除，資料已移轉。');
-              setEditingUser(null);
-              loadData();
-          } else {
-              alert('刪除失敗。');
-          }
+          if (success) { alert('刪除成功'); setEditingUser(null); loadData(); } else { alert('刪除失敗'); }
       }
-  };
-
-  const handleBulkUpdate = async () => {
-      if (selectedIds.size === 0 || !bulkDate) return alert("請選擇使用者與日期");
-      if (!confirm(`確定更新 ${selectedIds.size} 位使用者？`)) return;
-      setIsBulkUpdating(true);
-      await bulkUpdateAccessExpiry(Array.from(selectedIds), bulkDate);
-      setIsBulkUpdating(false);
-      alert("更新成功");
-      setSelectedIds(new Set());
-      setBulkDate('');
-      loadData();
   };
 
   const handleInvite = async () => {
@@ -240,337 +177,388 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen, onClose }) => {
       else { alert('失敗: ' + res.msg); }
   };
 
-  const SortableHeader = ({ label, sortKey, className = "" }: { label: string, sortKey: keyof UserProfile | 'activeCount', className?: string }) => (
-      <th 
-          className={`py-3 px-2 cursor-pointer hover:bg-gray-100 transition-colors select-none ${className}`}
-          onClick={() => handleSort(sortKey)}
-      >
+  const handleSingleAdjust = async (amount: number, reason: string) => {
+      if (!editingUser) return;
+      const ok = await adminAdjustPoints(editingUser.id, amount, reason);
+      if (ok) {
+          alert('調整成功');
+          loadUserHistory(editingUser.id);
+          loadData();
+      } else {
+          alert('調整失敗');
+      }
+  };
+
+  // --- 批次功能邏輯 ---
+
+  const handleBulkAddPoints = async () => {
+      if (selectedIds.size === 0) return alert("請選擇使用者");
+      const amountStr = prompt(`請輸入要給予選定 ${selectedIds.size} 位使用者的點數 (負數為扣除):`, "0");
+      if (!amountStr) return;
+      const amount = parseInt(amountStr);
+      if (isNaN(amount) || amount === 0) return alert("無效數量");
+      const reason = prompt("請輸入給點原因 (必填):", "批次調整");
+      if (!reason) return alert("原因必填");
+
+      if (!confirm(`確定對 ${selectedIds.size} 位使用者進行點數調整: ${amount} 點？`)) return;
+
+      setIsBulkUpdating(true);
+      let successCount = 0;
+      for (const uid of selectedIds) {
+          const ok = await adminAdjustPoints(uid, amount, reason);
+          if (ok) successCount++;
+      }
+      setIsBulkUpdating(false);
+      alert(`完成！成功 ${successCount} / 失敗 ${selectedIds.size - successCount}`);
+      setSelectedIds(new Set());
+      loadData();
+  };
+
+  const executeBulkExpiry = async () => {
+      if (selectedIds.size === 0 || !bulkDate) return;
+      setIsBulkUpdating(true);
+      const success = await bulkUpdateAccessExpiry(Array.from(selectedIds), bulkDate);
+      setIsBulkUpdating(false);
+      setShowBulkExpiryModal(false);
+      if (success) {
+          alert('批量更新成功');
+          setSelectedIds(new Set());
+          loadData();
+      } else {
+          alert('批量更新失敗');
+      }
+  };
+
+  const executeBulkCharts = async () => {
+      if (selectedIds.size === 0) return;
+      setIsBulkUpdating(true);
+      const success = await adminBulkUpdateMaxCharts(Array.from(selectedIds), bulkChartValue, bulkChartMode);
+      setIsBulkUpdating(false);
+      setShowBulkChartsModal(false);
+      if (success) {
+          alert('批量更新成功');
+          setSelectedIds(new Set());
+          loadData();
+      } else {
+          alert('批量更新失敗');
+      }
+  };
+
+  const SortableHeader = ({ label, sortKey, className = "" }: { label: string, sortKey: keyof UserProfile | 'activeCount' | 'points_balance', className?: string }) => (
+      <th className={`py-3 px-2 cursor-pointer hover:bg-gray-100 transition-colors select-none ${className}`} onClick={() => handleSort(sortKey)}>
           <div className={`flex items-center gap-1 ${className.includes('text-center') ? 'justify-center' : ''}`}>
               {label}
-              {sortConfig.key === sortKey && (
-                  sortConfig.direction === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />
-              )}
+              {sortConfig.key === sortKey && (sortConfig.direction === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
           </div>
       </th>
   );
 
-  const renderFeatureIcons = (user: UserProfile) => {
-      const defaultFlags = DEFAULT_FLAGS_BY_ROLE[user.role] || {};
-      const userFlags = user.feature_flags || {};
-      const isActive = (key: keyof UserFeatures) => userFlags[key] !== undefined ? userFlags[key] : defaultFlags[key];
-
-      const icons = [
-          { key: 'twin', icon: Users, label: '雙胞胎', color: 'text-indigo-500' },
-          { key: 'inverted', icon: Repeat, label: '顛倒盤', color: 'text-indigo-500' },
-          { key: 'xiao_limit', icon: Clock, label: '小限', color: 'text-green-600' },
-          { key: 'flying_star', icon: UserPlusIcon, label: '飛化', color: 'text-purple-600' },
-          { key: 'dual_chart', icon: RefreshCw, label: '合盤', color: 'text-purple-600' },
-          { key: 'liu_month', icon: Calendar, label: '流月日', color: 'text-amber-500' },
-          { key: 'lucky_divination', icon: Sparkles, label: '吉凶占卜', color: 'text-rose-500' },
-      ];
-
-      return (
-          <div className="flex items-center gap-1.5 justify-center">
-              {icons.map((item) => {
-                  const active = isActive(item.key as keyof UserFeatures);
-                  if (!active) return null; 
-                  const Icon = item.icon;
-                  return (
-                      <div key={item.key} className={`p-1 rounded-md bg-gray-50 border border-gray-100 ${item.color}`} title={item.label}>
-                          <Icon size={12} strokeWidth={2.5} />
-                      </div>
-                  );
-              })}
-              {icons.every(i => !isActive(i.key as keyof UserFeatures)) && <span className="text-[10px] text-gray-300">-</span>}
-          </div>
-      );
-  };
-
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex overflow-hidden animate-in fade-in zoom-in duration-200 relative text-gray-800">
+    <div className="w-full h-full bg-slate-50 flex flex-col overflow-hidden relative text-gray-800">
         
-        {/* 左側列表 (Table) */}
-        <div className={`flex-1 flex flex-col h-full transition-all duration-300 ${editingUser ? 'w-2/3 border-r border-gray-200' : 'w-full'}`}>
-            <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 bg-gray-50 shrink-0">
-                <div className="flex items-center gap-2">
-                    <Shield className="text-blue-600" />
-                    <h2 className="text-lg font-bold text-gray-900">使用者管理</h2>
-                    <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-bold">{processedProfiles.length}</span>
-                </div>
-                <button onClick={onClose} className="p-1 hover:bg-gray-200 rounded-full"><X size={20} className="text-gray-500" /></button>
+        {/* --- 頂部工具列 --- */}
+        <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row gap-4 bg-white items-center shrink-0">
+            <div className="relative flex-1 w-full max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <input type="text" placeholder="搜尋 Email..." className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
             </div>
             
-            <div className="p-4 border-b border-gray-100 flex gap-4 bg-white items-center shrink-0">
-                <div className="relative flex-1 max-w-sm">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                    <input type="text" placeholder="搜尋 Email..." className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-900" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
-                </div>
-                
-                <div className="relative">
+            <div className="flex gap-2 w-full sm:w-auto">
+                <div className="relative flex-1 sm:flex-none">
                     <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                    <select 
-                        className="pl-9 pr-8 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white text-sm text-gray-900 appearance-none cursor-pointer hover:bg-gray-50"
-                        value={filterRole}
-                        onChange={e => { setFilterRole(e.target.value); setCurrentPage(1); }}
-                    >
+                    <select className="w-full pl-9 pr-8 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white text-sm" value={filterRole} onChange={e => { setFilterRole(e.target.value); setCurrentPage(1); }}>
                         <option value="all">所有角色</option>
                         <option value="general">一般</option>
                         <option value="student">學員</option>
                         <option value="competitor">同業</option>
                         <option value="admin">管理員</option>
                     </select>
-                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={14} />
                 </div>
-
-                <button onClick={() => setIsInviteOpen(true)} className="ml-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 font-bold text-sm shadow-md transition-all"><UserPlus size={18} /> 新增</button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-0 relative min-h-0">
-                {loading ? <div className="flex justify-center py-20"><Loader2 className="animate-spin text-gray-400"/></div> : (
-                    <table className="w-full text-left border-collapse">
-                        <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm text-gray-500 text-sm">
-                            <tr>
-                                <th className="py-3 px-4 w-10"><input type="checkbox" onChange={handleSelectAllPage} checked={paginatedData.length > 0 && paginatedData.filter(p=>!checkIsSuperAdmin(p.email)).every(p => selectedIds.has(p.id))} disabled={paginatedData.length===0}/></th>
-                                <SortableHeader label="Email" sortKey="email" />
-                                <SortableHeader label="已排/上限" sortKey="activeCount" className="text-center w-28" />
-                                <SortableHeader label="角色" sortKey="role" className="text-center w-20" />
-                                <th className="py-3 px-2 text-center w-32">功能狀態</th>
-                                <SortableHeader label="到期日" sortKey="accessExpiry" className="text-center w-28" />
-                                <SortableHeader label="狀態" sortKey="isBanned" className="text-center w-16" />
-                                <th className="py-3 px-4 w-16 text-right">設定</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                            {paginatedData.map(user => {
-                                const isSuper = checkIsSuperAdmin(user.email);
-                                const usage = user.activeCount || 0;
-                                const isFull = usage >= user.maxCharts;
-                                return (
-                                    <tr key={user.id} className={`hover:bg-gray-50 group transition-colors ${selectedIds.has(user.id) ? 'bg-blue-50/50' : ''} ${editingUser?.id === user.id ? 'bg-blue-100/30' : ''}`}>
-                                        <td className="py-3 px-4"><input type="checkbox" checked={selectedIds.has(user.id)} onChange={() => handleSelectOne(user.id)} disabled={isSuper}/></td>
-                                        <td className="py-3 px-2 text-sm font-bold text-gray-700">
-                                            <div className="flex items-center gap-2">
-                                                {isSuper && '👑'} 
-                                                <span className="select-text break-all">{user.email}</span>
-                                            </div>
-                                        </td>
-                                        
-                                        <td className="py-3 px-2 text-center">
-                                            <span className={`text-xs font-mono font-bold px-2 py-1 rounded-full ${isFull ? 'bg-red-100 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
-                                                {usage} / {user.maxCharts}
-                                            </span>
-                                        </td>
-
-                                        <td className="py-3 px-2 text-center"><span className={`text-xs px-2 py-1 rounded-full ${user.role === 'admin' ? 'bg-purple-100 text-purple-700' : user.role === 'student' ? 'bg-green-100 text-green-700' : user.role === 'competitor' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}`}>{user.role === 'admin' ? '管理員' : user.role === 'student' ? '學員' : user.role === 'competitor' ? '同業' : '一般'}</span></td>
-                                        
-                                        <td className="py-3 px-2 text-center">
-                                            {renderFeatureIcons(user)}
-                                        </td>
-
-                                        <td className="py-3 px-2 text-xs font-mono text-gray-600 text-center">{user.accessExpiry ? user.accessExpiry.split('T')[0] : '-'}</td>
-                                        
-                                        <td className="py-3 px-2 text-center">{!isSuper ? <button onClick={() => handleBanToggle(user)} className={`w-8 h-4 rounded-full p-0.5 transition-colors inline-block align-middle ${!user.isBanned ? 'bg-green-500' : 'bg-gray-300'}`}><div className={`w-3 h-3 bg-white rounded-full shadow transform transition-transform ${!user.isBanned ? 'translate-x-4' : 'translate-x-0'}`} /></button> : <span className="text-amber-500 text-xs">🔒</span>}</td>
-                                        <td className="py-3 px-4 text-right"><button onClick={() => openEditDrawer(user)} className="p-2 bg-gray-100 hover:bg-blue-100 text-gray-600 hover:text-blue-600 rounded-lg transition-colors"><Settings size={16} /></button></td>
-                                    </tr>
-                                )
-                            })}
-                        </tbody>
-                    </table>
-                )}
-            </div>
-
-            {selectedIds.size > 0 && (
-                <div className="bg-blue-50 px-6 py-3 border-t border-blue-100 flex items-center justify-between shrink-0">
-                    <span className="text-sm font-bold text-blue-800">已選擇 {selectedIds.size} 位使用者</span>
-                    <div className="flex items-center gap-3">
-                        <input type="date" className="px-3 py-1.5 border border-blue-200 rounded text-sm bg-white text-gray-900" value={bulkDate} onChange={e => setBulkDate(e.target.value)} />
-                        <button onClick={handleBulkUpdate} disabled={isBulkUpdating} className="px-4 py-1.5 bg-blue-600 text-white rounded text-sm font-bold hover:bg-blue-700 flex items-center gap-2">{isBulkUpdating ? <Loader2 className="animate-spin" size={14}/> : <CalendarClock size={14}/>} 批量展延期限</button>
-                    </div>
-                </div>
-            )}
-
-            {/* [修正] 換頁功能區域：強化對比度、按鈕實體化 */}
-            <div className="bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-between shrink-0 h-16 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] z-20">
-                <span className="text-xs font-bold text-gray-500">Showing {paginatedData.length} of {processedProfiles.length}</span>
-                <div className="flex gap-2 items-center">
-                    <button 
-                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
-                        disabled={currentPage === 1} 
-                        className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50 disabled:bg-gray-50 disabled:cursor-not-allowed transition-all"
-                    >
-                        <ChevronLeft size={18}/>
-                    </button>
-                    
-                    <div className="bg-gray-50 border border-gray-200 px-4 py-1.5 rounded-lg text-sm font-mono font-bold text-gray-700 min-w-[4rem] text-center">
-                        {currentPage} / {totalPages}
-                    </div>
-                    
-                    <button 
-                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
-                        disabled={currentPage === totalPages} 
-                        className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50 disabled:bg-gray-50 disabled:cursor-not-allowed transition-all"
-                    >
-                        <ChevronRight size={18}/>
-                    </button>
-                </div>
+                <button onClick={() => setIsInviteOpen(true)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 font-bold text-sm shadow-md transition-all whitespace-nowrap"><UserPlus size={18} /> <span className="hidden sm:inline">新增</span></button>
             </div>
         </div>
 
-        {/* 右側編輯面板 (Drawer) */}
-        {editingUser && (
-            <div className="w-1/3 h-full bg-gray-50 flex flex-col border-l border-gray-200 shadow-xl z-20 animate-in slide-in-from-right-10 duration-200">
-                <div className="p-6 border-b border-gray-200 bg-white flex justify-between items-center shrink-0">
-                    <div>
-                        <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2"><Sliders size={18} className="text-purple-600"/> 編輯權限</h3>
-                        <p className="text-xs text-gray-500 mt-1 select-text break-all">{editingUser.email}</p>
-                    </div>
-                    <button onClick={() => setEditingUser(null)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
-                </div>
-                
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                    {/* 1. 角色與基礎設定 */}
-                    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-4">
-                        <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Basic Settings</h4>
-                        
-                        <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-1">角色權限 (Role)</label>
-                            <select 
-                                className="w-full p-2 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-purple-500 outline-none transition-all text-gray-900"
-                                value={editForm.role || 'general'}
-                                onChange={e => handleRoleChange(e.target.value)}
-                                disabled={checkIsSuperAdmin(editingUser.email)}
-                            >
-                                <option value="general">一般會員 (General)</option>
-                                <option value="student">學員 (Student)</option>
-                                <option value="competitor">同業 (Competitor)</option>
-                                <option value="admin">管理員 (Admin)</option>
-                            </select>
-                            <p className="text-[10px] text-gray-400 mt-1">* 切換角色將重置功能開關為該角色的預設值</p>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-1">命盤上限</label>
-                                <input type="number" className="w-full p-2 border border-gray-300 rounded-lg text-sm text-gray-900" value={editForm.maxCharts ?? 0} onChange={e => handleFormChange('maxCharts', parseInt(e.target.value))} />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-1">每盤修改次數</label>
-                                <input type="number" className="w-full p-2 border border-gray-300 rounded-lg text-sm text-gray-900" value={editForm.maxEditsPerChart ?? 0} onChange={e => handleFormChange('maxEditsPerChart', parseInt(e.target.value))} />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-1">權限到期日</label>
-                            <input type="date" className="w-full p-2 border border-gray-300 rounded-lg text-sm text-gray-900" value={editForm.accessExpiry ?? ''} onChange={e => handleFormChange('accessExpiry', e.target.value)} />
-                            <p className="text-[10px] text-gray-400 mt-1">* 若留空則永久有效 (視角色而定)</p>
-                        </div>
-                    </div>
-
-                    {/* 2. 功能細項開關 (Feature Flags) */}
-                    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                        <div className="flex justify-between items-center mb-3">
-                            <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Feature Flags (Overrides)</h4>
-                            <button 
-                                onClick={() => {
-                                    setEditForm(prev => ({ ...prev, feature_flags: {} }));
-                                    setHasChanges(true);
-                                }}
-                                className="text-[10px] text-blue-600 hover:underline flex items-center gap-1"
-                            >
-                                <RotateCcw size={10} /> 重置為預設
-                            </button>
-                        </div>
-                        
-                        <div className="space-y-2">
-                            {Object.entries(FEATURE_NAMES).map(([key, label]) => {
-                                const k = key as keyof UserFeatures;
-                                const defaultVal = DEFAULT_FLAGS_BY_ROLE[editForm.role || 'general']?.[k] ?? false;
-                                const currentVal = editForm.feature_flags?.[k];
-                                const isOverridden = currentVal !== undefined;
-                                const effectiveVal = isOverridden ? currentVal : defaultVal;
-
-                                return (
-                                    <div key={key} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 border border-transparent hover:border-gray-100 transition-colors">
+        {/* --- 列表內容 --- */}
+        <div className="flex-1 overflow-y-auto p-0 relative min-h-0 bg-white">
+            {loading ? <div className="flex justify-center py-20"><Loader2 className="animate-spin text-gray-400"/></div> : (
+                <table className="w-full text-left border-collapse">
+                    <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm text-gray-500 text-sm">
+                        <tr>
+                            <th className="py-3 px-4 w-10"><input type="checkbox" onChange={handleSelectAllPage} checked={paginatedData.length > 0 && paginatedData.filter(p=>!checkIsSuperAdmin(p.email)).every(p => selectedIds.has(p.id))} disabled={paginatedData.length===0}/></th>
+                            <SortableHeader label="Email" sortKey="email" />
+                            <SortableHeader label="點數" sortKey="points_balance" className="text-center w-20" />
+                            <SortableHeader label="盤數" sortKey="activeCount" className="text-center w-20 hidden sm:table-cell" />
+                            <SortableHeader label="角色" sortKey="role" className="text-center w-20 hidden sm:table-cell" />
+                            <SortableHeader label="狀態" sortKey="isBanned" className="text-center w-16" />
+                            <th className="py-3 px-4 w-16 text-right">設定</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                        {paginatedData.map(user => {
+                            const isSuper = checkIsSuperAdmin(user.email);
+                            const usage = user.activeCount || 0;
+                            return (
+                                <tr key={user.id} className={`hover:bg-gray-50 group transition-colors ${selectedIds.has(user.id) ? 'bg-blue-50/50' : ''}`}>
+                                    <td className="py-3 px-4"><input type="checkbox" checked={selectedIds.has(user.id)} onChange={() => handleSelectOne(user.id)} disabled={isSuper}/></td>
+                                    <td className="py-3 px-2 text-sm font-bold text-gray-700">
                                         <div className="flex items-center gap-2">
-                                            <div className={`w-2 h-2 rounded-full ${effectiveVal ? 'bg-green-500' : 'bg-gray-300'}`} />
-                                            <span className={`text-sm font-medium ${effectiveVal ? 'text-gray-900' : 'text-gray-400'}`}>{label}</span>
-                                            {isOverridden && <span className="text-[9px] px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded-full font-bold">自訂</span>}
+                                            {isSuper && '👑'} <span className="select-text break-all">{user.email}</span>
                                         </div>
-                                        <div className="flex bg-gray-100 p-0.5 rounded-lg">
-                                            <button 
-                                                onClick={() => handleFeatureToggle(k, true)}
-                                                className={`px-2 py-1 text-xs rounded-md transition-all ${effectiveVal === true && isOverridden ? 'bg-white shadow text-green-700 font-bold' : 'text-gray-400 hover:text-gray-600'}`}
-                                            >ON</button>
-                                            <button 
-                                                onClick={() => handleFeatureToggle(k, undefined)}
-                                                className={`px-2 py-1 text-xs rounded-md transition-all ${!isOverridden ? 'bg-white shadow text-gray-700 font-bold' : 'text-gray-400 hover:text-gray-600'}`}
-                                                title="使用角色預設值"
-                                            >預設</button>
-                                            <button 
-                                                onClick={() => handleFeatureToggle(k, false)}
-                                                className={`px-2 py-1 text-xs rounded-md transition-all ${effectiveVal === false && isOverridden ? 'bg-white shadow text-red-700 font-bold' : 'text-gray-400 hover:text-gray-600'}`}
-                                            >OFF</button>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
+                                    </td>
+                                    <td className="py-3 px-2 text-center text-sm font-mono text-purple-600 font-bold">{user.points_balance}</td>
+                                    <td className="py-3 px-2 text-center hidden sm:table-cell"><span className="text-xs font-mono font-bold px-2 py-1 bg-blue-50 text-blue-600 rounded-full">{usage}/{user.maxCharts}</span></td>
+                                    <td className="py-3 px-2 text-center hidden sm:table-cell"><span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">{user.role}</span></td>
+                                    <td className="py-3 px-2 text-center">{!isSuper ? <button onClick={() => handleBanToggle(user)} className={`w-8 h-4 rounded-full p-0.5 transition-colors inline-block align-middle ${!user.isBanned ? 'bg-green-500' : 'bg-gray-300'}`}><div className={`w-3 h-3 bg-white rounded-full shadow transform transition-transform ${!user.isBanned ? 'translate-x-4' : 'translate-x-0'}`} /></button> : <span className="text-amber-500 text-xs">🔒</span>}</td>
+                                    <td className="py-3 px-4 text-right">
+                                        <button onClick={() => openEditModal(user)} className="p-2 bg-gray-100 hover:bg-blue-100 text-gray-600 hover:text-blue-600 rounded-lg transition-colors"><Settings size={16} /></button>
+                                    </td>
+                                </tr>
+                            )
+                        })}
+                    </tbody>
+                </table>
+            )}
+        </div>
 
-                    {/* 危險區域 */}
-                    {!checkIsSuperAdmin(editingUser.email) && (
-                        <div className="border border-red-100 bg-red-50 p-4 rounded-xl">
-                            <h4 className="text-xs font-bold text-red-400 uppercase tracking-wider mb-2">Danger Zone</h4>
-                            <button 
-                                onClick={handleDeleteUser} 
-                                className="w-full py-2 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-colors text-sm font-bold flex items-center justify-center gap-2"
-                            >
-                                <Trash2 size={16} /> 刪除使用者 (移轉資料)
-                            </button>
-                        </div>
-                    )}
-                </div>
-
-                <div className="p-4 bg-white border-t border-gray-200 flex justify-end gap-3 shrink-0">
-                    <button onClick={() => setEditingUser(null)} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors">取消</button>
-                    <button 
-                        onClick={handleSaveProfile} 
-                        disabled={!hasChanges}
-                        className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg shadow-lg shadow-purple-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-bold flex items-center gap-2"
-                    >
-                        <Save size={18} /> 儲存變更
+        {/* --- 批次操作列 (Action Bar) --- */}
+        {selectedIds.size > 0 && (
+            <div className="bg-blue-600 text-white px-6 py-3 border-t border-blue-700 flex flex-row items-center justify-between shrink-0 shadow-lg z-30">
+                <span className="text-sm font-bold flex items-center gap-2"><CheckCircle size={16}/> 已選擇 {selectedIds.size} 位使用者</span>
+                <div className="flex items-center gap-3">
+                    {/* 主要功能：加點 */}
+                    <button onClick={handleBulkAddPoints} disabled={isBulkUpdating} className="px-4 py-2 bg-yellow-500 text-white rounded-lg font-bold hover:bg-yellow-400 flex items-center gap-2 shadow-md transition-colors whitespace-nowrap text-sm">
+                        {isBulkUpdating ? <Loader2 className="animate-spin" size={16}/> : <Coins size={16}/>} 批次加點
                     </button>
+                    
+                    {/* 更多功能 Dropdown */}
+                    <div className="relative" ref={bulkMenuRef}>
+                        <button 
+                            onClick={() => setIsBulkMenuOpen(!isBulkMenuOpen)}
+                            className="px-3 py-2 bg-blue-700 hover:bg-blue-500 rounded-lg transition-colors flex items-center gap-1"
+                        >
+                            <MoreHorizontal size={20} />
+                            {isBulkMenuOpen ? <ChevronDown size={14}/> : <ChevronUp size={14}/>}
+                        </button>
+
+                        {isBulkMenuOpen && (
+                            <div className="absolute bottom-full right-0 mb-2 w-48 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden animate-in fade-in zoom-in duration-200 py-1 text-gray-800">
+                                <button 
+                                    onClick={() => { setShowBulkExpiryModal(true); setIsBulkMenuOpen(false); }}
+                                    className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-3 font-medium text-sm"
+                                >
+                                    <CalendarClock size={16} className="text-blue-600"/> 批次展延期限
+                                </button>
+                                <button 
+                                    onClick={() => { setShowBulkChartsModal(true); setIsBulkMenuOpen(false); }}
+                                    className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-3 font-medium text-sm"
+                                >
+                                    <Grid size={16} className="text-purple-600"/> 批次增加盤數
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         )}
 
-        {/* 邀請視窗 (Modal) */}
-        {isInviteOpen && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 animate-in zoom-in duration-200">
-                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2"><UserPlus size={20} className="text-blue-600"/> 新增使用者</h3>
-                    <p className="text-sm text-gray-500 mb-4">輸入對方的 Email，系統將發送邀請信 (包含重設密碼連結)。對方點擊連結設定密碼後即可登入。</p>
-                    <input 
-                        type="email" 
-                        placeholder="user@example.com" 
-                        className="w-full p-3 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-blue-500 outline-none text-gray-900"
-                        value={inviteEmail}
-                        onChange={e => setInviteEmail(e.target.value)}
-                    />
+        {/* --- 頁碼列 --- */}
+        <div className="bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-between shrink-0 h-16 z-20">
+            <span className="text-xs font-bold text-gray-500">Showing {paginatedData.length} of {processedProfiles.length}</span>
+            <div className="flex gap-2 items-center">
+                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-50"><ChevronLeft size={18}/></button>
+                <div className="bg-gray-50 border border-gray-200 px-4 py-1.5 rounded-lg text-sm font-mono font-bold text-gray-700 min-w-[4rem] text-center">{currentPage} / {totalPages}</div>
+                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-50"><ChevronRight size={18}/></button>
+            </div>
+        </div>
+
+        {/* --- [Modal 1] 批次展延 --- */}
+        {showBulkExpiryModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+                <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2"><CalendarClock className="text-blue-600"/> 批次展延期限</h3>
+                    <p className="text-sm text-gray-500 mb-4">將選取的 {selectedIds.size} 位使用者權限延展至：</p>
+                    <input type="date" className="w-full p-3 border rounded-lg mb-6 bg-gray-50 text-lg" value={bulkDate} onChange={e => setBulkDate(e.target.value)} />
                     <div className="flex gap-3">
-                        <button onClick={() => setIsInviteOpen(false)} className="flex-1 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">取消</button>
-                        <button onClick={handleInvite} disabled={isInviting || !inviteEmail} className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-bold flex justify-center items-center gap-2">
-                            {isInviting ? <Loader2 className="animate-spin" size={18} /> : '發送邀請'}
+                        <button onClick={() => setShowBulkExpiryModal(false)} className="flex-1 py-2 border rounded-lg text-gray-600 hover:bg-gray-50 font-bold">取消</button>
+                        <button onClick={executeBulkExpiry} disabled={isBulkUpdating || !bulkDate} className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold flex justify-center items-center gap-2">
+                            {isBulkUpdating ? <Loader2 className="animate-spin" size={18}/> : '確認更新'}
                         </button>
                     </div>
                 </div>
             </div>
         )}
 
-      </div>
+        {/* --- [Modal 2] 批次修改盤數 --- */}
+        {showBulkChartsModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+                <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2"><Grid className="text-purple-600"/> 批次調整盤數上限</h3>
+                    <p className="text-sm text-gray-500 mb-4">針對選取的 {selectedIds.size} 位使用者：</p>
+                    
+                    <div className="flex bg-gray-100 p-1 rounded-lg mb-4">
+                        <button onClick={() => setBulkChartMode('add')} className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${bulkChartMode==='add' ? 'bg-white shadow text-purple-700' : 'text-gray-500'}`}>增加 / 減少</button>
+                        <button onClick={() => setBulkChartMode('set')} className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${bulkChartMode==='set' ? 'bg-white shadow text-purple-700' : 'text-gray-500'}`}>設定為</button>
+                    </div>
+
+                    <div className="mb-6">
+                        <label className="block text-xs font-bold text-gray-500 mb-1">數量</label>
+                        <input type="number" className="w-full p-3 border rounded-lg bg-gray-50 text-lg font-mono" value={bulkChartValue} onChange={e => setBulkChartValue(parseInt(e.target.value) || 0)} placeholder="例如: 5" />
+                        <p className="text-xs text-gray-400 mt-2">
+                            {bulkChartMode === 'add' ? '輸入正數增加，負數減少。' : '所有選取者的上限將直接變為此數值。'}
+                        </p>
+                    </div>
+
+                    <div className="flex gap-3">
+                        <button onClick={() => setShowBulkChartsModal(false)} className="flex-1 py-2 border rounded-lg text-gray-600 hover:bg-gray-50 font-bold">取消</button>
+                        <button onClick={executeBulkCharts} disabled={isBulkUpdating} className="flex-1 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-bold flex justify-center items-center gap-2">
+                            {isBulkUpdating ? <Loader2 className="animate-spin" size={18}/> : '確認執行'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* 使用者編輯 Modal (保持不變) */}
+        {editingUser && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden">
+                    <div className="p-4 sm:p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50 shrink-0">
+                        <div>
+                            <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2"><Settings size={20} className="text-blue-600"/> 使用者管理</h3>
+                            <p className="text-xs text-gray-500 mt-1 select-text font-mono">{editingUser.email}</p>
+                        </div>
+                        <button onClick={() => setEditingUser(null)} className="p-2 hover:bg-gray-200 rounded-full transition-colors"><X size={24} className="text-gray-500"/></button>
+                    </div>
+                    <div className="flex border-b border-gray-200 bg-white shrink-0">
+                        <button onClick={() => setActiveTab('profile')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${activeTab === 'profile' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><FileText size={16}/> 基本資料與權限</button>
+                        <button onClick={() => setActiveTab('history')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-2 border-b-2 transition-colors ${activeTab === 'history' ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}><History size={16}/> 點數與交易紀錄</button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50">
+                        {activeTab === 'profile' ? (
+                            <div className="space-y-6">
+                                <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-4">
+                                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">基本權限</h4>
+                                    <div><label className="block text-sm font-bold text-gray-700 mb-1">角色權限</label><select className="w-full p-2 border rounded-lg bg-gray-50" value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value as any})} disabled={checkIsSuperAdmin(editingUser.email)}><option value="general">一般會員</option><option value="student">學員</option><option value="competitor">同業</option><option value="admin">管理員</option></select></div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div><label className="block text-sm font-bold text-gray-700 mb-1">命盤上限</label><input type="number" className="w-full p-2 border rounded-lg" value={editForm.maxCharts} onChange={e => setEditForm({...editForm, maxCharts: parseInt(e.target.value)})} /></div>
+                                        <div><label className="block text-sm font-bold text-gray-700 mb-1">每盤修改次數</label><input type="number" className="w-full p-2 border rounded-lg" value={editForm.maxEditsPerChart} onChange={e => setEditForm({...editForm, maxEditsPerChart: parseInt(e.target.value)})} /></div>
+                                    </div>
+                                    <div><label className="block text-sm font-bold text-gray-700 mb-1">權限到期日</label><input type="date" className="w-full p-2 border rounded-lg" value={editForm.accessExpiry} onChange={e => setEditForm({...editForm, accessExpiry: e.target.value})} /></div>
+                                </div>
+                                <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">功能開關 (Feature Flags)</h4>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        {Object.entries(FEATURE_NAMES).map(([key, label]) => {
+                                            const k = key as keyof UserFeatures;
+                                            const defaultVal = DEFAULT_FLAGS_BY_ROLE[editForm.role || 'general']?.[k] ?? false;
+                                            const currentVal = editForm.feature_flags?.[k];
+                                            const isOverridden = currentVal !== undefined;
+                                            const effectiveVal = isOverridden ? currentVal : defaultVal;
+                                            return (
+                                                <div key={key} className="flex items-center justify-between p-2 rounded-lg bg-gray-50">
+                                                    <div className="flex items-center gap-2"><div className={`w-2 h-2 rounded-full ${effectiveVal ? 'bg-green-500' : 'bg-gray-300'}`} /><span className="text-sm">{label}</span></div>
+                                                    <div className="flex bg-white p-0.5 rounded-lg border">
+                                                        <button onClick={() => setEditForm(p => ({...p, feature_flags: {...p.feature_flags, [k]: true}}))} className={`px-2 py-0.5 text-xs rounded ${effectiveVal===true && isOverridden ? 'bg-green-100 text-green-700 font-bold' : 'text-gray-400'}`}>ON</button>
+                                                        <button onClick={() => setEditForm(p => { const f = {...p.feature_flags}; delete f[k]; return {...p, feature_flags: f}; })} className={`px-2 py-0.5 text-xs rounded ${!isOverridden ? 'bg-gray-100 text-gray-700 font-bold' : 'text-gray-400'}`}>預設</button>
+                                                        <button onClick={() => setEditForm(p => ({...p, feature_flags: {...p.feature_flags, [k]: false}}))} className={`px-2 py-0.5 text-xs rounded ${effectiveVal===false && isOverridden ? 'bg-red-100 text-red-700 font-bold' : 'text-gray-400'}`}>OFF</button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                                {!checkIsSuperAdmin(editingUser.email) && <div className="p-4 rounded-xl border border-red-200 bg-red-50"><button onClick={handleDeleteUser} className="w-full py-2 text-red-600 font-bold flex items-center justify-center gap-2"><Trash2 size={16}/> 刪除此使用者</button></div>}
+                            </div>
+                        ) : (
+                            <div className="space-y-6">
+                                <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col sm:flex-row items-center gap-4">
+                                    <div className="text-center sm:text-left">
+                                        <div className="text-xs text-gray-500 mb-1">目前餘額</div>
+                                        <div className="text-3xl font-black text-purple-600 font-mono">{editingUser.points_balance}</div>
+                                    </div>
+                                    <div className="flex-1 w-full flex items-center gap-2">
+                                        <button onClick={() => { const r = prompt("增加原因:"); if(r) handleSingleAdjust(100, r); }} className="flex-1 py-2 bg-green-50 text-green-700 border border-green-200 rounded-lg font-bold text-sm hover:bg-green-100">+100 補償</button>
+                                        <button onClick={() => { const r = prompt("扣除原因:"); if(r) handleSingleAdjust(-50, r); }} className="flex-1 py-2 bg-red-50 text-red-700 border border-red-200 rounded-lg font-bold text-sm hover:bg-red-100">-50 扣除</button>
+                                        <button onClick={() => { const amt = prompt("輸入數量 (+/-):"); const res = prompt("原因:"); if(amt && res) handleSingleAdjust(parseInt(amt), res); }} className="flex-1 py-2 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg font-bold text-sm hover:bg-gray-100">自訂調整</button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h4 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><History size={16}/> 點數變動明細 (Ledger)</h4>
+                                    {historyLoading ? <Loader2 className="animate-spin text-gray-400"/> : (
+                                        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                                            <table className="w-full text-xs text-left">
+                                                <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-200">
+                                                    <tr><th className="p-3">時間</th><th className="p-3">類型</th><th className="p-3 text-right">變動</th><th className="p-3">原因/備註</th><th className="p-3 text-right">操作</th></tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-100">
+                                                    {userLedger.map(row => (
+                                                        <tr key={row.id} className="hover:bg-gray-50">
+                                                            <td className="p-3 text-gray-500">{new Date(row.created_at).toLocaleString()}</td>
+                                                            <td className="p-3 font-bold">{row.type}</td>
+                                                            <td className={`p-3 text-right font-mono font-bold ${row.delta_points > 0 ? 'text-green-600' : 'text-red-600'}`}>{row.delta_points > 0 ? `+${row.delta_points}` : row.delta_points}</td>
+                                                            <td className="p-3 text-gray-600 truncate max-w-[150px]" title={row.reason}>{row.reason}</td>
+                                                            <td className="p-3 text-right">
+                                                                {row.delta_points < 0 && <button onClick={() => { if(confirm(`確定要退還這 ${Math.abs(row.delta_points)} 點給使用者嗎？`)) handleSingleAdjust(Math.abs(row.delta_points), `退還: ${row.reason}`); }} className="px-2 py-1 bg-blue-50 text-blue-600 rounded border border-blue-200 hover:bg-blue-100 text-[10px]"><RotateCcw size={12} className="inline mr-1"/>退還</button>}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                    {userLedger.length === 0 && <tr><td colSpan={5} className="p-4 text-center text-gray-400">無資料</td></tr>}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
+                                <div>
+                                    <h4 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><CreditCard size={16}/> 購買紀錄 (Transactions)</h4>
+                                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                                        <table className="w-full text-xs text-left">
+                                            <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-200">
+                                                <tr><th className="p-3">時間</th><th className="p-3">商品</th><th className="p-3">金額</th><th className="p-3">狀態</th><th className="p-3 text-right">退款處理</th></tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100">
+                                                {userTransactions.map(t => (
+                                                    <tr key={t.id} className="hover:bg-gray-50">
+                                                        <td className="p-3 text-gray-500">{new Date(t.created_at).toLocaleString()}</td>
+                                                        <td className="p-3 font-bold">{t.pack_name}</td>
+                                                        <td className="p-3">NT${t.price_ntd_snapshot}</td>
+                                                        <td className="p-3"><span className={`px-2 py-0.5 rounded-full ${t.status==='SUCCESS'?'bg-green-100 text-green-700':'bg-gray-100 text-gray-600'}`}>{t.status}</span></td>
+                                                        <td className="p-3 text-right">
+                                                            {t.status === 'SUCCESS' && <button onClick={() => { if(confirm(`注意：此操作僅會扣除使用者點數並註記，不會自動刷退信用卡。\n請確認您已在綠界後台完成退款。\n\n確定執行？`)) { const pts = (t.base_points_snapshot || 0) + (t.bonus_points_snapshot || 0); handleSingleAdjust(-pts, `訂單退款: ${t.id}`); } }} className="px-2 py-1 bg-red-50 text-red-600 rounded border border-red-200 hover:bg-red-100 text-[10px]"><RefreshCcw size={12} className="inline mr-1"/>註記退款</button>}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                                {userTransactions.length === 0 && <tr><td colSpan={5} className="p-4 text-center text-gray-400">無購買紀錄</td></tr>}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <p className="text-[10px] text-gray-400 mt-2">* 注意：信用卡退款需至綠界後台操作，此處僅處理點數回收。</p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    {activeTab === 'profile' && (
+                        <div className="p-4 bg-white border-t border-gray-200 flex justify-end gap-3 shrink-0">
+                            <button onClick={() => setEditingUser(null)} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg">取消</button>
+                            <button onClick={handleSaveProfile} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-lg font-bold flex items-center gap-2"><Save size={18} /> 儲存變更</button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        )}
+
+        {/* 邀請視窗 (保持不變) */}
+        {isInviteOpen && (
+            <div className="absolute inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 animate-in zoom-in duration-200">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2"><UserPlus size={20} className="text-blue-600"/> 新增使用者</h3>
+                    <input type="email" placeholder="user@example.com" className="w-full p-3 border border-gray-300 rounded-lg mb-4" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
+                    <div className="flex gap-3">
+                        <button onClick={() => setIsInviteOpen(false)} className="flex-1 py-2 border rounded-lg text-gray-600 hover:bg-gray-50">取消</button>
+                        <button onClick={handleInvite} disabled={isInviting || !inviteEmail} className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold">{isInviting ? <Loader2 className="animate-spin inline" size={18} /> : '發送邀請'}</button>
+                    </div>
+                </div>
+            </div>
+        )}
     </div>
   );
 };

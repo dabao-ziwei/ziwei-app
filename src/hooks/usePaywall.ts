@@ -1,8 +1,8 @@
 // FILE: src/hooks/usePaywall.ts
 import { useState, useEffect } from 'react';
-import { issueGuestToken, getPaywallPhase } from '../db';
+import { issueGuestToken, getPaywallPhase, getFeatureRuntime } from '../db';
+import type { FeatureConfig } from '../types/store';
 
-export const DIVINATION_COST = 50;
 export const FEATURE_YEARLY_ADVICE_ENABLED = false;
 
 const normalizePhase = (v: any): string | null => {
@@ -30,6 +30,7 @@ export type PaywallMode =
 
 export const usePaywall = (userProfile: any) => {
   const [dbPhase, setDbPhase] = useState<string | null>(null);
+  const [featureConfig, setFeatureConfig] = useState<FeatureConfig | null>(null);
 
   useEffect(() => {
     const checkGuestToken = async () => {
@@ -47,8 +48,11 @@ export const usePaywall = (userProfile: any) => {
         const phase = await getPaywallPhase();
         const normalized = normalizePhase(phase);
         if (normalized) setDbPhase(normalized);
+
+        const config = await getFeatureRuntime('lucky_divination');
+        setFeatureConfig(config);
       } catch (e) {
-        // Fallback to env
+        // Fallback
       }
     };
     fetchPhase();
@@ -56,35 +60,42 @@ export const usePaywall = (userProfile: any) => {
 
   const activePhase = dbPhase || ENV_PHASE;
 
-  const checkAccess = (): { canAccess: boolean; mode: PaywallMode } => {
+  const checkAccess = (): { canAccess: boolean; mode: PaywallMode, cost: number, announcement: string } => {
     const isMember = !!userProfile?.id;
-    // Note: No localStorage blocking here. Handler manages retry.
-
-    const credits = (userProfile as any)?.credits || 0;
+    const credits = (userProfile as any)?.points_balance ?? (userProfile as any)?.credits ?? 0;
     const freeDivinationUsed = (userProfile as any)?.free_divination_used || false;
+    
+    let cost = 0; // 預設 0，等待 DB 載入
+    let announcement = '';
+    let isPaid = true;
 
-    // 1. 訪客邏輯
+    if (featureConfig) {
+        cost = featureConfig.price;
+        announcement = featureConfig.announcement;
+        isPaid = featureConfig.is_paid;
+    }
+
+    if (!isPaid) {
+        return { canAccess: true, mode: 'ALLOW', cost: 0, announcement };
+    }
+
     if (!isMember) {
-        return { canAccess: true, mode: 'GUEST_FREE' };
+        return { canAccess: true, mode: 'GUEST_FREE', cost: 0, announcement };
     }
 
-    // 2. 會員邏輯 - 免費額度
     if (!freeDivinationUsed) {
-      return { canAccess: true, mode: 'MEMBER_FREE' };
+      return { canAccess: true, mode: 'MEMBER_FREE', cost: 0, announcement };
     }
 
-    // 3. Phase 邏輯
     switch (activePhase) {
       case 'SOFT_LAUNCH':
-        return { canAccess: true, mode: 'SOFT_NOTICE' };
+        return { canAccess: true, mode: 'SOFT_NOTICE', cost, announcement };
       case 'FULL_PAYWALL':
-        // [P1 Fix] 若點數足夠，也回傳 true，讓 Handler 決定是否彈出 Confirm Modal (而不是 false 擋住)
-        // 但我們仍回傳 CONFIRM_DEDUCT 模式，讓前端知道這是一次付費行為
-        if (credits >= DIVINATION_COST) return { canAccess: true, mode: 'CONFIRM_DEDUCT' };
-        return { canAccess: false, mode: 'INSUFFICIENT' };
+        if (credits >= cost) return { canAccess: true, mode: 'CONFIRM_DEDUCT', cost, announcement };
+        return { canAccess: false, mode: 'INSUFFICIENT', cost, announcement };
       case 'ANNOUNCE_ONLY':
       default:
-        return { canAccess: true, mode: 'ALLOW' };
+        return { canAccess: true, mode: 'ALLOW', cost: 0, announcement };
     }
   };
 
