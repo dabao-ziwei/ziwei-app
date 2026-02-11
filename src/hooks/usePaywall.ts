@@ -1,8 +1,9 @@
 // FILE: src/hooks/usePaywall.ts
 import { useState, useEffect } from 'react';
 import { issueGuestToken, getPaywallPhase, getFeatureRuntime } from '../db';
-import type { FeatureConfig } from '../types/store';
 
+// ✅ [關鍵修正] 必須匯出這些常數，SingleChart 才能使用
+export const DIVINATION_COST = 50;
 export const FEATURE_YEARLY_ADVICE_ENABLED = false;
 
 const normalizePhase = (v: any): string | null => {
@@ -25,12 +26,11 @@ export type PaywallMode =
   | 'SOFT_NOTICE' 
   | 'CONFIRM_DEDUCT' 
   | 'INSUFFICIENT' 
-  | 'MUST_LOGIN'
+  | 'MUST_LOGIN' 
   | 'GUEST_ALREADY_USED';
 
 export const usePaywall = (userProfile: any) => {
   const [dbPhase, setDbPhase] = useState<string | null>(null);
-  const [featureConfig, setFeatureConfig] = useState<FeatureConfig | null>(null);
 
   useEffect(() => {
     const checkGuestToken = async () => {
@@ -48,9 +48,6 @@ export const usePaywall = (userProfile: any) => {
         const phase = await getPaywallPhase();
         const normalized = normalizePhase(phase);
         if (normalized) setDbPhase(normalized);
-
-        const config = await getFeatureRuntime('lucky_divination');
-        setFeatureConfig(config);
       } catch (e) {
         // Fallback
       }
@@ -65,28 +62,20 @@ export const usePaywall = (userProfile: any) => {
     const credits = (userProfile as any)?.points_balance ?? (userProfile as any)?.credits ?? 0;
     const freeDivinationUsed = (userProfile as any)?.free_divination_used || false;
     
-    let cost = 0; // 預設 0，等待 DB 載入
+    let cost = DIVINATION_COST; 
     let announcement = '';
-    let isPaid = true;
 
-    if (featureConfig) {
-        cost = featureConfig.price;
-        announcement = featureConfig.announcement;
-        isPaid = featureConfig.is_paid;
-    }
-
-    if (!isPaid) {
-        return { canAccess: true, mode: 'ALLOW', cost: 0, announcement };
-    }
-
+    // 1. 訪客邏輯
     if (!isMember) {
-        return { canAccess: true, mode: 'GUEST_FREE', cost: 0, announcement };
+        return { canAccess: true, mode: 'GUEST_FREE', cost, announcement };
     }
 
+    // 2. 會員邏輯 - 免費額度
     if (!freeDivinationUsed) {
-      return { canAccess: true, mode: 'MEMBER_FREE', cost: 0, announcement };
+      return { canAccess: true, mode: 'MEMBER_FREE', cost, announcement };
     }
 
+    // 3. Phase 邏輯
     switch (activePhase) {
       case 'SOFT_LAUNCH':
         return { canAccess: true, mode: 'SOFT_NOTICE', cost, announcement };
@@ -95,7 +84,7 @@ export const usePaywall = (userProfile: any) => {
         return { canAccess: false, mode: 'INSUFFICIENT', cost, announcement };
       case 'ANNOUNCE_ONLY':
       default:
-        return { canAccess: true, mode: 'ALLOW', cost: 0, announcement };
+        return { canAccess: true, mode: 'ALLOW', cost, announcement };
     }
   };
 
