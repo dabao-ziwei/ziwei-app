@@ -12,66 +12,66 @@ interface DualChartProps {
 }
 
 const getSiHuaMap = (ganIndex: number) => {
-    if (ganIndex < 0 || ganIndex > 9) return {};
-    const ganChar = GAN[ganIndex];
-    const stars = SIHUA_TABLE[ganChar];
-    if (!stars) return {};
-    return {
-        [stars[0]]: '祿',
-        [stars[1]]: '權',
-        [stars[2]]: '科',
-        [stars[3]]: '忌',
-    } as Record<string, '祿' | '權' | '科' | '忌'>;
+  if (ganIndex < 0 || ganIndex > 9) return {};
+  const ganChar = GAN[ganIndex];
+  const stars = SIHUA_TABLE[ganChar];
+  if (!stars) return {};
+  return {
+    [stars[0]]: '祿',
+    [stars[1]]: '權',
+    [stars[2]]: '科',
+    [stars[3]]: '忌',
+  } as Record<string, '祿' | '權' | '科' | '忌'>;
 };
 
 const getLiuNianList = (engine: ZiWeiEngine, chartData: any, daXianSeq: number) => {
-    if (!engine || !chartData || daXianSeq < 0) return [];
-    
-    const startPos = engine.getMingPos();
-    const direction = chartData.direction || 1;
-    const offset = daXianSeq * direction;
-    const daXianPalaceIdx = (startPos + offset + 120) % 12;
-    const palace = chartData.palaces[daXianPalaceIdx];
-    
-    if (!palace) return [];
-    
-    const startYear = chartData.lunarYear + palace.ages[0];
-    const list = [];
-    for (let i = 0; i < 10; i++) {
-        const year = startYear + i;
-        list.push({ year, label: `${year}` });
-    }
-    return list;
+  if (!engine || !chartData || daXianSeq < 0) return [];
+  
+  const startPos = engine.getMingPos();
+  const direction = chartData.direction || 1;
+  const offset = daXianSeq * direction;
+  const daXianPalaceIdx = (startPos + offset + 120) % 12;
+  const palace = chartData.palaces[daXianPalaceIdx];
+  
+  if (!palace) return [];
+  
+  const startYear = chartData.lunarYear + palace.ages[0];
+  const list = [];
+  for (let i = 0; i < 10; i++) {
+    const year = startYear + i;
+    list.push({ year, label: `${year}` });
+  }
+  return list;
 };
 
 const getCurrentDaLimitIndex = (chartData: any, engine: ZiWeiEngine) => {
-    if (!chartData || !engine) return 0;
-    
-    const now = new Date();
-    const solar = Solar.fromYmd(now.getFullYear(), now.getMonth() + 1, now.getDate());
-    const currentLunarYear = solar.getLunar().getYear(); 
-    
-    const virtualAge = currentLunarYear - chartData.lunarYear + 1;
+  if (!chartData || !engine) return 0;
+  
+  const now = new Date();
+  const solar = Solar.fromYmd(now.getFullYear(), now.getMonth() + 1, now.getDate());
+  const currentLunarYear = solar.getLunar().getYear(); 
+  
+  const virtualAge = currentLunarYear - chartData.lunarYear + 1;
 
-    const startPos = engine.getMingPos();
-    const direction = chartData.direction || 1;
-    
-    for (let i = 0; i < 10; i++) {
-        const idx = (startPos + i * direction + 120) % 12;
-        const p = chartData.palaces[idx];
-        if (virtualAge >= p.ages[0] && virtualAge <= p.ages[1]) {
-            return i;
-        }
+  const startPos = engine.getMingPos();
+  const direction = chartData.direction || 1;
+  
+  for (let i = 0; i < 10; i++) {
+    const idx = (startPos + i * direction + 120) % 12;
+    const p = chartData.palaces[idx];
+    if (virtualAge >= p.ages[0] && virtualAge <= p.ages[1]) {
+      return i;
     }
-    return 0;
+  }
+  return 0;
 };
 
 const calcNextHour = (currentHour: number, delta: number) => {
-    const currentZhiIdx = Math.floor((currentHour + 1) / 2) % 12;
-    let nextZhiIdx = currentZhiIdx + delta;
-    if (nextZhiIdx < 0) nextZhiIdx = 11;
-    if (nextZhiIdx > 11) nextZhiIdx = 0;
-    return nextZhiIdx === 0 ? 0 : nextZhiIdx * 2;
+  const currentZhiIdx = Math.floor((currentHour + 1) / 2) % 12;
+  let nextZhiIdx = currentZhiIdx + delta;
+  if (nextZhiIdx < 0) nextZhiIdx = 11;
+  if (nextZhiIdx > 11) nextZhiIdx = 0;
+  return nextZhiIdx === 0 ? 0 : nextZhiIdx * 2;
 };
 
 export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
@@ -383,14 +383,88 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
         <div className="flex-1 flex overflow-hidden relative">
             <div className="flex-1 flex flex-col border-r-2 border-gray-300 relative min-w-0">
                 <div className="flex-1 relative min-h-0">
-                    <PalaceGrid client={clientA} chartData={chartA} relationships={[]} historyStack={[]} mode="standard" selectedPalace={null} flyingPalace={activeSide === 'A' ? flyingPalace : null} daXianSeq={daSeqA} liuNianYear={liuYearA} showXiaoXian={showXiaoA} isReverse={isCurrentRevA} reverseFlags={reverseFlagsA} onToggleInverted={handleToggleReverseA} isTwinMode={isTwinA} externalGan={null} flyingStarsLookup={flyMapBtoA} benMingMajorStarsStr="" currentHourZhi={`${hourA}`} isTimeModified={hourA !== clientA.birthHour} connections={dummyConnections} daXianList={daXianList} xiaoXianMingIdx={-1} getRelativeNames={(idx) => { let daName = undefined; if (daSeqA >= 0 && daListA[daSeqA]?.palaceIdx === idx) daName = '大命'; return { daName }; }} getIsBenMingMing={(idx) => idx === engineA!.getMingPos()} getAnchorCoord={getDummyCoords} onHistoryBack={dummyNav} onNavigate={dummyNav} onCompatibility={dummyNav} onChangeHour={handleChangeHourA} onResetTime={() => setHourA(clientA.birthHour)} onToggleTwin={() => setIsTwinA(!isTwinA)} onToggleSmallLimit={() => setShowXiaoA(!showXiaoA)} onPalaceClick={(idx) => handlePalaceClick('A', idx)} onTriggerClick={() => {}} currentRealTime={currentRealTimeA} />
+                    <PalaceGrid 
+                        client={clientA} 
+                        chartData={chartA} 
+                        relationships={[]} 
+                        historyStack={[]} 
+                        mode="standard" 
+                        selectedPalace={null} 
+                        flyingPalace={activeSide === 'A' ? flyingPalace : null} 
+                        daXianSeq={daSeqA} 
+                        liuNianYear={liuYearA} 
+                        showXiaoXian={showXiaoA} 
+                        isReverse={isCurrentRevA} 
+                        reverseFlags={reverseFlagsA} 
+                        onToggleInverted={handleToggleReverseA} 
+                        isTwinMode={isTwinA} 
+                        externalGan={null} 
+                        flyingStarsLookup={flyMapBtoA} 
+                        benMingMajorStarsStr="" 
+                        currentHourZhi={`${hourA}`} 
+                        isTimeModified={hourA !== clientA.birthHour} 
+                        connections={dummyConnections} 
+                        daXianList={daListA} // ✅ 修復：使用 daListA 而非 undefined 的 daXianList
+                        xiaoXianMingIdx={-1} 
+                        getRelativeNames={(idx) => { let daName = undefined; if (daSeqA >= 0 && daListA[daSeqA]?.palaceIdx === idx) daName = '大命'; return { daName }; }} 
+                        getIsBenMingMing={(idx) => idx === engineA!.getMingPos()} 
+                        getAnchorCoord={getDummyCoords} 
+                        onHistoryBack={dummyNav} 
+                        onNavigate={dummyNav} 
+                        onCompatibility={dummyNav} 
+                        onChangeHour={handleChangeHourA} 
+                        onResetTime={() => setHourA(clientA.birthHour)} 
+                        onToggleTwin={() => setIsTwinA(!isTwinA)} 
+                        onToggleSmallLimit={() => setShowXiaoA(!showXiaoA)} 
+                        onPalaceClick={(idx) => handlePalaceClick('A', idx)} 
+                        onTriggerClick={() => {}} 
+                        currentRealTime={currentRealTimeA}
+                        showCompass={false} 
+                    />
                 </div>
                 {renderControlBar(daListA, daSeqA, setDaSeqA, setLiuYearA, setLiuYearB, engineA!, chartA, liuYearA, 'A', currentRealTimeA)}
             </div>
 
             <div className="flex-1 flex flex-col relative min-w-0">
                 <div className="flex-1 relative min-h-0">
-                    <PalaceGrid client={clientB} chartData={chartB} relationships={[]} historyStack={[]} mode="standard" selectedPalace={null} flyingPalace={activeSide === 'B' ? flyingPalace : null} daXianSeq={daSeqB} liuNianYear={liuYearB} showXiaoXian={showXiaoB} isReverse={isCurrentRevB} reverseFlags={reverseFlagsB} onToggleInverted={handleToggleReverseB} isTwinMode={isTwinB} externalGan={null} flyingStarsLookup={flyMapAtoB} benMingMajorStarsStr="" currentHourZhi={`${hourB}`} isTimeModified={hourB !== clientB.birthHour} connections={dummyConnections} daXianList={daListB} xiaoXianMingIdx={-1} getRelativeNames={(idx) => { let daName = undefined; if (daSeqB >= 0 && daListB[daSeqB]?.palaceIdx === idx) daName = '大命'; return { daName }; }} getIsBenMingMing={(idx) => idx === engineB!.getMingPos()} getAnchorCoord={getDummyCoords} onHistoryBack={dummyNav} onNavigate={dummyNav} onCompatibility={dummyNav} onChangeHour={handleChangeHourB} onResetTime={() => setHourB(clientB.birthHour)} onToggleTwin={() => setIsTwinB(!isTwinB)} onToggleSmallLimit={() => setShowXiaoB(!showXiaoB)} onPalaceClick={(idx) => handlePalaceClick('B', idx)} onTriggerClick={() => {}} currentRealTime={currentRealTimeB} />
+                    <PalaceGrid 
+                        client={clientB} 
+                        chartData={chartB} 
+                        relationships={[]} 
+                        historyStack={[]} 
+                        mode="standard" 
+                        selectedPalace={null} 
+                        flyingPalace={activeSide === 'B' ? flyingPalace : null} 
+                        daXianSeq={daSeqB} 
+                        liuNianYear={liuYearB} 
+                        showXiaoXian={showXiaoB} 
+                        isReverse={isCurrentRevB} 
+                        reverseFlags={reverseFlagsB} 
+                        onToggleInverted={handleToggleReverseB} 
+                        isTwinMode={isTwinB} 
+                        externalGan={null} 
+                        flyingStarsLookup={flyMapAtoB} 
+                        benMingMajorStarsStr="" 
+                        currentHourZhi={`${hourB}`} 
+                        isTimeModified={hourB !== clientB.birthHour} 
+                        connections={dummyConnections} 
+                        daXianList={daListB} // 使用 daListB
+                        xiaoXianMingIdx={-1} 
+                        getRelativeNames={(idx) => { let daName = undefined; if (daSeqB >= 0 && daListB[daSeqB]?.palaceIdx === idx) daName = '大命'; return { daName }; }} 
+                        getIsBenMingMing={(idx) => idx === engineB!.getMingPos()} 
+                        getAnchorCoord={getDummyCoords} 
+                        onHistoryBack={dummyNav} 
+                        onNavigate={dummyNav} 
+                        onCompatibility={dummyNav} 
+                        onChangeHour={handleChangeHourB} 
+                        onResetTime={() => setHourB(clientB.birthHour)} 
+                        onToggleTwin={() => setIsTwinB(!isTwinB)} 
+                        onToggleSmallLimit={() => setShowXiaoB(!showXiaoB)} 
+                        onPalaceClick={(idx) => handlePalaceClick('B', idx)} 
+                        onTriggerClick={() => {}} 
+                        currentRealTime={currentRealTimeB}
+                        showCompass={false}
+                    />
                 </div>
                 {renderControlBar(daListB, daSeqB, setDaSeqB, setLiuYearB, setLiuYearA, engineB!, chartB, liuYearB, 'B', currentRealTimeB)}
             </div>

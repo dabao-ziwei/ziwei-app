@@ -1,12 +1,28 @@
+/* src/index.css - 請完全覆蓋 */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root { height: 100%; width: 100%; }
-body {
-  background-color: #f5f5f5; margin: 0; padding: 0;
-  font-family: "Microsoft JhengHei", "Heiti TC", sans-serif;
-  overflow: hidden;
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* 關鍵：鎖定視窗，讓內部元件自己處理捲動 */
 }
-/* 讓文字直排的工具類 */
-.writing-vertical { writing-mode: vertical-rl; text-orientation: upright; }
+
+body {
+  background-color: #f1f5f9; /* slate-100 */
+  font-family: "Microsoft JhengHei", "Heiti TC", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 隱藏捲軸但保留功能 (Chrome/Safari) */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+/* 隱藏捲軸但保留功能 (Firefox/IE) */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

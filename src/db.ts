@@ -1,27 +1,19 @@
 import { supabase } from './supabase'; 
 export { supabase };
 
+import type { UserFeatures } from './logic/permissions'; 
 import type { YearAdviceRule } from './logic/types';
 import type { PointPack, PointsLedger, PointTransaction, FeatureConfig } from './types/store';
 
 export const SUPER_VIEW_EMAIL = 'stephenwu.0926@gmail.com';
-
-// [修正] 僅作內部最後防線，不 Export，避免外部依賴
 const FALLBACK_COST = 50; 
 
-export interface UserFeatures {
-  twin?: boolean;
-  inverted?: boolean;
-  xiao_limit?: boolean;
-  flying_star?: boolean;
-  dual_chart?: boolean;
-  screenshot?: boolean;
-  divination?: boolean;
-  liu_month?: boolean;
-  liu_day?: boolean;
-  lucky_divination?: boolean;
-}
+// --- Helper Functions ---
+export const checkIsSuperAdmin = (email: string | undefined | null) => {
+    return email?.trim().toLowerCase() === SUPER_VIEW_EMAIL;
+};
 
+// --- Interfaces ---
 export interface UserProfile {
   id: string;
   email: string;
@@ -36,7 +28,7 @@ export interface UserProfile {
   deletedCount?: number;
   joinDate?: string;
   points_balance: number;
-  has_claimed_welcome_gift?: boolean; // 新增欄位
+  has_claimed_welcome_gift?: boolean;
 }
 
 export interface Client {
@@ -68,12 +60,6 @@ export interface Relationship {
   inferred_from?: string;
 }
 
-// --- Helper Functions ---
-
-export const checkIsSuperAdmin = (email: string | undefined | null) => {
-    return email?.trim().toLowerCase() === SUPER_VIEW_EMAIL;
-};
-
 // --- User & Profile ---
 
 export const getMyProfile = async (): Promise<UserProfile | null> => {
@@ -93,7 +79,7 @@ export const getMyProfile = async (): Promise<UserProfile | null> => {
     feature_flags: data.feature_flags,
     activeCount: 0, 
     points_balance: data.points_balance || 0,
-    has_claimed_welcome_gift: data.has_claimed_welcome_gift // 對應資料庫
+    has_claimed_welcome_gift: data.has_claimed_welcome_gift
   };
 };
 
@@ -162,9 +148,11 @@ export const getPaywallPhase = async (): Promise<string> => {
   return data;
 };
 
+// ✅ 這個函式必須被匯出，usePaywall 才能讀取
 export const getFeatureRuntime = async (featureKey: string): Promise<FeatureConfig | null> => {
-    const { data } = await supabase.from('feature_configs').select('*').eq('feature_key', featureKey).single();
+    const { data } = await supabase.from('feature_configs').select('*').eq('feature_key', featureKey).maybeSingle();
     if (data) return data as FeatureConfig;
+    // 如果找不到設定，回傳預設值
     return { 
         feature_key: featureKey, 
         name: '未知功能', 
@@ -208,18 +196,30 @@ const mapClientToEntity = (data: any): Client => ({
     majorStars: data.major_stars
 });
 
-export const loadClients = async (): Promise<Client[]> => {
+export const loadClients = async (loadAllForAdmin = false): Promise<Client[]> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
+  
   const isSuperViewer = user.email === SUPER_VIEW_EMAIL;
+  
   let query = supabase.from('clients').select('*').order('created_at', { ascending: false });
-  if (!isSuperViewer) {
+  
+  if (!isSuperViewer || !loadAllForAdmin) {
       query = query.eq('user_id', user.id).eq('is_deleted', false);
   }
+  
   const { data, error } = await query;
   if (error) return [];
+  
+  let userIdToEmailMap: Record<string, string> = {};
+  if (isSuperViewer && loadAllForAdmin) {
+      const { data: profiles } = await supabase.from('profiles').select('id, email');
+      if (profiles) profiles.forEach(p => userIdToEmailMap[p.id] = p.email);
+  }
+
   return data.map((item: any) => ({
     ...mapClientToEntity(item),
+    creatorEmail: userIdToEmailMap[item.user_id] || '',
     is_deleted: item.is_deleted
   }));
 };
@@ -232,7 +232,18 @@ export const getClient = async (id: string): Promise<Client | null> => {
 
 export const saveClient = async (clientData: any): Promise<string | null> => {
     if (clientData.id && !clientData.id.toString().startsWith('temp-') && clientData.id !== '') {
-        return clientData.id;
+        const dbPayload: any = {};
+        if (clientData.name) dbPayload.name = clientData.name;
+        if (clientData.gender) dbPayload.gender = clientData.gender;
+        if (clientData.birthYear !== undefined) dbPayload.birth_year = clientData.birthYear;
+        if (clientData.birthMonth !== undefined) dbPayload.birth_month = clientData.birthMonth;
+        if (clientData.birthDay !== undefined) dbPayload.birth_day = clientData.birthDay;
+        if (clientData.birthHour !== undefined) dbPayload.birth_hour = clientData.birthHour;
+        if (clientData.birthMinute !== undefined) dbPayload.birth_minute = clientData.birthMinute;
+        if (clientData.type) dbPayload.type = clientData.type;
+        if (clientData.majorStars) dbPayload.major_stars = clientData.majorStars;
+        const { error } = await supabase.from('clients').update(dbPayload).eq('id', clientData.id);
+        return !error ? clientData.id : null;
     } else {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return null;
@@ -353,21 +364,18 @@ export const adminAdjustPoints = async (targetUserId: string, delta: number, rea
     return !error;
 };
 
-// [新功能] 領取迎新禮 (99點)
 export const claimWelcomeGift = async (): Promise<boolean> => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
 
-    // 直接呼叫調整點數邏輯
     const { error } = await supabase.rpc('admin_adjust_points', {
         p_target_user_id: user.id,
         p_delta: 99,
         p_reason: '會員迎新禮 (Welcome Gift)',
-        p_admin_id: user.id // 自己領取，記錄自己的ID
+        p_admin_id: user.id 
     });
 
     if (!error) {
-        // 更新狀態為已領取
         await supabase.from('profiles').update({ has_claimed_welcome_gift: true }).eq('id', user.id);
         return true;
     }
@@ -383,18 +391,14 @@ export const consumeDivinationV2 = async (options?: any, guestToken?: string | n
 
     if (!user) return { success: false, message: '請先登入' };
 
-    // 1. 讀取 DB 設定 (即時)
     const config = await getFeatureRuntime('lucky_divination');
     
-    // 2. 判斷是否免費
     if (config && !config.is_paid) {
         return { success: true, message: '目前免費', skipped: true };
     }
 
-    // 3. 取得價格 (DB設定優先)
     const cost = config?.price ?? FALLBACK_COST; 
 
-    // 4. 執行扣點
     const { data, error } = await supabase.rpc('deduct_points_for_divination', {
         p_user_id: user.id,
         p_cost: cost
@@ -455,7 +459,7 @@ export const deleteYearAdviceRule = async (id: string) => {
     return !error;
 };
 
-// --- [新功能] 批次修改命盤上限 ---
+// --- Admin ---
 export const adminBulkUpdateMaxCharts = async (userIds: string[], value: number, mode: 'add' | 'set'): Promise<boolean> => {
     const { error } = await supabase.rpc('admin_bulk_update_max_charts', {
         p_user_ids: userIds,
