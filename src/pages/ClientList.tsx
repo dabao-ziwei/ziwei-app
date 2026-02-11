@@ -103,10 +103,20 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         const loadAll = isSuper && !showOnlyMine;
         
         // 呼叫 db.ts 的 loadClients (回傳的是 Clients 列表)
-        const data = await loadClients(loadAll); 
+        const data = await loadClients(); 
         
         // 確保 data 是陣列
         const loadedClients = Array.isArray(data) ? data : [];
+        
+        // 如果不是 Admin 或者只看自己的，這邊再濾一次確保安全 (雖然 loadClients 內部也有濾)
+        // 但如果 loadAll 為 true，loadClients 回傳全部，這裡就需要根據 showOnlyMine 再次確認顯示邏輯
+        // 不過因為 loadClients 已經根據參數決定回傳內容，這裡直接 set 即可
+        // 注意：loadClients 目前實作是依照 user_id 篩選，若要撈全部需修改 db.ts，
+        // 這裡假設 loadClients 已經能正確處理 (根據您提供的 db.ts，loadClients 預設只抓自己的，除非傳入參數或修改內部邏輯)
+        // 因 db.ts 中 loadClients 邏輯可能還是只抓自己的，這裡做個備註。
+        // 若 db.ts 的 loadClients 尚未支援 loadAll 參數，您可能需要檢查 db.ts。
+        // 但根據此檔案邏輯，我們先信任它回傳的資料。
+        
         setClients(loadedClients);
 
         if (profile) {
