@@ -8,29 +8,25 @@ import {
   getRelationships,
   getMyProfile,
   loadYearAdviceRules,
-  consumeDivinationV2,
   type Client,
   type Relationship,
   type UserProfile,
   type YearAdviceRule,
+  consumeDivinationV2,
+  issueGuestToken,
 } from '../../db';
-
 import { ZiWeiEngine } from '../../logic/engine';
 import { GAN, ZHI, PALACE_NAMES, SIHUA_TABLE } from '../../logic/constants';
-import { Loader2, UserPlus, X, ChevronLeft, Camera, Compass, Sparkles, Users } from 'lucide-react';
+import { Loader2, UserPlus, X, ChevronLeft, Camera, Users, Compass, Sparkles, MessageCircle } from 'lucide-react';
 import { getFeaturePermission } from '../../logic/permissions';
 import { Lunar, LunarYear } from 'lunar-typescript';
 import { YearlyAnalysisBoard } from './YearlyAnalysisBoard';
 import { YearlyAnalysisDrawer } from './YearlyAnalysisDrawer';
 import { scanYearlyAdvice } from '../../logic/advice/yearAdvice';
-import { usePaywall, type PaywallMode } from '../../hooks/usePaywall';
+import { usePaywall, type PaywallMode, FEATURE_YEARLY_ADVICE_ENABLED, DIVINATION_COST } from '../../hooks/usePaywall';
 import PaywallModal from '../Paywall/PaywallModal';
 
 const OFFICIAL_SITE_URL = 'https://www.dabao.life';
-
-// [修正] 本地定義常數，避免 import 錯誤
-const DIVINATION_COST = 50;
-const FEATURE_YEARLY_ADVICE_ENABLED = false;
 
 interface SingleChartProps {
   client?: Client;
@@ -44,7 +40,10 @@ const getSiHuaMap = (ganIndex: number) => {
   const stars = SIHUA_TABLE[ganChar];
   if (!stars) return {};
   return {
-    [stars[0]]: '祿', [stars[1]]: '權', [stars[2]]: '科', [stars[3]]: '忌',
+    [stars[0]]: '祿',
+    [stars[1]]: '權',
+    [stars[2]]: '科',
+    [stars[3]]: '忌',
   } as Record<string, '祿' | '權' | '科' | '忌'>;
 };
 
@@ -77,17 +76,13 @@ const calcNextHour = (currentHour: number, delta: number) => {
   return hours[nextIndex];
 };
 
-// [輔助] CSS 類名合併
-function classNames(...xs: Array<string | false | null | undefined>) {
-  return xs.filter(Boolean).join(' ');
-}
-
 export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, onBack, mode = 'standard' }) => {
   const { id } = useParams<{ id?: string }>();
   const navigate = useNavigate();
   const location = useLocation();
 
   const [client, setClient] = useState<Client | null>(propClient || location.state?.client || null);
+
   const [historyStack, setHistoryStack] = useState<Client[]>([]);
   const [relationships, setRelationships] = useState<Relationship[]>([]);
 
@@ -102,7 +97,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
   const [selectedPalace, setSelectedPalace] = useState<number | null>(null);
   const [flyingPalace, setFlyingPalace] = useState<number | null>(null);
-  
   const [daXianSeq, setDaXianSeq] = useState<number>(-1);
   const [liuNianYear, setLiuNianYear] = useState<number | null>(null);
   const [showXiaoXian, setShowXiaoXian] = useState<boolean>(false);
@@ -123,6 +117,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const [externalYearType, setExternalYearType] = useState<'west' | 'roc'>('roc');
   const [externalGan, setExternalGan] = useState<number | null>(null);
 
+  // Yearly Analysis States
   const [isYearlyDrawerOpen, setIsYearlyDrawerOpen] = useState(false);
   const [analysisYear, setAnalysisYear] = useState<number>(new Date().getFullYear());
   const [adviceRules, setAdviceRules] = useState<YearAdviceRule[]>([]);
@@ -132,10 +127,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const { checkAccess } = usePaywall(userProfile);
 
   const chartRef = useRef<HTMLDivElement>(null);
-  const majorRowRef = useRef<HTMLDivElement | null>(null);
-
-  const [currentCost, setCurrentCost] = useState(DIVINATION_COST);
-  const [currentAnnouncement, setCurrentAnnouncement] = useState('');
 
   useEffect(() => {
     getMyProfile().then(setUserProfile);
@@ -162,10 +153,11 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
             setCurrentHour(data.birthHour);
             getRelationships(data.id).then(setRelationships);
           } else {
-            navigate('/list', { replace: true });
+            alert('找不到此命盤');
+            navigate('/list');
           }
         } catch (e) {
-          navigate('/list', { replace: true });
+          navigate('/list');
         } finally {
           setLoading(false);
         }
@@ -174,7 +166,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       }
     };
     fetchData();
-  }, [id, client, navigate, mode, currentHour]);
+  }, [id, client, navigate, mode]);
 
   const canTwin = useMemo(() => getFeaturePermission(userProfile, 'twin'), [userProfile]);
   const canInvert = useMemo(() => getFeaturePermission(userProfile, 'inverted'), [userProfile]);
@@ -253,6 +245,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
     if (mode === 'divination') return displayEngine.getChartData();
 
+    // ✅ 關鍵：未選大限時，計算用「第一大限」的 daGan（不是 -1）
     const effectiveDaXianSeq = daXianSeq === -1 ? 0 : daXianSeq;
 
     let daGan = -1,
@@ -310,48 +303,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     return undefined;
   }, [externalGan, liuDayGan, liuMonthGan]);
 
-  const flyingStarsLookup = (() => {
-    if (flyingPalace === null) return {};
-    const targetPalace = chartData!.palaces[flyingPalace];
-    if (!targetPalace) return {};
-    return baseEngine!.getSiHuaMap(targetPalace.ganIndex);
-  })();
-
-  const benMingPos = baseEngine ? baseEngine.getMingPos() : 0;
-  
-  const getIsBenMingMing = (palaceIdx: number) => {
-    if (mode === 'divination') return palaceIdx === divMingIndex;
-    return palaceIdx === benMingPos;
-  };
-
-  const benMingMajorStarsStr = useMemo(() => {
-    if (!baseEngine || !baseChartData) return '';
-    const pos = mode === 'divination' && divMingIndex !== -1 ? divMingIndex : baseEngine.getMingPos();
-    if (pos === -1) return '';
-    const p = chartData?.palaces[pos] || baseChartData.palaces[pos];
-    if (p && p.majorStars.length > 0) return `(${p.majorStars.map((s) => s.name).join('、')})`;
-    return '(無主星)';
-  }, [baseEngine, baseChartData, mode, chartData, divMingIndex]);
-
-  const handleDaXianClick = (seq: number) => {
-    setDaXianSeq(daXianSeq === seq ? -1 : seq);
-    setLiuNianYear(null);
-    setLiuMonth(null);
-    setLiuDay(null);
-    setShowXiaoXian(false);
-    setFlyingPalace(null);
-    setSelectedPalace(null);
-  };
-
-  const handleLiuNianClick = (year: number) => {
-    setLiuNianYear(liuNianYear === year ? null : year);
-    setLiuMonth(null);
-    setLiuDay(null);
-    setShowXiaoXian(false);
-    setFlyingPalace(null);
-    setSelectedPalace(null);
-  };
-
   const handleExternalYearSubmit = () => {
     if (!externalYearStr) return;
     const val = parseInt(externalYearStr);
@@ -366,6 +317,40 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     setExternalGan(gan);
     setIsExternalInputOpen(false);
   };
+
+  const handleNavigateToRelation = (target: Client) => {
+    if (client) {
+      setHistoryStack((prev) => [...prev, client]);
+      setClient(target);
+      setCurrentHour(target.birthHour);
+      resetAllStates();
+    }
+  };
+
+  const handleHistoryBack = () => {
+    if (historyStack.length > 0) {
+      const prevClient = historyStack[historyStack.length - 1];
+      setHistoryStack((prev) => prev.slice(0, -1));
+      setClient(prevClient);
+      setCurrentHour(prevClient.birthHour);
+      resetAllStates();
+    } else {
+      handleBack();
+    }
+  };
+
+  const handleCompatibility = (target: Client) => {
+    alert(`即將與 ${target.name} 進行合盤分析 (開發中)`);
+  };
+
+  const benMingMajorStarsStr = useMemo(() => {
+    if (!baseEngine || !baseChartData) return '';
+    const pos = mode === 'divination' && divMingIndex !== -1 ? divMingIndex : baseEngine.getMingPos();
+    if (pos === -1) return '';
+    const p = chartData?.palaces[pos] || baseChartData.palaces[pos];
+    if (p && p.majorStars.length > 0) return `(${p.majorStars.map((s) => s.name).join('、')})`;
+    return '(無主星)';
+  }, [baseEngine, baseChartData, mode, chartData, divMingIndex]);
 
   const resetAllStates = () => {
     setDaXianSeq(-1);
@@ -397,57 +382,59 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       navigate(-1);
     }
   };
-  
-  const handleHistoryBack = () => {
-    if (historyStack.length > 0) {
-      const prevClient = historyStack[historyStack.length - 1];
-      setHistoryStack((prev) => prev.slice(0, -1));
-      setClient(prevClient);
-      setCurrentHour(prevClient.birthHour);
-      resetAllStates();
-    } else {
-      handleBack();
-    }
-  };
-  
-  const handleNavigateToRelation = (target: Client) => {
-    if (client) {
-      setHistoryStack((prev) => [...prev, client]);
-      setClient(target);
-      setCurrentHour(target.birthHour);
-      resetAllStates();
-    }
-  };
-  
-  const handleCompatibility = (target: Client) => {
-    if (!client) return;
-    navigate('/compatibility', {
-        state: {
-            clientA: client,
-            clientB: target,
-        },
-    });
-  };
-  
-  const toggleXiaoXian = () => {
-    setShowXiaoXian(!showXiaoXian);
-    setFlyingPalace(null);
-    setSelectedPalace(null);
-  };
-  const handlePalaceClick = (palaceIdx: number) => setSelectedPalace(selectedPalace === palaceIdx ? null : palaceIdx);
-  const handleTriggerClick = (palaceIdx: number) => setFlyingPalace(flyingPalace === palaceIdx ? null : palaceIdx);
 
+  // [P0 Fix] Atomic Handler for Guest (Retry) & Member
   const handleDivinationClick = async () => {
     const access = checkAccess();
-    setCurrentCost(access.cost);
-    setCurrentAnnouncement(access.announcement);
-
     if (access.canAccess) {
-      if (access.mode === 'SOFT_NOTICE' || access.mode === 'CONFIRM_DEDUCT') {
-        setPaywallMode(access.mode);
+      if (access.mode === 'SOFT_NOTICE') {
+        setPaywallMode('SOFT_NOTICE');
         setIsPaywallOpen(true);
         return;
       }
+
+      if (access.mode === 'CONFIRM_DEDUCT') {
+        setPaywallMode('CONFIRM_DEDUCT');
+        setIsPaywallOpen(true);
+        return;
+      }
+
+      if (access.mode === 'GUEST_FREE') {
+        let token = localStorage.getItem('dabao_guest_token');
+        let result = await consumeDivinationV2(0, token);
+
+        if (!result.success && (result.message === 'MISSING_GUEST_TOKEN' || result.message === 'INVALID_GUEST_TOKEN')) {
+          const newToken = await issueGuestToken();
+          if (newToken) {
+            localStorage.setItem('dabao_guest_token', newToken);
+            token = newToken;
+            result = await consumeDivinationV2(0, newToken);
+          }
+        }
+
+        if (result.success) {
+          navigate('/lucky');
+        } else if (result.message === 'GUEST_ALREADY_USED') {
+          setPaywallMode('GUEST_ALREADY_USED');
+          setIsPaywallOpen(true);
+        } else {
+          alert(result.message || '系統忙碌，請重試');
+        }
+        return;
+      }
+
+      if (access.mode === 'MEMBER_FREE' && userProfile?.id) {
+        const result = await consumeDivinationV2(0);
+        if (result.success) {
+          const updatedProfile = await getMyProfile();
+          setUserProfile(updatedProfile);
+          navigate('/lucky');
+        } else {
+          alert(result.message || '免費次數使用失敗');
+        }
+        return;
+      }
+
       navigate('/lucky');
     } else {
       setPaywallMode(access.mode);
@@ -462,15 +449,11 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
   const isBenMingState = daXianSeq === -1 && liuNianYear === null;
   const isCleanState = isBenMingState && flyingPalace === null && selectedPalace === null && externalGan === null && mode !== 'divination';
-  const isTimeModified = currentHour !== client?.birthHour;
 
-  let currentHourZhi = '';
-  if (client) {
-      const zhiIdx = Math.floor((currentHour + 1) / 2) % 12;
-      currentHourZhi = ZHI[zhiIdx] || '';
-      if (zhiIdx === 0) {
-        currentHourZhi = currentHour === 23 ? '晚子' : '早子';
-      }
+  const isTimeModified = currentHour !== client?.birthHour;
+  let currentHourZhi = ZHI[Math.floor((currentHour + 1) / 2) % 12];
+  if (Math.floor((currentHour + 1) / 2) % 12 === 0) {
+    currentHourZhi = currentHour === 23 ? '晚子' : '早子';
   }
 
   const connections = (() => {
@@ -526,6 +509,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     return list;
   }, [baseChartData, baseEngine, mode]);
 
+  // ✅ 永遠使用「有效大限」：未選 = 0
   const effectiveDaXianSeq = daXianSeq === -1 ? 0 : daXianSeq;
 
   const liuNianList = useMemo(() => {
@@ -548,6 +532,13 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     const virtualAge = liuNianYear - baseChartData.lunarYear + 1;
     return baseEngine.getXiaoXianPos(virtualAge);
   }, [liuNianYear, baseChartData, baseEngine]);
+
+  const benMingPos = baseEngine ? baseEngine.getMingPos() : 0;
+
+  const getIsBenMingMing = (palaceIdx: number) => {
+    if (mode === 'divination') return palaceIdx === divMingIndex;
+    return palaceIdx === benMingPos;
+  };
 
   const handleToggleReverse = () => {
     if (canInvert === 'hidden' || canInvert === 'disabled') return;
@@ -574,6 +565,47 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   else if (liuMonth !== null) isCurrentReverseOn = isYueRev;
   else if (liuNianYear !== null) isCurrentReverseOn = isLiuRev;
   else if (daXianSeq >= 0) isCurrentReverseOn = isDaRev;
+
+  const handleDaXianClick = (seq: number) => {
+    setDaXianSeq(daXianSeq === seq ? -1 : seq);
+    setLiuNianYear(null);
+    setLiuMonth(null);
+    setLiuDay(null);
+    setShowXiaoXian(false);
+    setFlyingPalace(null);
+    setSelectedPalace(null);
+  };
+
+  const handleLiuNianClick = (year: number) => {
+    // ✅ 若目前未選大限，仍可直接點流年：視覺上不一定要強制選，但計算已用 effectiveDaXianSeq
+    setLiuNianYear(liuNianYear === year ? null : year);
+    setLiuMonth(null);
+    setLiuDay(null);
+    setShowXiaoXian(false);
+    setFlyingPalace(null);
+    setSelectedPalace(null);
+  };
+
+  const toggleXiaoXian = () => {
+    setShowXiaoXian(!showXiaoXian);
+    setFlyingPalace(null);
+    setSelectedPalace(null);
+  };
+
+  const handlePalaceClick = (palaceIdx: number) => {
+    setSelectedPalace(selectedPalace === palaceIdx ? null : palaceIdx);
+  };
+
+  const handleTriggerClick = (palaceIdx: number) => {
+    setFlyingPalace(flyingPalace === palaceIdx ? null : palaceIdx);
+  };
+
+  const flyingStarsLookup = (() => {
+    if (flyingPalace === null) return {};
+    const targetPalace = chartData!.palaces[flyingPalace];
+    if (!targetPalace) return {};
+    return baseEngine!.getSiHuaMap(targetPalace.ganIndex);
+  })();
 
   const getRelativeNames = (currentIdx: number) => {
     const mingIdx =
@@ -665,144 +697,8 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     );
   }
 
-  // ✅ [修復] 使用 Style 標籤恢復「連續矩形工具列」樣式
-  // 這樣能確保按鈕緊密排列、有分隔線、無圓角、貼齊底部且支援橫向捲動
-  const bottomBar = (
-    <div className="sc-bottomWrap">
-      {/* 大限列 (Row 1) */}
-      <div className="sc-daRow" ref={majorRowRef}>
-        {daXianList.map((m: any, i: number) => {
-          const isActive = daXianSeq === m.seq;
-          const isRealTime = currentRealTime && currentRealTime.daSeq === m.seq;
-          return (
-            <button
-              key={`${m.name}-${i}`}
-              className={classNames('sc-daBtn', isActive && 'sc-daBtnActive')}
-              onClick={() => handleDaXianClick(m.seq)}
-              type="button"
-            >
-              {isRealTime && <div className="sc-dot" />}
-              <span>{m.name} {m.ganZhi}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* 流年列 (Row 2)，只在有選中大限時顯示 */}
-      <div className="sc-liuRow">
-        {liuNianList.map((y: any) => {
-          const isActive = liuNianYear === y.year;
-          const isRealTime = currentRealTime && currentRealTime.year === y.year;
-          return (
-            <button
-              key={String(y.year)}
-              className={classNames('sc-liuBtn', isActive && 'sc-liuBtnActive')}
-              onClick={() => handleLiuNianClick(y.year)}
-              type="button"
-            >
-              {isRealTime && <div className="sc-dot" />}
-              {y.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* 內嵌樣式定義 (Scoped) */}
-      <style>{`
-        .sc-bottomWrap {
-          position: sticky;
-          bottom: 0;
-          z-index: 50;
-          background: #fff;
-          border-top: 1px solid #e5e7eb;
-          display: flex;
-          flex-direction: column;
-          /* 確保在 iPhone X 等設備上有底部安全距離 */
-          padding-bottom: env(safe-area-inset-bottom);
-        }
-        
-        .sc-daRow {
-          display: flex;
-          overflow-x: auto;
-          scrollbar-width: none; /* Firefox */
-          -webkit-overflow-scrolling: touch;
-          border-bottom: 1px solid #e5e7eb;
-          height: 44px;
-        }
-        .sc-daRow::-webkit-scrollbar { display: none; }
-
-        .sc-daBtn {
-          flex: 1;
-          min-width: 80px;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          font-size: 13px;
-          font-weight: 500;
-          color: #6b7280;
-          background: #f9fafb;
-          border-right: 1px solid #e5e7eb;
-          white-space: nowrap;
-          position: relative;
-          cursor: pointer;
-          transition: background-color 0.2s;
-        }
-        .sc-daBtn:active {
-          background-color: #e5e7eb;
-        }
-        .sc-daBtnActive {
-          background: #374151 !important; /* slate-700 */
-          color: #fff !important;
-          font-weight: 700;
-        }
-
-        .sc-liuRow {
-          display: flex;
-          overflow-x: auto;
-          scrollbar-width: none;
-          -webkit-overflow-scrolling: touch;
-          height: 40px;
-          background: #eff6ff; /* blue-50 */
-        }
-        .sc-liuRow::-webkit-scrollbar { display: none; }
-
-        .sc-liuBtn {
-          flex: 1;
-          min-width: 60px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 13px;
-          font-weight: 500;
-          color: #2563eb; /* blue-600 */
-          border-right: 1px solid #dbeafe; /* blue-100 */
-          white-space: nowrap;
-          position: relative;
-          cursor: pointer;
-        }
-        .sc-liuBtnActive {
-          background: #2563eb !important;
-          color: #fff !important;
-          font-weight: 700;
-        }
-
-        .sc-dot {
-          position: absolute;
-          top: 4px;
-          right: 4px;
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background: #f59e0b; /* amber-500 */
-          box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-        }
-      `}</style>
-    </div>
-  );
-
   return (
-    <div className="flex flex-col h-screen w-full bg-slate-100 relative">
+    <div className="flex flex-col h-screen w-full bg-slate-100 overflow-hidden relative">
       <div className="flex justify-between items-center px-4 py-2 bg-white border-b border-gray-200 shadow-sm shrink-0 z-50 h-[56px]">
         <button
           onClick={handleBack}
@@ -840,7 +736,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
             {canDual !== 'hidden' && (
               <button
-                onClick={() => handleCompatibility(client!)}
+                onClick={() => navigate('/compatibility', { state: { clientA: client } })}
                 disabled={canDual === 'disabled'}
                 className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-sm font-bold shadow-md shadow-purple-200 ${
                   canDual === 'disabled' ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-purple-600 text-white hover:bg-purple-700'
@@ -901,7 +797,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         )}
       </div>
 
-      <div className="flex-1 min-h-0 w-full relative flex flex-col">
+      <div className="flex-1 min-h-0 w-full relative">
         {isExternalInputOpen && (
           <div className="absolute inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 relative animate-in fade-in zoom-in">
@@ -1019,7 +915,56 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         />
       </div>
 
-      {mode !== 'divination' && bottomBar}
+      {/* --- 底部：大限列 --- */}
+      {mode !== 'divination' && daXianList.length > 0 && (
+        <div className="shrink-0 bg-white border-t border-gray-200 w-full z-40 overflow-hidden">
+          <div className="flex overflow-x-auto no-scrollbar w-full">
+            {daXianList.map((item: any) => {
+              const isActive = daXianSeq === item.seq;
+              const isRealTime = currentRealTime && currentRealTime.daSeq === item.seq;
+              return (
+                <button
+                  key={item.seq}
+                  onClick={() => handleDaXianClick(item.seq)}
+                  className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs relative ${
+                    isActive ? 'bg-indigo-600 text-white font-bold' : 'hover:bg-indigo-50 text-gray-600'
+                  }`}
+                >
+                  {isRealTime && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
+                  <div className="flex flex-col items-center">
+                    <span>{item.name}</span>
+                    <span className="scale-75 opacity-80">{item.ganZhi}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* --- 底部：流年列（永遠顯示；未選大限 = 第一大限） --- */}
+      {mode !== 'divination' && daXianList.length > 0 && (
+        <div className="shrink-0 bg-slate-50 border-t border-gray-200 w-full z-40 overflow-hidden">
+          <div className="flex overflow-x-auto no-scrollbar w-full">
+            {liuNianList.map((item) => {
+              const isActive = liuNianYear === item.year;
+              const isRealTime = currentRealTime && currentRealTime.year === item.year;
+              return (
+                <button
+                  key={item.year}
+                  onClick={() => handleLiuNianClick(item.year)}
+                  className={`flex-1 min-w-[70px] py-1 px-1 border-r border-gray-300 last:border-r-0 transition-colors text-xs relative ${
+                    isActive ? 'bg-blue-600 text-white font-bold' : 'hover:bg-blue-100 text-gray-600'
+                  }`}
+                >
+                  {isRealTime && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <YearlyAnalysisDrawer
         open={isYearlyDrawerOpen}
@@ -1036,21 +981,17 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       <PaywallModal
         isOpen={isPaywallOpen}
         mode={paywallMode}
-        balance={(userProfile as any)?.points_balance ?? 0}
-        cost={currentCost}
-        announcement={currentAnnouncement}
+        balance={(userProfile as any)?.credits ?? 0}
         onDeductConfirm={async () => {
-          const profileId = (userProfile as any)?.id ?? (userProfile as any)?.user_id ?? (userProfile as any)?.uuid;
-          if (profileId) {
+          if (userProfile?.id) {
             const result = await consumeDivinationV2(DIVINATION_COST);
-            const isSuccess = (result?.ok === true && result?.skipped === true) || result?.success === true;
-            if (isSuccess) {
+            if (result.success) {
               const updatedProfile = await getMyProfile();
               setUserProfile(updatedProfile);
               setIsPaywallOpen(false);
               navigate('/lucky');
             } else {
-              console.error('Deduct failed:', result?.message);
+              alert(result.message || '扣點失敗');
             }
           }
         }}
