@@ -24,6 +24,11 @@ export const StorePage: React.FC = () => {
   }, []);
 
   const handlePurchase = async (pkg: PointPack) => {
+    // [修改] 配合綠界審核，暫時僅顯示提示訊息
+    alert('目前尚未開放點數購買');
+    
+    // 原本的模擬購買邏輯暫時註解/停用
+    /*
     if (processingId) return;
     setProcessingId(pkg.id);
     
@@ -56,6 +61,7 @@ export const StorePage: React.FC = () => {
     } finally {
         setProcessingId(null);
     }
+    */
   };
 
   return (
@@ -70,7 +76,6 @@ export const StorePage: React.FC = () => {
                 <ShoppingBag className="text-purple-600" /> 點數儲值中心
             </h1>
         </div>
-        {/* ✅ [修改 1] 改為「點數餘額」 */}
         <div className="bg-slate-100 px-3 py-1 rounded-full text-xs font-bold text-slate-600">
             點數餘額: <span className="text-purple-600 text-base ml-1">{userBalance}</span>
         </div>
@@ -118,7 +123,6 @@ export const StorePage: React.FC = () => {
             )}
         </div>
 
-        {/* ✅ [修改 2] 聯絡客服移至底部，字體縮小，樣式簡化 */}
         <div className="mt-12 mb-6 flex flex-col items-center justify-center gap-1 text-xs text-slate-400">
             <span>若有購買問題，請聯繫客服：<a href="mailto:dabao@dabao.life" className="hover:text-slate-600 underline transition-colors">dabao@dabao.life</a></span>
         </div>
