@@ -11,11 +11,12 @@ type SortConfig = {
     direction: 'asc' | 'desc';
 };
 
+// [修正] 將所有角色的 lucky_divination 預設值改為 true (開啟)
 const DEFAULT_FLAGS_BY_ROLE: Record<string, Partial<UserFeatures>> = {
-    general: { liu_month: false, liu_day: false, twin: false, inverted: false, xiao_limit: false, flying_star: false, dual_chart: false, screenshot: false, divination: false, lucky_divination: false },
-    student: { liu_month: true, liu_day: true, twin: true, inverted: true, xiao_limit: true, flying_star: true, dual_chart: true, screenshot: true, divination: false, lucky_divination: false },
+    general: { liu_month: false, liu_day: false, twin: false, inverted: false, xiao_limit: false, flying_star: false, dual_chart: false, screenshot: false, divination: false, lucky_divination: true },
+    student: { liu_month: true, liu_day: true, twin: true, inverted: true, xiao_limit: true, flying_star: true, dual_chart: true, screenshot: true, divination: false, lucky_divination: true },
     admin: { liu_month: true, liu_day: true, twin: true, inverted: true, xiao_limit: true, flying_star: true, dual_chart: true, screenshot: true, divination: true, lucky_divination: true },
-    competitor: { liu_month: true, liu_day: true, twin: true, inverted: true, xiao_limit: true, flying_star: false, dual_chart: false, screenshot: false, divination: false, lucky_divination: false }
+    competitor: { liu_month: true, liu_day: true, twin: true, inverted: true, xiao_limit: true, flying_star: false, dual_chart: false, screenshot: false, divination: false, lucky_divination: true }
 };
 
 interface UserManagementModalProps {
