@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { Search, ChevronLeft, ChevronRight, Loader2, Trash2, UserPlus, CalendarClock, Settings, Save, RotateCcw, ArrowUp, ArrowDown, Filter, ChevronDown, Coins, X, History, FileText, CreditCard, RefreshCcw, MoreHorizontal, Grid, ChevronUp, CheckCircle } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Loader2, Trash2, UserPlus, CalendarClock, Settings, Save, RotateCcw, ArrowUp, ArrowDown, Filter, ChevronDown, Coins, X, History, FileText, CreditCard, RefreshCcw, MoreHorizontal, Grid, CheckCircle } from 'lucide-react';
 import { getAllProfilesWithStats, updateProfile, toggleUserBan, deleteUserProfile, inviteUserByEmail, adminAdjustPoints, getPointsLedger, getPointTransactions, bulkUpdateAccessExpiry, adminBulkUpdateMaxCharts, type UserProfile, type UserFeatures } from '../db';
 import { FEATURE_NAMES } from '../logic/permissions';
 
@@ -18,14 +18,17 @@ const DEFAULT_FLAGS_BY_ROLE: Record<string, Partial<UserFeatures>> = {
     competitor: { liu_month: true, liu_day: true, twin: true, inverted: true, xiao_limit: true, flying_star: false, dual_chart: false, screenshot: false, divination: false, lucky_divination: false }
 };
 
-// [修改 1] 新增 Props 定義
 interface UserManagementModalProps {
-    isOpen: boolean;
-    onClose: () => void;
+    isOpen?: boolean;        // 改為選填
+    onClose?: () => void;    // 改為選填
+    isEmbedded?: boolean;    // [新增] 是否為嵌入模式 (後台使用)
 }
 
-// [修改 2] 接收 Props
-export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClose }) => {
+export const UserManagementModal: React.FC<UserManagementModalProps> = ({ 
+    isOpen = false, 
+    onClose = () => {}, 
+    isEmbedded = false 
+}) => {
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -57,12 +60,14 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
 
   const bulkMenuRef = useRef<HTMLDivElement>(null);
 
-  // [修改 3] 當 isOpen 為 true 時才載入資料
+  // 控制顯示邏輯
+  const shouldRender = isEmbedded || isOpen;
+
   useEffect(() => { 
-      if (isOpen) {
+      if (shouldRender) {
           loadData(); 
       }
-  }, [isOpen]);
+  }, [shouldRender]);
 
   useEffect(() => {
       const handleClickOutside = (event: MouseEvent) => {
@@ -256,17 +261,23 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
       </th>
   );
 
-  // [修改 4] 判斷顯示邏輯
-  if (!isOpen) return null;
+  if (!shouldRender) return null;
 
-  // [修改 5] 外層加上 fixed 遮罩與置中樣式
+  // [修改重點] 根據是否為嵌入模式，決定容器樣式
+  // 嵌入模式：w-full h-full, 無圓角, 無陰影, 無 fixed
+  // 彈窗模式：fixed inset-0, 遮罩, 圓角, 陰影
   return (
-    <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-        <div className="bg-white w-full max-w-6xl h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col relative">
+    <div className={isEmbedded 
+        ? "w-full h-full flex flex-col bg-white overflow-hidden" 
+        : "fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+    }>
+        <div className={isEmbedded 
+            ? "flex-1 flex flex-col overflow-hidden" 
+            : "bg-white w-full max-w-6xl h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col relative"
+        }>
             
             {/* --- 頂部工具列 --- */}
             <div className="p-4 border-b border-gray-200 flex flex-col sm:flex-row gap-4 bg-white items-center shrink-0">
-                {/* [修改 6] 加入標題與關閉按鈕 */}
                 <div className="flex items-center gap-2 mr-auto">
                     <h2 className="text-xl font-bold text-gray-800">使用者管理</h2>
                 </div>
@@ -288,8 +299,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                         </select>
                     </div>
                     <button onClick={() => setIsInviteOpen(true)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 font-bold text-sm shadow-md transition-all whitespace-nowrap"><UserPlus size={18} /> <span className="hidden sm:inline">新增</span></button>
-                    {/* [修改 7] 關閉按鈕 */}
-                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors ml-2"><X size={24} className="text-gray-500"/></button>
+                    {/* 只有在非嵌入模式才顯示關閉按鈕 */}
+                    {!isEmbedded && (
+                        <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors ml-2"><X size={24} className="text-gray-500"/></button>
+                    )}
                 </div>
             </div>
 
@@ -335,9 +348,6 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                 )}
             </div>
 
-            {/* ... (下方的 Action Bar 和其他 Modals 保持不變，因為它們是渲染在上面的 container 內) ... */}
-            {/* 為了節省篇幅，這部分直接保留您原本的程式碼結構即可，因為主要的修正是在最外層的 div 和 props 控制 */}
-            
             {/* --- 批次操作列 (Action Bar) --- */}
             {selectedIds.size > 0 && (
                 <div className="bg-blue-600 text-white px-6 py-3 border-t border-blue-700 flex flex-row items-center justify-between shrink-0 shadow-lg z-30">
@@ -375,8 +385,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
                 </div>
             </div>
 
-            {/* ... 內部的 Modals (ShowBulkExpiry, ShowBulkCharts, EditUser, Invite) ... */}
-            {/* 這部分程式碼請直接保留原樣，它們是絕對定位在 Container 內的 */}
+            {/* ... 內部的 Modals ... */}
             
             {showBulkExpiryModal && (
             <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">

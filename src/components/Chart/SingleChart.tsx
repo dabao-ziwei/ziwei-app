@@ -28,7 +28,6 @@ import PaywallModal from '../Paywall/PaywallModal';
 
 const OFFICIAL_SITE_URL = 'https://www.dabao.life';
 
-// [修正] 本地定義常數，避免 import 錯誤
 const DIVINATION_COST = 50;
 const FEATURE_YEARLY_ADVICE_ENABLED = false;
 
@@ -77,7 +76,6 @@ const calcNextHour = (currentHour: number, delta: number) => {
   return hours[nextIndex];
 };
 
-// [輔助] CSS 類名合併
 function classNames(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(' ');
 }
@@ -253,7 +251,9 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
     if (mode === 'divination') return displayEngine.getChartData();
 
-    const effectiveDaXianSeq = daXianSeq === -1 ? 0 : daXianSeq;
+    // 邏輯修正：保持 effectiveDaXianSeq 為原始狀態 (若為 -1 則保持 -1)
+    // 只有在使用者真的點擊選取大限 (>=0) 時，才去計算大限四化
+    const effectiveDaXianSeq = daXianSeq; 
 
     let daGan = -1,
       liuGan = -1,
@@ -263,6 +263,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     const startPos = displayEngine.getMingPos();
     const direction = tempBaseData.direction || 1;
 
+    // 只有在真的有選取大限時，才代入 daGan
     if (effectiveDaXianSeq >= 0) {
       const offset = effectiveDaXianSeq * direction;
       const daXianPalaceIdx = (startPos + offset + 120) % 12;
@@ -512,6 +513,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       const palace = baseChartData.palaces[palaceIdx];
       if (palace) {
         const startYear = baseChartData.lunarYear + palace.ages[0];
+        const endYear = startYear + 9;
         list.push({
           seq: i,
           name: `${['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'][i]}限`,
@@ -520,28 +522,38 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
           startAge: palace.ages[0],
           endAge: palace.ages[1],
           startYear,
+          endYear,
         });
       }
     }
     return list;
   }, [baseChartData, baseEngine, mode]);
 
-  const effectiveDaXianSeq = daXianSeq === -1 ? 0 : daXianSeq;
+  // 為了下方流年列表的顯示邏輯：
+  // 當 daXianSeq 為 -1 (本命盤) 時，預設使用第一大限 (index 0) 的流年列表
+  const displayDaXianSeq = daXianSeq === -1 ? 0 : daXianSeq;
 
+  // [修改] 調整資料結構，將 ganZhi 分開，供前端分行顯示
   const liuNianList = useMemo(() => {
     if (mode === 'divination') return [];
-    const targetDaXian = daXianList[effectiveDaXianSeq];
+    const targetDaXian = daXianList[displayDaXianSeq];
     if (!targetDaXian) return [];
-    const list: { year: number; age: number; label: string }[] = [];
+    
+    const list: { year: number; age: number; ganZhi: string }[] = [];
     for (let i = 0; i < 10; i++) {
       const year = targetDaXian.startYear + i;
       const age = targetDaXian.startAge + i;
       const gan = (year - 4) % 10;
       const zhi = (year - 4) % 12;
-      list.push({ year, age, label: `${year}${GAN[gan]}${ZHI[zhi]} ${age}` });
+      
+      list.push({ 
+        year, 
+        age, 
+        ganZhi: `${GAN[gan]}${ZHI[zhi]}` 
+      });
     }
     return list;
-  }, [effectiveDaXianSeq, daXianList, mode]);
+  }, [displayDaXianSeq, daXianList, mode]);
 
   const xiaoXianMingIdx = useMemo(() => {
     if (!liuNianYear || !baseChartData || !baseEngine) return -1;
@@ -632,11 +644,11 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const currentRealTime = useMemo(() => {
     const now = new Date();
     const year = now.getFullYear();
-    if (!baseChartData || !baseEngine) return undefined;
-    const virtualAge = year - baseChartData.lunarYear + 1;
-    const daSeq = daXianList.findIndex((d: any) => virtualAge >= d.startAge && virtualAge <= d.endAge);
+    // 邏輯修正：直接使用西元年份比對區間，確保圓點位置與命理師認知一致
+    if (!daXianList || daXianList.length === 0) return undefined;
+    const daSeq = daXianList.findIndex((d: any) => year >= d.startYear && year <= d.endYear);
     return { year, daSeq: daSeq >= 0 ? daSeq : -1 };
-  }, [baseChartData, baseEngine, daXianList]);
+  }, [daXianList]);
 
   const handleDownload = async () => {
     if (!chartRef.current) return;
@@ -666,7 +678,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   }
 
   // ✅ [修復] 使用 Style 標籤恢復「連續矩形工具列」樣式
-  // 這樣能確保按鈕緊密排列、有分隔線、無圓角、貼齊底部且支援橫向捲動
+  // ✅ [修改] 流年按鈕改為 flex-col 並分為兩行顯示，高度增至 48px
   const bottomBar = (
     <div className="sc-bottomWrap">
       {/* 大限列 (Row 1) */}
@@ -701,7 +713,9 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
               type="button"
             >
               {isRealTime && <div className="sc-dot" />}
-              {y.label}
+              {/* 上下兩行顯示 */}
+              <span className="text-[11px] font-bold leading-tight">{y.year}</span>
+              <span className="text-[10px] leading-tight transform scale-90 origin-top">{y.ganZhi} {y.age}</span>
             </button>
           );
         })}
@@ -762,7 +776,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
           overflow-x: auto;
           scrollbar-width: none;
           -webkit-overflow-scrolling: touch;
-          height: 40px;
+          height: 48px; /* [修改] 增加高度容納兩行文字 */
           background: #eff6ff; /* blue-50 */
         }
         .sc-liuRow::-webkit-scrollbar { display: none; }
@@ -771,6 +785,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
           flex: 1;
           min-width: 60px;
           display: flex;
+          flex-direction: column; /* [修改] 改為垂直排列 */
           align-items: center;
           justify-content: center;
           font-size: 13px;
@@ -789,10 +804,10 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
         .sc-dot {
           position: absolute;
-          top: 4px;
-          right: 4px;
-          width: 6px;
-          height: 6px;
+          top: 3px;
+          right: 3px;
+          width: 5px;
+          height: 5px;
           border-radius: 50%;
           background: #f59e0b; /* amber-500 */
           box-shadow: 0 1px 2px rgba(0,0,0,0.1);
@@ -802,7 +817,8 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   );
 
   return (
-    <div className="flex flex-col h-screen w-full bg-slate-100 relative">
+    // [CSS修正] 使用 100dvh 解決移動端高度問題
+    <div className="flex flex-col h-[100dvh] w-full bg-slate-100 relative overflow-hidden">
       <div className="flex justify-between items-center px-4 py-2 bg-white border-b border-gray-200 shadow-sm shrink-0 z-50 h-[56px]">
         <button
           onClick={handleBack}

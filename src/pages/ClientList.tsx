@@ -41,6 +41,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
 
   // --- 2. 資料狀態 (Client 陣列) ---
   const [clients, setClients] = useState<Client[]>([]); 
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null); // [新增] 用於前端過濾
   
   // 展開/收合 分類
   const [expandedCats, setExpandedCats] = useState<string[]>(() => {
@@ -54,7 +55,10 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   
   // Admin 是否只看自己的資料
   const [showOnlyMine, setShowOnlyMine] = useState<boolean>(() => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY_FILTER) || 'true'); } catch { return true; }
+    try { 
+        const saved = localStorage.getItem(STORAGE_KEY_FILTER);
+        return saved !== null ? JSON.parse(saved) : true; 
+    } catch { return true; }
   });
 
   const [loading, setLoading] = useState(false);
@@ -95,27 +99,26 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const refreshData = async () => {
     setLoading(true);
     try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) setCurrentUserId(user.id);
+
         const profile = await getMyProfile();
         setUserProfile(profile);
 
         // 判斷是否為 Admin
         const isSuper = checkIsSuperAdmin(profile?.email);
-        const loadAll = isSuper && !showOnlyMine;
         
-        // 呼叫 db.ts 的 loadClients (回傳的是 Clients 列表)
-        const data = await loadClients(); 
+        // [關鍵修正] 
+        // 只有當「是超級管理員」且「showOnlyMine 為 false (關閉)」時，
+        // 才傳入 true 給 loadClients 以載入全部資料。
+        // 否則 loadClients(false) 只會載入當前使用者的資料。
+        const shouldLoadAll = isSuper && !showOnlyMine;
+        
+        // 呼叫 db.ts 的 loadClients (傳入正確的布林值)
+        const data = await loadClients(shouldLoadAll); 
         
         // 確保 data 是陣列
         const loadedClients = Array.isArray(data) ? data : [];
-        
-        // 如果不是 Admin 或者只看自己的，這邊再濾一次確保安全 (雖然 loadClients 內部也有濾)
-        // 但如果 loadAll 為 true，loadClients 回傳全部，這裡就需要根據 showOnlyMine 再次確認顯示邏輯
-        // 不過因為 loadClients 已經根據參數決定回傳內容，這裡直接 set 即可
-        // 注意：loadClients 目前實作是依照 user_id 篩選，若要撈全部需修改 db.ts，
-        // 這裡假設 loadClients 已經能正確處理 (根據您提供的 db.ts，loadClients 預設只抓自己的，除非傳入參數或修改內部邏輯)
-        // 因 db.ts 中 loadClients 邏輯可能還是只抓自己的，這裡做個備註。
-        // 若 db.ts 的 loadClients 尚未支援 loadAll 參數，您可能需要檢查 db.ts。
-        // 但根據此檔案邏輯，我們先信任它回傳的資料。
         
         setClients(loadedClients);
 
@@ -203,13 +206,11 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         const genderMatch = filterGender === 'all' || c.gender === filterGender;
         const starMatch = !filterStar || (c.majorStars || '').includes(filterStar);
         
-        let isOwnerMatch = true;
-        if (userProfile && checkIsSuperAdmin(userProfile.email) && showOnlyMine) {
-            isOwnerMatch = c.user_id === userProfile.id;
-        }
-        return match && genderMatch && starMatch && isOwnerMatch;
+        // 這裡不需要再過濾 owner，因為 refreshData 已經根據 showOnlyMine 決定了
+        // loadClients 回傳的資料範圍就是正確的
+        return match && genderMatch && starMatch;
       });
-  }, [clients, searchTerm, filterGender, filterStar, showOnlyMine, userProfile]);
+  }, [clients, searchTerm, filterGender, filterStar]);
 
   // --- 列表分組 (產生卡片的關鍵) ---
   const groupedData = useMemo(() => {
@@ -309,9 +310,9 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                   <div className="text-slate-400">{isOpen ? <ChevronDown size={20}/> : <ChevronRight size={20}/>}</div>
                 </button>
                 
-                {/* 這是展開後的卡片清單 (絕對不是 Table) */}
+                {/* 這是展開後的卡片清單 */}
                 {isOpen && <div className="divide-y divide-slate-50">{items.map(c => {
-                    const isMine = c.user_id === userProfile?.id;
+                    const isMine = c.user_id === currentUserId; // 修正：判斷此命盤是否屬於當前登入者
                     const isZ = c.type === '紫占';
                     return (
                         <div key={c.id} onClick={() => navigate(isZ ? `/divination/${c.id}` : `/chart/${c.id}`)} className={`group relative p-3 sm:p-4 cursor-pointer transition-colors flex items-center justify-between gap-3 ${isZ?'hover:bg-purple-50/50':'hover:bg-blue-50/50'}`}>
@@ -324,6 +325,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                                 </div>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
+                                {/* 如果不是我建立的，顯示建立者 Email */}
                                 {!isMine && c.creatorEmail && (<div className="hidden sm:flex items-center gap-1 text-[10px] text-gray-400 bg-gray-50 px-2 py-1 rounded border border-gray-100 select-none mr-1"><User size={10} /><span>建立者:</span><span className="max-w-[120px] truncate" title={c.creatorEmail}>{c.creatorEmail}</span></div>)}
                                 <div className="flex gap-1">
                                     {!isZ && isMine && <button onClick={(e)=>{e.stopPropagation();setRelationClient(c)}} className="p-2 rounded-full text-slate-400 hover:text-green-600 hover:bg-green-100 transition-colors" title="設定人際關係"><Network size={18}/></button>}
@@ -340,6 +342,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         <div className="h-10"></div>
       </div>
       
+      {/* 傳入 isOpen 屬性來正確控制 Modal 顯示 */}
       <UserManagementModal isOpen={isUserMgmtOpen} onClose={() => setIsUserMgmtOpen(false)} />
       <DivinationSetupModal isOpen={isDivinationModalOpen} onClose={() => setIsDivinationModalOpen(false)} onConfirm={handleCreateDivination} />
       {relationClient && <RelationshipModal isOpen={!!relationClient} onClose={() => setRelationClient(null)} currentClient={relationClient} />}

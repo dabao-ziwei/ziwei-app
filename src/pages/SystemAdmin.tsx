@@ -4,13 +4,12 @@ import { ArrowLeft, Database, ShoppingBag, Users, Sliders, LogOut, Settings } fr
 import { ProductManagement } from '../components/Admin/ProductManagement';
 import { DivinationAdminPanel } from '../components/DivinationAdminPanel';
 import { UserManagementModal } from '../components/UserManagementModal';
-// ✅ [修正] 確保正確引入剛剛建立的面板
 import { FeatureConfigPanel } from '../components/Admin/FeatureConfigPanel';
 import { supabase } from '../supabase';
 
 export const SystemAdmin: React.FC = () => {
     const navigate = useNavigate();
-    // 預設顯示 users，您可以隨時切換
+    // 預設顯示 users
     const [activeTab, setActiveTab] = useState<'users' | 'products' | 'divination' | 'config'>('users');
 
     return (
@@ -37,8 +36,6 @@ export const SystemAdmin: React.FC = () => {
                         
                         <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-bold transition-all ${activeTab === 'users' ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200' : 'text-gray-600 hover:bg-gray-50'}`}><Users size={18} /> 使用者與點數</button>
                         <button onClick={() => setActiveTab('products')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-bold transition-all ${activeTab === 'products' ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200' : 'text-gray-600 hover:bg-gray-50'}`}><ShoppingBag size={18} /> 點數商品管理</button>
-                        
-                        {/* ✅ [重點] 功能營運設定按鈕 */}
                         <button onClick={() => setActiveTab('config')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-bold transition-all ${activeTab === 'config' ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200' : 'text-gray-600 hover:bg-gray-50'}`}><Settings size={18} /> 功能營運設定</button>
                         
                         <div className="border-t border-gray-100 my-4"></div>
@@ -50,13 +47,10 @@ export const SystemAdmin: React.FC = () => {
                 </aside>
 
                 <main className="flex-1 overflow-hidden relative bg-slate-50 flex flex-col">
-                    {/* ✅ [重點] 渲染對應的元件 */}
-                    {activeTab === 'users' && <div className="w-full h-full animate-in fade-in zoom-in duration-200"><UserManagementModal /></div>}
+                    {/* [修正] 傳入 isEmbedded={true} 讓 UserManagementModal 正確顯示 */}
+                    {activeTab === 'users' && <div className="w-full h-full animate-in fade-in zoom-in duration-200"><UserManagementModal isEmbedded={true} /></div>}
                     {activeTab === 'products' && <div className="w-full h-full overflow-y-auto p-8 animate-in fade-in slide-in-from-bottom-4 duration-300"><div className="max-w-5xl mx-auto"><ProductManagement /></div></div>}
-                    
-                    {/* ✅ [重點] 這裡顯示功能設定面板 */}
                     {activeTab === 'config' && <div className="w-full h-full overflow-y-auto p-8 animate-in fade-in slide-in-from-bottom-4 duration-300"><div className="max-w-4xl mx-auto"><FeatureConfigPanel /></div></div>}
-                    
                     {activeTab === 'divination' && <div className="w-full h-full overflow-y-auto p-8 animate-in fade-in slide-in-from-bottom-4 duration-300"><div className="max-w-7xl mx-auto"><div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden min-h-[600px]"><DivinationAdminPanel /></div></div></div>}
                 </main>
             </div>
