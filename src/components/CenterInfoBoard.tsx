@@ -1,5 +1,3 @@
-// FILE: src/components/CenterInfoBoard.tsx
-
 import React, { useState, useMemo } from 'react';
 import {
   Users,
@@ -23,9 +21,6 @@ import type { ChartData } from '../logic/types';
 import type { PermissionState } from '../logic/permissions';
 import { LunarYear, Solar, Lunar } from 'lunar-typescript';
 import { GAN } from '../logic/constants';
-
-// ✅ 硬關閉開關：先全部不顯示（不做 email 判斷、不做 auth 判斷）
-const DEV_YEARLY_ANALYSIS_ENABLED = false;
 
 const ArrowHead = ({ x, y, rotation }: { x: number; y: number; rotation: number }) => (
   <polygon points="0,0 -6,-4 -6,4" fill="#cbd5e1" transform={`translate(${x}, ${y}) rotate(${rotation})`} />
@@ -80,7 +75,7 @@ interface CenterInfoBoardProps {
     xiao: PermissionState;
     liu_month: PermissionState;
     liu_day: PermissionState;
-    dual_chart?: PermissionState;
+    dual_chart?: PermissionState; // ✅ 補齊：關聯圖小卡「和他合盤」會用到
   };
 
   liuMonth?: number | null;
@@ -266,7 +261,9 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     });
 
     const parents = relationships.filter((r) => ['父親', '母親', '爸爸', '媽媽', '父', '母'].includes(r.relation_type));
-    const children = relationships.filter((r) => ['子女', '兒子', '女兒', '長男', '長女', '次男', '次女'].includes(r.relation_type));
+    const children = relationships.filter((r) =>
+      ['子女', '兒子', '女兒', '長男', '長女', '次男', '次女'].includes(r.relation_type)
+    );
     const partners = relationships.filter((r) => ['配偶', '老公', '老婆', '丈夫', '妻子', '情侶'].includes(r.relation_type));
     const others = relationships.filter((r) => !parents.includes(r) && !children.includes(r) && !partners.includes(r));
 
@@ -383,7 +380,10 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
         >
           {historyStack.length > 0 && (
             <div className="absolute top-0 left-0 w-full px-2 py-1 z-50 bg-white/90 backdrop-blur-sm border-b border-gray-100 flex items-center gap-1 overflow-hidden">
-              <button onClick={onHistoryBack} className="flex items-center text-gray-500 hover:text-blue-600 transition-colors shrink-0">
+              <button
+                onClick={onHistoryBack}
+                className="flex items-center text-gray-500 hover:text-blue-600 transition-colors shrink-0"
+              >
                 <ArrowLeft size={14} />
               </button>
               <div className="flex items-center text-[10px] text-gray-400 overflow-hidden whitespace-nowrap">
@@ -482,7 +482,9 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                         <Users size={12} /> <span className="hidden sm:inline">雙胞胎</span>
                       </button>
                     )}
-                    {permissionFlags?.twin !== 'hidden' && permissionFlags?.inverted !== 'hidden' && <div className="w-px bg-gray-300 my-0.5"></div>}
+                    {permissionFlags?.twin !== 'hidden' && permissionFlags?.inverted !== 'hidden' && (
+                      <div className="w-px bg-gray-300 my-0.5"></div>
+                    )}
                   </>
                 )}
 
@@ -511,7 +513,8 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                         } ${permissionFlags?.xiao === 'disabled' ? 'opacity-50 cursor-not-allowed' : ''}`}
                         title={permissionFlags?.xiao === 'disabled' ? '權限已到期' : ''}
                       >
-                        {permissionFlags?.xiao === 'disabled' ? <Lock size={12} /> : <Clock size={12} />} <span className="hidden sm:inline">小限</span>
+                        {permissionFlags?.xiao === 'disabled' ? <Lock size={12} /> : <Clock size={12} />}{' '}
+                        <span className="hidden sm:inline">小限</span>
                       </button>
                     )}
                   </>
@@ -524,16 +527,16 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                     <div className="relative flex-1">
                       <div
                         className={`flex items-center rounded overflow-hidden shadow-sm transition-colors
-                          ${liuMonth !== null ? 'bg-amber-500' : 'bg-white border border-gray-200'}
-                          ${permissionFlags?.liu_month === 'disabled' ? 'opacity-50 cursor-not-allowed' : ''}
-                        `}
+                                                ${liuMonth !== null ? 'bg-amber-500' : 'bg-white border border-gray-200'}
+                                                ${permissionFlags?.liu_month === 'disabled' ? 'opacity-50 cursor-not-allowed' : ''}
+                                            `}
                       >
                         <button
                           onClick={handlePrevMonth}
                           disabled={permissionFlags?.liu_month === 'disabled'}
                           className={`px-1 py-1 h-full flex items-center justify-center hover:bg-black/10 active:bg-black/20 transition-colors cursor-pointer
-                            ${liuMonth !== null ? 'text-white' : 'text-gray-400'}
-                          `}
+                                                        ${liuMonth !== null ? 'text-white' : 'text-gray-400'}
+                                                    `}
                         >
                           <ChevronLeftIcon size={12} />
                         </button>
@@ -548,8 +551,8 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                           }}
                           disabled={permissionFlags?.liu_month === 'disabled'}
                           className={`flex-1 py-1 text-[10px] font-bold flex items-center justify-center gap-1 h-full hover:bg-black/5 transition-colors
-                            ${liuMonth !== null ? 'text-white' : 'text-gray-500'}
-                          `}
+                                                        ${liuMonth !== null ? 'text-white' : 'text-gray-500'}
+                                                    `}
                           title={permissionFlags?.liu_month === 'disabled' ? '權限已到期' : ''}
                         >
                           {permissionFlags?.liu_month === 'disabled' ? <Lock size={12} /> : <Calendar size={12} />}
@@ -563,8 +566,8 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                           onClick={handleNextMonth}
                           disabled={permissionFlags?.liu_month === 'disabled'}
                           className={`px-1 py-1 h-full flex items-center justify-center hover:bg-black/10 active:bg-black/20 transition-colors cursor-pointer
-                            ${liuMonth !== null ? 'text-white' : 'text-gray-400'}
-                          `}
+                                                        ${liuMonth !== null ? 'text-white' : 'text-gray-400'}
+                                                    `}
                         >
                           <ChevronRightIcon size={12} />
                         </button>
@@ -585,9 +588,9 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                     closePickers();
                                   }}
                                   className={`text-xs py-1.5 rounded hover:bg-amber-50 text-gray-700 
-                                    ${liuMonth === m && !isLiuMonthLeap ? 'bg-amber-100 font-bold text-amber-700' : ''}
-                                    ${isReal ? 'border-2 border-red-400' : ''}
-                                  `}
+                                                                        ${liuMonth === m && !isLiuMonthLeap ? 'bg-amber-100 font-bold text-amber-700' : ''}
+                                                                        ${isReal ? 'border-2 border-red-400' : ''}
+                                                                    `}
                                 >
                                   {NUM_CN[m - 1]}月
                                 </button>
@@ -598,9 +601,13 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                       closePickers();
                                     }}
                                     className={`text-[10px] py-1.5 rounded hover:bg-amber-50 text-amber-600 border border-amber-100 col-span-1 
-                                      ${liuMonth === m && isLiuMonthLeap ? 'bg-amber-100 font-bold' : ''}
-                                      ${isCurrentYear && realIsLeap && realLunarMonth === m ? 'border-2 border-red-400' : ''}
-                                    `}
+                                                                            ${liuMonth === m && isLiuMonthLeap ? 'bg-amber-100 font-bold' : ''}
+                                                                            ${
+                                                                              isCurrentYear && realIsLeap && realLunarMonth === m
+                                                                                ? 'border-2 border-red-400'
+                                                                                : ''
+                                                                            }
+                                                                        `}
                                   >
                                     閏{NUM_CN[m - 1]}
                                   </button>
@@ -626,16 +633,16 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                     <div className="relative flex-1">
                       <div
                         className={`flex items-center rounded overflow-hidden shadow-sm transition-colors
-                          ${liuDay !== null ? 'bg-green-600' : 'bg-white border border-gray-200'}
-                          ${permissionFlags?.liu_day === 'disabled' ? 'opacity-50 cursor-not-allowed' : ''}
-                        `}
+                                                ${liuDay !== null ? 'bg-green-600' : 'bg-white border border-gray-200'}
+                                                ${permissionFlags?.liu_day === 'disabled' ? 'opacity-50 cursor-not-allowed' : ''}
+                                            `}
                       >
                         <button
                           onClick={handlePrevDay}
                           disabled={permissionFlags?.liu_day === 'disabled'}
                           className={`px-1 py-1 h-full flex items-center justify-center hover:bg-black/10 active:bg-black/20 transition-colors cursor-pointer
-                            ${liuDay !== null ? 'text-white' : 'text-gray-400'}
-                          `}
+                                                        ${liuDay !== null ? 'text-white' : 'text-gray-400'}
+                                                    `}
                         >
                           <ChevronLeftIcon size={12} />
                         </button>
@@ -650,8 +657,8 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                           }}
                           disabled={permissionFlags?.liu_day === 'disabled'}
                           className={`flex-1 py-1 text-[10px] font-bold flex items-center justify-center gap-1 h-full hover:bg-black/5 transition-colors
-                            ${liuDay !== null ? 'text-white' : 'text-gray-500'}
-                          `}
+                                                        ${liuDay !== null ? 'text-white' : 'text-gray-500'}
+                                                    `}
                           title={permissionFlags?.liu_day === 'disabled' ? '權限已到期' : ''}
                         >
                           {permissionFlags?.liu_day === 'disabled' ? <Lock size={12} /> : <Sun size={12} />}
@@ -665,8 +672,8 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                           onClick={handleNextDay}
                           disabled={permissionFlags?.liu_day === 'disabled'}
                           className={`px-1 py-1 h-full flex items-center justify-center hover:bg-black/10 active:bg-black/20 transition-colors cursor-pointer
-                            ${liuDay !== null ? 'text-white' : 'text-gray-400'}
-                          `}
+                                                        ${liuDay !== null ? 'text-white' : 'text-gray-400'}
+                                                    `}
                         >
                           <ChevronRightIcon size={12} />
                         </button>
@@ -692,9 +699,9 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                   closePickers();
                                 }}
                                 className={`text-[10px] py-1.5 rounded hover:bg-green-50 text-gray-700 
-                                  ${liuDay === d ? 'bg-green-100 font-bold text-green-700' : ''}
-                                  ${isRealDay ? 'border-2 border-red-400 font-bold text-red-600' : ''}
-                                `}
+                                                                    ${liuDay === d ? 'bg-green-100 font-bold text-green-700' : ''}
+                                                                    ${isRealDay ? 'border-2 border-red-400 font-bold text-red-600' : ''}
+                                                                `}
                               >
                                 {d}
                               </button>
@@ -715,9 +722,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                   )}
                 </div>
               )}
-
-              {/* ✅ 硬關閉：年度分析抽屜入口（先整段不顯示） */}
-              {DEV_YEARLY_ANALYSIS_ENABLED && null}
             </div>
           </div>
         </div>
@@ -746,7 +750,12 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                     <div
                       key={node.id}
                       className="absolute flex flex-col items-center justify-center"
-                      style={{ left: node.x, top: node.y, transform: 'translate(-50%, -50%)', zIndex: isSelected ? 50 : 10 }}
+                      style={{
+                        left: node.x,
+                        top: node.y,
+                        transform: 'translate(-50%, -50%)',
+                        zIndex: isSelected ? 50 : 10,
+                      }}
                       onClick={(e) => {
                         e.stopPropagation();
                         if (!isCenter) setSelectedNodeId(isSelected ? null : node.id);
@@ -754,15 +763,15 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                     >
                       <div
                         className={`relative px-3 py-1.5 rounded-md shadow-sm border transition-all duration-200 flex items-center justify-center
-                          ${
-                            isCenter
-                              ? client.gender === '男'
-                                ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white border-blue-600'
-                                : 'bg-gradient-to-r from-pink-500 to-pink-600 text-white border-pink-600'
-                              : isSelected
-                              ? 'bg-white border-blue-400 ring-2 ring-blue-200 scale-105'
-                              : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-md'
-                          }`}
+                                                ${
+                                                  isCenter
+                                                    ? client.gender === '男'
+                                                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white border-blue-600'
+                                                      : 'bg-gradient-to-r from-pink-500 to-pink-600 text-white border-pink-600'
+                                                    : isSelected
+                                                    ? 'bg-white border-blue-400 ring-2 ring-blue-200 scale-105'
+                                                    : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-md'
+                                                }`}
                         style={{ minWidth: 80, cursor: isCenter ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
                       >
                         <span className={`text-xs font-bold ${isCenter ? 'text-white' : 'text-gray-700'}`}>{node.data.name}</span>
@@ -797,6 +806,7 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                 <X size={12} />
                               </button>
                             </div>
+
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -817,8 +827,12 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                 }}
                                 disabled={permissionFlags?.dual_chart === 'disabled'}
                                 className={`flex items-center gap-2 px-2 py-2 text-xs rounded-lg text-left font-bold transition-colors
-                                  ${permissionFlags?.dual_chart === 'disabled' ? 'text-gray-400 bg-gray-50 cursor-not-allowed' : 'text-purple-700 hover:bg-purple-50'}
-                                `}
+                                                                    ${
+                                                                      permissionFlags?.dual_chart === 'disabled'
+                                                                        ? 'text-gray-400 bg-gray-50 cursor-not-allowed'
+                                                                        : 'text-purple-700 hover:bg-purple-50'
+                                                                    }
+                                                                `}
                               >
                                 <RefreshCw size={14} /> 和他合盤
                               </button>

@@ -2,18 +2,40 @@
 
 export type AnalysisStatus = 'active' | 'hidden' | 'manual_only';
 
-// 分析線路（強型別，避免 focus_line / cache key 漂移）
+// 分析線路
 export type AnalysisLine = '命遷線' | '夫官線' | '財福線';
 
-// 1. 純命理掃描結果 (黑盒核心產出)
+// L0: 免費引導層
+export interface AnalysisSummary {
+  headline: string;
+  bullets: string[];
+}
+
+// L1: 付費詳解層
+export interface AnalysisDetails {
+  structure: string[];
+  reasoning: string[];
+  suggestions?: string[];
+}
+
+// 未來 API 友善型別：解鎖時只回傳該線的 Details
+export type AnalysisDetailsByLine = Partial<Record<AnalysisLine, AnalysisDetails>>;
+
+// 1. 純命理掃描結果
 export interface RawAnalysisResult {
   line: AnalysisLine;
   severity: number;      // 內部排序用，不外顯
-  riskTags: string[];    // 課題標籤
   status: AnalysisStatus;
+  isPrimary: boolean;
+  
+  // 相容欄位
+  riskTags?: string[]; 
+
+  summary: AnalysisSummary;
+  details?: AnalysisDetails; // 只有 includeDetails: true 時才會有值
 }
 
-// 2. 存儲於 Supabase 的完整快取結構
+// 2. Supabase 存儲結構
 export interface YearlyAnalysisRecord {
   id?: string;
   user_id: string;
@@ -21,21 +43,18 @@ export interface YearlyAnalysisRecord {
   year: number;
   focus_line: AnalysisLine;
   results: RawAnalysisResult[];
-
-  // Key 是 line, Value 是文案（允許部分生成 / 部分缺省）
   content_cache: Partial<Record<AnalysisLine, string>>;
-
-  // 紀錄產出文案的邏輯版本，規則或模板更新時可用於判斷快取是否失效
   content_version: number;
-
   created_at?: string;
 }
 
-// 3. UI 顯示狀態
+// 3. UI 顯示狀態 (ViewModel)
 export interface AnalysisViewState {
   line: AnalysisLine;
-  isLocked: boolean;
-  tags: string[];
-  content: string;
   status: AnalysisStatus;
+  isPrimary: boolean;
+  
+  // 資料面
+  summary: AnalysisSummary;
+  details?: AnalysisDetails; // 解鎖後才會有值
 }
