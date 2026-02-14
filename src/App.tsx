@@ -9,16 +9,17 @@ import { Dashboard } from './pages/Dashboard';
 import { saveClient, type Client } from './db';
 import { supabase } from './supabase';
 import { Loader2 } from 'lucide-react';
+import { RequireMeChart } from './components/RequireMeChart'; // [新增]
 
 import { DualChart } from './components/Chart/DualChart';
 import { CompatibilitySetup } from './pages/CompatibilitySetup';
 import { LuckyPage } from './pages/LuckyPage'; 
 import { StorePage } from './pages/StorePage';
-import { SystemAdmin } from './pages/SystemAdmin'; // ✅ 正確引入剛剛建立的檔案
+import { SystemAdmin } from './pages/SystemAdmin';
 
 // [效能監控] Vercel Speed Insights
 import { SpeedInsights } from "@vercel/speed-insights/react";
-// [新增] [流量分析] Vercel Analytics
+// [流量分析] Vercel Analytics
 import { Analytics } from "@vercel/analytics/react";
 
 function App() {
@@ -83,7 +84,11 @@ function App() {
     if (!session) return <Navigate to="/login" replace />;
     return (
       <div className="w-full h-screen bg-[#f8f9fa]">
-        <Outlet />
+        {/* [關鍵修改] 使用 RequireMeChart 包裹 Outlet，強制要求命盤 */}
+        <RequireMeChart>
+            <Outlet />
+        </RequireMeChart>
+
         <AddChartModal
           isOpen={isModalOpen}
           onClose={() => {
@@ -99,9 +104,7 @@ function App() {
 
   return (
     <>
-      {/* [效能監控] */}
       <SpeedInsights />
-      {/* [新增] [流量分析] 自動追蹤頁面瀏覽與訪客數 */}
       <Analytics />
       
       <Routes>
@@ -134,10 +137,7 @@ function App() {
           <Route path="/dual-chart" element={<DualChart />} />
           <Route path="/divination" element={<ChartBoard mode="divination" />} />
           
-          {/* 後台管理 (整合頁面) */}
           <Route path="/admin" element={<SystemAdmin />} />
-          
-          {/* 點數商城頁面 */}
           <Route path="/store" element={<StorePage />} />
         </Route>
 

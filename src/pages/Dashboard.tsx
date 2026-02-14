@@ -1,9 +1,8 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
     Sparkles, Menu, LogOut, Loader2, PlusCircle, 
-    FileText, Globe, Sliders, Coins, Gift, X, 
-    ShoppingCart
+    FileText, Globe, Sliders, Coins, Gift, ShoppingCart, ArrowRight
 } from 'lucide-react';
 import { supabase } from '../supabase';
 import { 
@@ -29,27 +28,249 @@ interface WizardProps {
     isTestMode: boolean;
 }
 
+// [修正] 優化後的精靈元件：包含完整的時間輸入與自動跳焦點邏輯
 const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCancelTest, isTestMode }) => {
     const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
-    const [formData, setFormData] = useState({ name: '', gender: '' as '男'|'女'|'', year: 2000, month: 1, day: 1, hour: 0, minute: 0 });
+    // 改用 string 方便輸入處理，最後送出再轉 number
+    const [formData, setFormData] = useState({ 
+        name: '', 
+        gender: '' as '男'|'女'|'', 
+        year: '', month: '', day: '', hour: '', minute: '' 
+    });
     const [loadingText, setLoadingText] = useState('正在連結星曜數據...');
+
+    // Refs 用於自動跳焦點
+    const yearRef = useRef<HTMLInputElement>(null);
+    const monthRef = useRef<HTMLInputElement>(null);
+    const dayRef = useRef<HTMLInputElement>(null);
+    const hourRef = useRef<HTMLInputElement>(null);
+    const minuteRef = useRef<HTMLInputElement>(null);
+
+    // 自動聚焦
+    useEffect(() => {
+        if (step === 3) {
+            setTimeout(() => yearRef.current?.focus(), 100);
+        }
+    }, [step]);
 
     useEffect(() => {
         if (step === 4) {
             const sequence = [{t:0,msg:'正在連結星曜數據...'},{t:800,msg:'正在推算命宮位置...'},{t:1600,msg:'正在分析本週運勢能量...'}];
             const timers = sequence.map(({t,msg})=>setTimeout(()=>setLoadingText(msg),t));
-            const finalTimer = setTimeout(async()=>{try{await onComplete(formData);}catch(e){console.error(e);setStep(3);}},2500);
+            
+            const finalTimer = setTimeout(async () => {
+                try {
+                    // 轉回數字格式
+                    const finalData = {
+                        ...formData,
+                        year: parseInt(formData.year),
+                        month: parseInt(formData.month),
+                        day: parseInt(formData.day),
+                        hour: parseInt(formData.hour || '0'),
+                        minute: parseInt(formData.minute || '0')
+                    };
+                    await onComplete(finalData);
+                } catch(e) {
+                    console.error(e);
+                    // alert('發生錯誤，請檢查資料'); // 避免干擾，通常 onComplete 會處理
+                    setStep(3);
+                }
+            }, 2500);
+
             return ()=>{timers.forEach(clearTimeout);clearTimeout(finalTimer);};
         }
     }, [step, formData, onComplete]);
 
-    const handleNext = () => { if (step === 1 && !formData.name) return alert('請輸入您的稱呼'); if (step === 2 && !formData.gender) return alert('請選擇性別'); setStep(prev => (prev + 1) as any); };
-    const handleFinalSubmit = () => { if (!formData.year) return alert("請輸入年份"); setStep(4); };
+    // 輸入處理：限制長度並自動跳下一格
+    const handleDateInput = (
+        e: React.ChangeEvent<HTMLInputElement>, 
+        field: keyof typeof formData, 
+        maxLen: number, 
+        nextRef?: React.RefObject<HTMLInputElement>
+    ) => {
+        const val = e.target.value.replace(/\D/g, '').slice(0, maxLen);
+        setFormData(prev => ({ ...prev, [field]: val }));
+        
+        if (val.length === maxLen && nextRef?.current) {
+            nextRef.current.focus();
+            nextRef.current.select();
+        }
+    };
+
+    const handleKeyDown = (
+        e: React.KeyboardEvent<HTMLInputElement>,
+        currentVal: string,
+        prevRef?: React.RefObject<HTMLInputElement>
+    ) => {
+        if (e.key === 'Backspace' && currentVal === '' && prevRef?.current) {
+            e.preventDefault();
+            prevRef.current.focus();
+        }
+        if (e.key === 'Enter') {
+            if (step === 1 && formData.name) handleNext();
+            if (step === 3) handleFinalSubmit();
+        }
+    };
+
+    const handleNext = () => { 
+        if (step === 1 && !formData.name) return alert('請輸入您的稱呼'); 
+        if (step === 2 && !formData.gender) return alert('請選擇性別'); 
+        setStep(prev => (prev + 1) as any); 
+    };
+
+    const handleFinalSubmit = () => { 
+        if (!formData.year || !formData.month || !formData.day) return alert("請輸入完整的出生日期"); 
+        setStep(4); 
+    };
     
-    if(step===1) return <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 text-center text-slate-800"><h1 className="text-2xl font-bold mb-4">歡迎</h1><input className="w-full border-b-2 text-center text-xl p-2 mb-4 outline-none border-blue-200 focus:border-blue-500 transition-colors" placeholder="您的稱呼" value={formData.name} onChange={e=>setFormData({...formData,name:e.target.value})}/><button onClick={handleNext} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-colors">下一步</button></div>;
-    if(step===2) return <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 text-center text-slate-800"><h1 className="text-xl font-bold mb-4">性別</h1><div className="flex gap-4"><button onClick={()=>{setFormData({...formData,gender:'男'});setTimeout(()=>setStep(3),200)}} className="flex-1 p-4 border rounded-xl hover:bg-blue-50 transition-colors font-bold text-blue-600">男</button><button onClick={()=>{setFormData({...formData,gender:'女'});setTimeout(()=>setStep(3),200)}} className="flex-1 p-4 border rounded-xl hover:bg-pink-50 transition-colors font-bold text-pink-500">女</button></div></div>;
-    if(step===3) return <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 text-center text-slate-800"><h1 className="text-xl font-bold mb-4">出生年</h1><input type="number" className="w-full border p-2 rounded mb-4 text-center text-xl outline-none focus:ring-2 focus:ring-blue-500" placeholder="西元年 (例如: 1990)" value={formData.year} onChange={e=>setFormData({...formData,year:parseInt(e.target.value)})}/><button onClick={handleFinalSubmit} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-colors">開始分析</button></div>;
-    return <div className="text-white text-center mt-20"><Loader2 className="animate-spin mx-auto mb-2"/>{loadingText}</div>;
+    // Step 1: 姓名
+    if(step===1) return (
+        <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 text-center text-slate-800 animate-in fade-in zoom-in duration-300">
+            <h1 className="text-2xl font-bold mb-4 text-slate-900">歡迎來到大寶紫微</h1>
+            <p className="text-slate-500 mb-8 text-sm">首先，請問該如何稱呼您？</p>
+            <input 
+                autoFocus
+                className="w-full border-b-2 text-center text-2xl p-2 mb-8 outline-none border-blue-100 focus:border-blue-500 transition-colors bg-transparent text-slate-800 placeholder:text-slate-300" 
+                placeholder="您的暱稱" 
+                value={formData.name} 
+                onChange={e=>setFormData({...formData,name:e.target.value})}
+                onKeyDown={e => handleKeyDown(e, formData.name)}
+            />
+            <button onClick={handleNext} className="w-full bg-blue-600 text-white py-3.5 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 flex items-center justify-center gap-2 group">
+                下一步 <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform"/>
+            </button>
+        </div>
+    );
+    
+    // Step 2: 性別
+    if(step===2) return (
+        <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 text-center text-slate-800 animate-in slide-in-from-right duration-300">
+            <h1 className="text-2xl font-bold mb-8 text-slate-900">您的生理性別是？</h1>
+            <div className="flex gap-4 mb-6">
+                <button 
+                    onClick={()=>{setFormData({...formData,gender:'男'});setTimeout(()=>setStep(3),200)}} 
+                    className="flex-1 p-6 border-2 border-slate-100 rounded-2xl hover:border-blue-500 hover:bg-blue-50 transition-all font-bold text-slate-400 hover:text-blue-600 text-xl flex flex-col items-center gap-3 group"
+                >
+                    <span className="text-4xl grayscale group-hover:grayscale-0 transition-all">👨</span> 
+                    <span>男</span>
+                </button>
+                <button 
+                    onClick={()=>{setFormData({...formData,gender:'女'});setTimeout(()=>setStep(3),200)}} 
+                    className="flex-1 p-6 border-2 border-slate-100 rounded-2xl hover:border-pink-500 hover:bg-pink-50 transition-all font-bold text-slate-400 hover:text-pink-600 text-xl flex flex-col items-center gap-3 group"
+                >
+                    <span className="text-4xl grayscale group-hover:grayscale-0 transition-all">👩</span> 
+                    <span>女</span>
+                </button>
+            </div>
+            <button onClick={()=>setStep(1)} className="text-slate-400 text-sm hover:text-slate-600">回上一步</button>
+        </div>
+    );
+    
+    // Step 3: 出生時間 (恢復好用的介面)
+    if(step===3) return (
+        <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 text-center text-slate-800 animate-in slide-in-from-right duration-300">
+            <h1 className="text-2xl font-bold mb-2 text-slate-900">出生時間</h1>
+            <p className="text-xs text-slate-400 mb-8">請輸入西元出生年月日時分</p>
+            
+            <div className="space-y-6 mb-10">
+                {/* 年月日 */}
+                <div className="flex items-center justify-center gap-2">
+                    <div className="flex flex-col gap-1 w-24">
+                        <input 
+                            ref={yearRef}
+                            type="tel" 
+                            className="w-full border-b-2 border-slate-200 p-2 text-center text-2xl outline-none focus:border-blue-500 bg-transparent font-mono text-slate-800 placeholder:text-slate-200" 
+                            placeholder="YYYY" 
+                            value={formData.year} 
+                            onChange={e=>handleDateInput(e, 'year', 4, monthRef)}
+                        />
+                        <span className="text-[10px] text-slate-400 font-bold">年</span>
+                    </div>
+                    <span className="text-slate-300 text-xl -mt-4">/</span>
+                    <div className="flex flex-col gap-1 w-16">
+                        <input 
+                            ref={monthRef}
+                            type="tel" 
+                            className="w-full border-b-2 border-slate-200 p-2 text-center text-2xl outline-none focus:border-blue-500 bg-transparent font-mono text-slate-800 placeholder:text-slate-200" 
+                            placeholder="MM" 
+                            value={formData.month} 
+                            onChange={e=>handleDateInput(e, 'month', 2, dayRef)}
+                            onKeyDown={e=>handleKeyDown(e, formData.month, yearRef)}
+                        />
+                        <span className="text-[10px] text-slate-400 font-bold">月</span>
+                    </div>
+                    <span className="text-slate-300 text-xl -mt-4">/</span>
+                    <div className="flex flex-col gap-1 w-16">
+                        <input 
+                            ref={dayRef}
+                            type="tel" 
+                            className="w-full border-b-2 border-slate-200 p-2 text-center text-2xl outline-none focus:border-blue-500 bg-transparent font-mono text-slate-800 placeholder:text-slate-200" 
+                            placeholder="DD" 
+                            value={formData.day} 
+                            onChange={e=>handleDateInput(e, 'day', 2, hourRef)}
+                            onKeyDown={e=>handleKeyDown(e, formData.day, monthRef)}
+                        />
+                        <span className="text-[10px] text-slate-400 font-bold">日</span>
+                    </div>
+                </div>
+
+                {/* 時分 */}
+                <div className="flex items-center justify-center gap-2">
+                    <div className="flex flex-col gap-1 w-20">
+                        <input 
+                            ref={hourRef}
+                            type="tel" 
+                            className="w-full border-b-2 border-slate-200 p-2 text-center text-2xl outline-none focus:border-blue-500 bg-transparent font-mono text-slate-800 placeholder:text-slate-200" 
+                            placeholder="00" 
+                            value={formData.hour} 
+                            onChange={e=>handleDateInput(e, 'hour', 2, minuteRef)}
+                            onKeyDown={e=>handleKeyDown(e, formData.hour, dayRef)}
+                        />
+                        <span className="text-[10px] text-slate-400 font-bold">時 (24H)</span>
+                    </div>
+                    <span className="text-slate-300 text-xl -mt-4">:</span>
+                    <div className="flex flex-col gap-1 w-20">
+                        <input 
+                            ref={minuteRef}
+                            type="tel" 
+                            className="w-full border-b-2 border-slate-200 p-2 text-center text-2xl outline-none focus:border-blue-500 bg-transparent font-mono text-slate-800 placeholder:text-slate-200" 
+                            placeholder="00" 
+                            value={formData.minute} 
+                            onChange={e=>handleDateInput(e, 'minute', 2)}
+                            onKeyDown={e=>handleKeyDown(e, formData.minute, hourRef)}
+                        />
+                        <span className="text-[10px] text-slate-400 font-bold">分</span>
+                    </div>
+                </div>
+            </div>
+
+            <button onClick={handleFinalSubmit} className="w-full bg-blue-600 text-white py-3.5 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 mb-4">
+                開始分析命盤
+            </button>
+            <button onClick={()=>setStep(2)} className="text-slate-400 text-sm hover:text-slate-600">回上一步</button>
+            
+            {isTestMode && (
+                <div className="mt-6 pt-4 border-t border-slate-100">
+                    <button onClick={onCancelTest} className="text-xs text-red-400 hover:text-red-600">
+                        取消測試模式
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+    
+    // Step 4: Loading
+    return (
+        <div className="text-white text-center mt-32 animate-in fade-in duration-700">
+            <div className="relative w-24 h-24 mx-auto mb-8">
+                <div className="absolute inset-0 border-4 border-purple-500/30 rounded-full"></div>
+                <div className="absolute inset-0 border-4 border-t-purple-500 rounded-full animate-spin"></div>
+                <Sparkles className="absolute inset-0 m-auto text-purple-400 animate-pulse" size={32} />
+            </div>
+            <h2 className="text-2xl font-bold tracking-widest mb-2">{loadingText}</h2>
+            <p className="text-purple-300/60 text-sm">AI 正在運算您的命盤軌跡...</p>
+        </div>
+    );
 };
 
 export const Dashboard: React.FC = () => {
@@ -241,9 +462,7 @@ export const Dashboard: React.FC = () => {
         <main className="flex-1 w-full overflow-y-auto relative z-10 scroll-smooth">
             <div className="max-w-7xl mx-auto p-4 flex flex-col items-center">
                 {meClient && !forceOnboarding ? (
-                    <>
-                        <div className="w-full animate-in fade-in duration-700"><FortuneWidget userProfile={userProfile} client={meClient} clientName={meClient.name} /></div>
-                    </>
+                    <div className="w-full animate-in fade-in duration-700"><FortuneWidget userProfile={userProfile} client={meClient} clientName={meClient.name} /></div>
                 ) : (
                     <div className="mt-6 w-full flex justify-center"><OnboardingWizard userProfile={userProfile} onComplete={handleWizardComplete} onCancelTest={() => setForceOnboarding(false)} isTestMode={forceOnboarding} /></div>
                 )}
