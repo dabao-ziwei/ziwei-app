@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, UserCog, LogOut, User, Sparkles, Network, ArrowLeft, Wrench, X, Filter } from 'lucide-react';
+// ✅ [關鍵] 引入正確的資料庫函式
 import { loadClients, deleteClient, getMyProfile, getUsedChartCount, checkIsSuperAdmin, type Client, type UserProfile } from '../db';
 import { supabase } from '../supabase';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
@@ -38,10 +39,9 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const [filterGender, setFilterGender] = useState<'all'|'男'|'女'>(initialG);
   const [filterStar, setFilterStar] = useState<string | null>(initialStar);
 
-  // --- 2. 資料狀態 ---
+  // --- 2. 資料狀態 (Client 陣列) ---
   const [clients, setClients] = useState<Client[]>([]); 
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null); 
-  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null); // [關鍵] 保存當前登入者 Email
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null); // [新增] 用於前端過濾
   
   // 展開/收合 分類
   const [expandedCats, setExpandedCats] = useState<string[]>(() => {
@@ -53,7 +53,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     }
   });
   
-  // Admin 是否只看自己的資料 (預設 true)
+  // Admin 是否只看自己的資料
   const [showOnlyMine, setShowOnlyMine] = useState<boolean>(() => {
     try { 
         const saved = localStorage.getItem(STORAGE_KEY_FILTER);
@@ -71,11 +71,12 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const [isDivinationModalOpen, setIsDivinationModalOpen] = useState(false);
   const [relationClient, setRelationClient] = useState<Client | null>(null);
 
+  // ✅ [已修復] 這裡補上了 toggleCat 函式
   const toggleCat = (cat: string) => {
     setExpandedCats(prev => 
       prev.includes(cat) 
-        ? prev.filter(c => c !== cat)
-        : [...prev, cat]
+        ? prev.filter(c => c !== cat) // 若已展開則收合
+        : [...prev, cat]              // 若已收合則展開
     );
   };
 
@@ -99,20 +100,26 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     setLoading(true);
     try {
         const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-            setCurrentUserId(user.id);
-            // [關鍵] 儲存 Email 供前端篩選邏輯使用
-            setCurrentUserEmail(user.email || '');
-        }
+        if (user) setCurrentUserId(user.id);
 
         const profile = await getMyProfile();
         setUserProfile(profile);
 
-        // [修正] 判斷是否為超級管理員，如果是，傳入 true 以載入所有使用者的資料
-        const isSuperUser = (user?.email || '').trim().toLowerCase() === SUPER_ADMIN_EMAIL;
-        const data = await loadClients(isSuperUser); 
+        // 判斷是否為 Admin
+        const isSuper = checkIsSuperAdmin(profile?.email);
         
+        // [關鍵修正] 
+        // 只有當「是超級管理員」且「showOnlyMine 為 false (關閉)」時，
+        // 才傳入 true 給 loadClients 以載入全部資料。
+        // 否則 loadClients(false) 只會載入當前使用者的資料。
+        const shouldLoadAll = isSuper && !showOnlyMine;
+        
+        // 呼叫 db.ts 的 loadClients (傳入正確的布林值)
+        const data = await loadClients(shouldLoadAll); 
+        
+        // 確保 data 是陣列
         const loadedClients = Array.isArray(data) ? data : [];
+        
         setClients(loadedClients);
 
         if (profile) {
@@ -127,14 +134,16 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     }
   };
 
+  // 當 showOnlyMine 切換時，重新執行 refreshData
   useEffect(() => {
     refreshData();
     const channel = supabase.channel('client_list_changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => refreshData())
         .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []); 
+  }, [showOnlyMine]); 
 
+  // 接收從 Dashboard 傳來的快速占卜指令
   useEffect(() => {
       if (location.state && (location.state as any).openDivination) {
           setIsDivinationModalOpen(true);
@@ -188,44 +197,22 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     if (confirm('確定要刪除此命盤嗎？')) { await deleteClient(id); refreshData(); }
   };
 
-  // --- [關鍵] 列表過濾邏輯 ---
+  // --- 列表過濾 ---
   const filtered = useMemo(() => {
       return clients.filter(c => {
-        // 1. 基礎搜尋篩選
         const term = searchTerm.toLowerCase();
+        // 搜尋的是「姓名」或「建立者 Email」，不是 User Email
         const match = !term || (c.name || '').toLowerCase().includes(term) || (c.birthYear || '').toString().includes(term) || (c.creatorEmail || '').toLowerCase().includes(term);
         const genderMatch = filterGender === 'all' || c.gender === filterGender;
         const starMatch = !filterStar || (c.majorStars || '').includes(filterStar);
         
-        // 2. 擁有者篩選 (邏輯核心)
-        let isOwnerMatch = true;
-        
-        // [修正] 直接比對 Email 字串，不依賴 userProfile 或其他變數，確保判斷最直接
-        const isSpecificSuperUser = (currentUserEmail || '').trim().toLowerCase() === SUPER_ADMIN_EMAIL;
-
-        if (isSpecificSuperUser) {
-            // 是指定的超級管理員
-            if (showOnlyMine) {
-                // 開關 ON -> 只看我的 (過濾非本人的資料)
-                if (currentUserId && c.user_id !== currentUserId) {
-                    isOwnerMatch = false;
-                }
-            } else {
-                // 開關 OFF -> 看全部 (所以 isOwnerMatch 保持 true)
-                isOwnerMatch = true;
-            }
-        } else {
-            // 其他所有使用者：強制只能看到自己的 (雙重保險)
-            if (currentUserId && c.user_id !== currentUserId) {
-                isOwnerMatch = false;
-            }
-        }
-        
-        return match && genderMatch && starMatch && isOwnerMatch;
+        // 這裡不需要再過濾 owner，因為 refreshData 已經根據 showOnlyMine 決定了
+        // loadClients 回傳的資料範圍就是正確的
+        return match && genderMatch && starMatch;
       });
-  }, [clients, searchTerm, filterGender, filterStar, showOnlyMine, currentUserEmail, currentUserId]);
+  }, [clients, searchTerm, filterGender, filterStar]);
 
-  // --- 列表分組 ---
+  // --- 列表分組 (產生卡片的關鍵) ---
   const groupedData = useMemo(() => {
       const groups: Record<string, Client[]> = {};
       
@@ -248,9 +235,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
       return { groups, sortedKeys };
   }, [filtered]);
 
-  // UI 顯示判斷 (只針對該 Email 顯示開關)
-  const isTargetSuperUser = (currentUserEmail || '').trim().toLowerCase() === SUPER_ADMIN_EMAIL;
-  
+  const isSuperAdmin = checkIsSuperAdmin(userProfile?.email);
   const quotaDisplay = userProfile ? `[${usedCount}/${userProfile.maxCharts}]` : '';
   const isOverQuota = userProfile && usedCount >= userProfile.maxCharts && userProfile.role !== 'admin';
 
@@ -264,17 +249,11 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
           <div><h1 className="text-xl font-bold text-slate-800 tracking-tight">命盤列表</h1><p className="text-xs text-slate-400 font-medium">總計 {filtered.length} 筆資料</p></div>
         </div>
         <div className="flex gap-4 items-center">
-            {/* 只看我的開關：只有 stephenwu.0926@gmail.com 看得到 */}
-            {isTargetSuperUser && (
+            {isSuperAdmin && (
                 <>
-                <div 
-                    className="hidden sm:flex items-center gap-2 cursor-pointer select-none bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-200 transition-colors" 
-                    onClick={() => setShowOnlyMine(!showOnlyMine)}
-                >
+                <div className="hidden sm:flex items-center gap-2 cursor-pointer select-none bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-200 transition-colors" onClick={() => setShowOnlyMine(!showOnlyMine)}>
                     <span className="text-xs font-bold text-gray-600">只看我的</span>
-                    <div className={`w-9 h-5 rounded-full p-0.5 transition-colors duration-200 ease-in-out ${showOnlyMine ? 'bg-blue-600' : 'bg-gray-400'}`}>
-                        <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-200 ease-in-out ${showOnlyMine ? 'translate-x-4' : 'translate-x-0'}`} />
-                    </div>
+                    <div className={`w-9 h-5 rounded-full p-0.5 transition-colors duration-200 ease-in-out ${showOnlyMine ? 'bg-blue-600' : 'bg-gray-400'}`}><div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-200 ease-in-out ${showOnlyMine ? 'translate-x-4' : 'translate-x-0'}`} /></div>
                 </div>
                 <button onClick={handleDataRepair} className="w-10 h-10 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-xl flex items-center justify-center transition-colors"><Wrench size={20} /></button>
                 </>
@@ -297,7 +276,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                 <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="w-12 h-full bg-white border border-slate-200 hover:bg-slate-50 rounded-xl flex items-center justify-center text-slate-600 shadow-sm"><Menu size={20} /></button>
                 {isMenuOpen && <div className="absolute top-14 right-0 w-52 bg-white rounded-xl shadow-xl border border-gray-100 z-50 p-2">
                     {userProfile?.can_use_divination && <button onClick={() => { setIsDivinationModalOpen(true); setIsMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-purple-50 flex items-center gap-2 text-purple-700 font-bold border-b border-gray-50"><Sparkles size={18} /> 紫微占卜</button>}
-                    {/* 使用者管理選單 */}
+                    {/* 這裡雖然有 UserCog，但它只是選單裡的一個選項，不是主畫面 */}
                     {userProfile?.role === 'admin' && <button onClick={() => { setIsUserMgmtOpen(true); setIsMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-2 text-gray-700 font-medium"><UserCog size={16} /> 使用者管理</button>}
                     <button onClick={() => supabase.auth.signOut()} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 font-bold flex gap-2"><LogOut size={16}/> 登出系統</button>
                 </div>}
