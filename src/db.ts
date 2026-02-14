@@ -200,7 +200,8 @@ export const loadClients = async (loadAllForAdmin = false): Promise<Client[]> =>
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
   
-  const isSuperViewer = user.email === SUPER_VIEW_EMAIL;
+  // [修正] 改用 checkIsSuperAdmin 忽略大小寫差異，解決權限判定問題
+  const isSuperViewer = checkIsSuperAdmin(user.email);
   
   let query = supabase.from('clients').select('*').order('created_at', { ascending: false });
   
@@ -382,6 +383,7 @@ export const claimWelcomeGift = async (): Promise<boolean> => {
     return false;
 };
 
+// [關鍵修正] 在這裡修復了該學員遇到的崩潰問題
 export const consumeDivinationV2 = async (options?: any, guestToken?: string | null): Promise<{ success: boolean; message?: string; newBalance?: number; ok?: boolean; skipped?: boolean }> => {
     const { data: { user } } = await supabase.auth.getUser();
     
@@ -405,7 +407,12 @@ export const consumeDivinationV2 = async (options?: any, guestToken?: string | n
     });
 
     if (error) return { success: false, message: error.message };
-    if (!data.success) return { success: false, message: data.message };
+
+    // [修正] 增加 data 是否存在的判斷，防止 RPC 回傳 null 導致 "null is not an object"
+    // 當 data 為 null 時，視為失敗並顯示預設錯誤訊息
+    if (!data || !data.success) {
+        return { success: false, message: data?.message || '交易失敗，請稍後再試 (System Error)' };
+    }
     
     return { success: true, newBalance: data.new_balance };
 };
