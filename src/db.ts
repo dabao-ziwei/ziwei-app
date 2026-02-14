@@ -84,16 +84,55 @@ export const getMyProfile = async (): Promise<UserProfile | null> => {
 };
 
 export const getAllProfilesWithStats = async (): Promise<UserProfile[]> => {
-  const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
-  if (error) return [];
-  return data.map((p: any) => ({
+  // 1. 先抓取所有使用者資料
+  const { data: profiles, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error || !profiles) return [];
+
+  // 2. 抓取所有命盤的 user_id (只選取未刪除的)
+  // 為了效能，我們只 select user_id 欄位
+  const { data: clients, error: clientError } = await supabase
+    .from('clients')
+    .select('user_id')
+    .eq('is_deleted', false);
+
+  if (clientError) {
+      console.error("Error fetching client stats:", clientError);
+      // 如果抓取失敗，回傳 profiles 但 activeCount 為 0
+      return profiles.map((p: any) => ({
+        id: p.id, email: p.email, role: p.role, maxCharts: p.max_charts,
+        maxEditsPerChart: p.max_edits_per_chart, isBanned: p.is_banned,
+        can_use_divination: p.can_use_divination ?? true,
+        accessExpiry: p.access_expiry,
+        feature_flags: p.feature_flags, 
+        points_balance: p.points_balance || 0,
+        activeCount: 0, 
+        joinDate: p.created_at,
+        has_claimed_welcome_gift: p.has_claimed_welcome_gift
+      }));
+  }
+
+  // 3. 在記憶體中計算每個 user_id 的出現次數
+  const counts: Record<string, number> = {};
+  clients.forEach((c: any) => {
+      const uid = c.user_id;
+      if (uid) {
+          counts[uid] = (counts[uid] || 0) + 1;
+      }
+  });
+
+  // 4. 合併資料並回傳
+  return profiles.map((p: any) => ({
     id: p.id, email: p.email, role: p.role, maxCharts: p.max_charts,
     maxEditsPerChart: p.max_edits_per_chart, isBanned: p.is_banned,
     can_use_divination: p.can_use_divination ?? true,
     accessExpiry: p.access_expiry,
     feature_flags: p.feature_flags, 
     points_balance: p.points_balance || 0,
-    activeCount: 0, 
+    activeCount: counts[p.id] || 0, // 填入實際計算的數量
     joinDate: p.created_at,
     has_claimed_welcome_gift: p.has_claimed_welcome_gift
   }));
