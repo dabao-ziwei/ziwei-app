@@ -24,6 +24,11 @@ export const StorePage: React.FC = () => {
   }, []);
 
   const handlePurchase = async (pkg: PointPack) => {
+    // [修改] 配合綠界審核，暫時僅顯示提示訊息，防止使用者誤拿到點數
+    alert('目前尚未開放點數購買');
+    
+    // --- 原本的模擬購買邏輯暫時註解 (待正式串接金流後再開啟或替換為 ECPay SDK) ---
+    /*
     if (processingId) return;
     setProcessingId(pkg.id);
     
@@ -56,6 +61,7 @@ export const StorePage: React.FC = () => {
     } finally {
         setProcessingId(null);
     }
+    */
   };
 
   return (
@@ -70,7 +76,6 @@ export const StorePage: React.FC = () => {
                 <ShoppingBag className="text-purple-600" /> 點數儲值中心
             </h1>
         </div>
-        {/* ✅ [修改 1] 改為「點數餘額」 */}
         <div className="bg-slate-100 px-3 py-1 rounded-full text-xs font-bold text-slate-600">
             點數餘額: <span className="text-purple-600 text-base ml-1">{userBalance}</span>
         </div>
@@ -118,8 +123,19 @@ export const StorePage: React.FC = () => {
             )}
         </div>
 
-        {/* ✅ [修改 2] 聯絡客服移至底部，字體縮小，樣式簡化 */}
-        <div className="mt-12 mb-6 flex flex-col items-center justify-center gap-1 text-xs text-slate-400">
+        {/* --- [新增] 服務條款與聲明 (金流審核必備) --- */}
+        <div className="mt-8 mb-4 px-4 py-4 bg-slate-100 rounded-xl border border-slate-200 text-slate-500 text-xs leading-relaxed">
+            <h4 className="font-bold text-slate-700 mb-2">購買須知與服務條款</h4>
+            <ul className="list-disc list-inside space-y-1">
+                <li>本點數為虛擬數位商品，依據消保法規定，<span className="font-bold text-red-500">經消費者同意提供之數位內容不適用七日鑑賞期</span>，一經購買入帳後恕不退費。</li>
+                <li>點數僅限於本系統內使用，不得轉讓、轉售或兌換現金。</li>
+                <li>未滿 18 歲之使用者，請由法定代理人陪同閱讀本條款後方得購買。</li>
+                <li>若遇付款失敗或點數未即時入帳，請勿重複付款，並請立即聯繫客服。</li>
+            </ul>
+        </div>
+
+        {/* 客服信箱 */}
+        <div className="mb-6 flex flex-col items-center justify-center gap-1 text-xs text-slate-400">
             <span>若有購買問題，請聯繫客服：<a href="mailto:dabao@dabao.life" className="hover:text-slate-600 underline transition-colors">dabao@dabao.life</a></span>
         </div>
 
