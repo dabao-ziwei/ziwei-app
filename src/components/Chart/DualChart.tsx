@@ -25,6 +25,7 @@ const getSiHuaMap = (ganIndex: number) => {
   } as Record<string, '祿' | '權' | '科' | '忌'>;
 };
 
+// [修正] 補足流年需要的天干地支與虛歲資料
 const getLiuNianList = (engine: ZiWeiEngine, chartData: any, daXianSeq: number) => {
   if (!engine || !chartData || daXianSeq < 0) return [];
   
@@ -37,10 +38,18 @@ const getLiuNianList = (engine: ZiWeiEngine, chartData: any, daXianSeq: number) 
   if (!palace) return [];
   
   const startYear = chartData.lunarYear + palace.ages[0];
+  const startAge = palace.ages[0];
   const list = [];
   for (let i = 0; i < 10; i++) {
     const year = startYear + i;
-    list.push({ year, label: `${year}` });
+    const age = startAge + i;
+    let gan = (year - 4) % 10;
+    if (gan < 0) gan += 10;
+    let zhi = (year - 4) % 12;
+    if (zhi < 0) zhi += 12;
+    const ganZhi = `${GAN[gan]}${ZHI[zhi]}`;
+    
+    list.push({ year, age, ganZhi });
   }
   return list;
 };
@@ -264,6 +273,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       return engineB.getChartData();
   }, [engineB, daSeqB, liuYearB, showXiaoB]);
 
+  // [修正] 在大限清單中加入干支 (ganZhi)
   const daListA = useMemo(() => {
       if (!engineA || !chartA) return [];
       const list = [];
@@ -280,6 +290,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
               startYear: startYear, 
               endYear: endYear, 
               name: `${['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'][i]}限`,
+              ganZhi: `${GAN[p.ganIndex]}${ZHI[p.zhiIndex]}`,
               label: `${p.ages[0]}-${p.ages[1]}`,
               startAge: p.ages[0],
               endAge: p.ages[1]
@@ -304,6 +315,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
               startYear: startYear, 
               endYear: endYear, 
               name: `${['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'][i]}限`,
+              ganZhi: `${GAN[p.ganIndex]}${ZHI[p.zhiIndex]}`,
               label: `${p.ages[0]}-${p.ages[1]}`,
               startAge: p.ages[0],
               endAge: p.ages[1]
@@ -424,7 +436,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       if (isLocked) setLiuDayA(d);
   };
 
-  // 處理跨盤飛化 (點擊非干支區)
   const handlePalaceClick = (side: 'A' | 'B', index: number) => {
       if (activeSide === side && flyingPalace === index) {
           setActiveSide(null);
@@ -435,12 +446,10 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       }
   };
 
-  // 處理自盤飛化 (點擊干支區) - A盤
   const handleTriggerClickA = (index: number) => {
       setSelfFlyingA(prev => prev === index ? null : index);
   };
 
-  // 處理自盤飛化 (點擊干支區) - B盤
   const handleTriggerClickB = (index: number) => {
       setSelfFlyingB(prev => prev === index ? null : index);
   };
@@ -465,7 +474,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       setReverseMapB({});
   };
 
-  // 計算跨盤四化 Map
   const flyMapAtoB = useMemo(() => {
       if (activeSide !== 'A' || flyingPalace === null || !chartA) return undefined;
       const gan = chartA.palaces[flyingPalace].ganIndex;
@@ -478,7 +486,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       return getSiHuaMap(gan);
   }, [activeSide, flyingPalace, chartB]);
 
-  // 計算自盤四化 Map
   const selfFlyMapA = useMemo(() => {
       if (selfFlyingA === null || !chartA) return undefined;
       const gan = chartA.palaces[selfFlyingA].ganIndex;
@@ -491,7 +498,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       return getSiHuaMap(gan);
   }, [selfFlyingB, chartB]);
 
-  // 最終傳給 PalaceGrid 的四化 Lookup (合併判斷)
   const activeLookupA = { ...(flyMapBtoA || {}), ...(selfFlyMapA || {}) };
   const activeLookupB = { ...(flyMapAtoB || {}), ...(selfFlyMapB || {}) };
   
@@ -509,9 +515,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       return { year, daSeq: daSeq >= 0 ? daSeq : -1 };
   }, [daListB]);
 
-  // --------------------------------------------------------
-  // 新增：精準轉換地支時辰的邏輯 (移植自 SingleChart)
-  // --------------------------------------------------------
   let currentHourZhiA = '';
   if (clientA) {
       const zhiIdxA = Math.floor((hourA + 1) / 2) % 12;
@@ -529,7 +532,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
           currentHourZhiB = hourB === 23 ? '晚子' : '早子';
       }
   }
-  // --------------------------------------------------------
 
   if (!clientA || !clientB || !chartA || !chartB) {
       return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin"/></div>;
@@ -542,27 +544,31 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   const getRelativeNamesA = createGetRelativeNames(chartA, daSeqA, daListA, liuYearA, xiaoXianMingIdxA, showXiaoA, timeParamsA.liuMonthIdx, timeParamsA.liuDayIdx);
   const getRelativeNamesB = createGetRelativeNames(chartB, daSeqB, daListB, liuYearB, xiaoXianMingIdxB, showXiaoB, timeParamsB.liuMonthIdx, timeParamsB.liuDayIdx);
 
+  // [修正] UI 佈局調整：加入干支與虛歲，並改為上下兩行排版，加上 no-scrollbar 確保滑動不破版
   const renderControlBar = (
       daList: any[], daSeq: number, setDaSeq: any, setLiuYear: any, targetLiuYearSetter: any, engine: ZiWeiEngine, chart: any, liuYear: number | null, source: 'A' | 'B', realTime: { year: number; daSeq: number } | undefined
   ) => (
       <>
-        <div className="h-12 bg-white border-t border-gray-200 flex overflow-x-auto scrollbar-hide shrink-0">
+        {/* 大限列 */}
+        <div className="h-11 bg-white border-t border-gray-200 flex overflow-x-auto no-scrollbar shrink-0">
             <div className="flex w-full">
                 {daList.map(limit => (
-                    <button key={limit.seq} onClick={() => { setDaSeq(limit.seq); setLiuYear(null); if(isLocked) { targetLiuYearSetter(null); if (source === 'A') { setLiuMonthB(null); setLiuDayB(null); } else { setLiuMonthA(null); setLiuDayA(null); } } }} className={`px-1 py-1 text-[10px] border-r border-gray-100 whitespace-nowrap flex-1 min-w-[50px] flex flex-col items-center justify-center relative ${daSeq === limit.seq ? 'bg-gray-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
-                        {realTime && realTime.daSeq === limit.seq && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
-                        <span>{limit.name}</span>
-                        <span className="text-[9px] opacity-80 scale-90">{limit.label}</span>
+                    <button key={limit.seq} onClick={() => { setDaSeq(limit.seq); setLiuYear(null); if(isLocked) { targetLiuYearSetter(null); if (source === 'A') { setLiuMonthB(null); setLiuDayB(null); } else { setLiuMonthA(null); setLiuDayA(null); } } }} className={`px-1 py-1 text-[12px] border-r border-gray-100 whitespace-nowrap flex-1 min-w-[70px] flex flex-col items-center justify-center relative ${daSeq === limit.seq ? 'bg-gray-700 text-white font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}>
+                        {realTime && realTime.daSeq === limit.seq && <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
+                        <span>{limit.name} {limit.ganZhi}</span>
                     </button>
                 ))}
             </div>
         </div>
+
+        {/* 流年列 */}
         {daSeq >= 0 && (
-            <div className="h-9 bg-blue-50 border-t border-blue-100 flex overflow-x-auto scrollbar-hide shrink-0">
+            <div className="h-[52px] bg-blue-50 border-t border-blue-100 flex overflow-x-auto no-scrollbar shrink-0">
                 {getLiuNianList(engine, chart, daSeq).map(item => (
-                    <button key={item.year} onClick={() => { const newYear = liuYear === item.year ? null : item.year; setLiuYear(newYear); syncTime(source, newYear); }} className={`px-1 text-[11px] font-medium border-r border-blue-200 whitespace-nowrap flex-1 min-w-[40px] relative ${liuYear === item.year ? 'bg-blue-600 text-white' : 'text-blue-600 hover:bg-blue-100'}`}>
-                        {realTime && realTime.year === item.year && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
-                        {item.label}
+                    <button key={item.year} onClick={() => { const newYear = liuYear === item.year ? null : item.year; setLiuYear(newYear); syncTime(source, newYear); }} className={`px-1 py-1 border-r border-blue-200 whitespace-nowrap flex-1 min-w-[55px] flex flex-col items-center justify-center relative ${liuYear === item.year ? 'bg-blue-600 text-white' : 'text-blue-600 hover:bg-blue-100'}`}>
+                        {realTime && realTime.year === item.year && <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
+                        <span className="text-[11px] font-bold leading-tight mt-0.5">{item.year}</span>
+                        <span className="text-[10px] leading-tight transform scale-90 origin-top opacity-90">{item.ganZhi} {item.age}</span>
                     </button>
                 ))}
             </div>
