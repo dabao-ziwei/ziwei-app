@@ -1,3 +1,4 @@
+// FILE: src/components/CenterInfoBoard.tsx
 import React, { useState, useMemo } from 'react';
 import {
   Users,
@@ -75,7 +76,7 @@ interface CenterInfoBoardProps {
     xiao: PermissionState;
     liu_month: PermissionState;
     liu_day: PermissionState;
-    dual_chart?: PermissionState; // ✅ 補齊：關聯圖小卡「和他合盤」會用到
+    dual_chart?: PermissionState;
   };
 
   liuMonth?: number | null;
@@ -370,6 +371,14 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     setIsDayPickerOpen(false);
   };
 
+  // --- 計算陰陽男女 ---
+  let yinYangGender = client.gender;
+  if (chartData && chartData.bazi) {
+      const yearGan = chartData.bazi.charAt(0); // 取得年干
+      const isYang = ['甲', '丙', '戊', '庚', '壬'].includes(yearGan);
+      yinYangGender = `${isYang ? '陽' : '陰'}${client.gender}`;
+  }
+
   return (
     <div className="col-span-2 row-span-2 flex z-10 relative overflow-visible p-0.5 h-full w-full" onClick={closePickers}>
       <div className={`flex w-full h-full bg-white`}>
@@ -439,7 +448,7 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
             {chartData && (
               <div className="text-[10px] text-gray-500 font-medium mt-1 space-y-0.5">
                 <div>
-                  {client.gender} | {chartData.bureau}
+                  {yinYangGender} | {chartData.bureau}
                 </div>
                 <div className="font-mono">
                   命主：{chartData.mingZhu}　身主：{chartData.shenZhu}
