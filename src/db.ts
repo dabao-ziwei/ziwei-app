@@ -1,3 +1,4 @@
+// FILE: src/db.ts
 import { supabase } from './supabase'; 
 export { supabase };
 
@@ -47,6 +48,7 @@ export interface Client {
   editCount?: number;
   creatorEmail?: string;
   is_deleted?: boolean;
+  is_favorite?: boolean; // [新增] 最愛標記
 }
 
 export interface Relationship {
@@ -84,7 +86,6 @@ export const getMyProfile = async (): Promise<UserProfile | null> => {
 };
 
 export const getAllProfilesWithStats = async (): Promise<UserProfile[]> => {
-  // 1. 先抓取所有使用者資料
   const { data: profiles, error } = await supabase
     .from('profiles')
     .select('*')
@@ -92,8 +93,6 @@ export const getAllProfilesWithStats = async (): Promise<UserProfile[]> => {
 
   if (error || !profiles) return [];
 
-  // 2. 抓取所有命盤的 user_id (只選取未刪除的)
-  // 為了效能，我們只 select user_id 欄位
   const { data: clients, error: clientError } = await supabase
     .from('clients')
     .select('user_id')
@@ -101,7 +100,6 @@ export const getAllProfilesWithStats = async (): Promise<UserProfile[]> => {
 
   if (clientError) {
       console.error("Error fetching client stats:", clientError);
-      // 如果抓取失敗，回傳 profiles 但 activeCount 為 0
       return profiles.map((p: any) => ({
         id: p.id, email: p.email, role: p.role, maxCharts: p.max_charts,
         maxEditsPerChart: p.max_edits_per_chart, isBanned: p.is_banned,
@@ -115,7 +113,6 @@ export const getAllProfilesWithStats = async (): Promise<UserProfile[]> => {
       }));
   }
 
-  // 3. 在記憶體中計算每個 user_id 的出現次數
   const counts: Record<string, number> = {};
   clients.forEach((c: any) => {
       const uid = c.user_id;
@@ -124,7 +121,6 @@ export const getAllProfilesWithStats = async (): Promise<UserProfile[]> => {
       }
   });
 
-  // 4. 合併資料並回傳
   return profiles.map((p: any) => ({
     id: p.id, email: p.email, role: p.role, maxCharts: p.max_charts,
     maxEditsPerChart: p.max_edits_per_chart, isBanned: p.is_banned,
@@ -132,7 +128,7 @@ export const getAllProfilesWithStats = async (): Promise<UserProfile[]> => {
     accessExpiry: p.access_expiry,
     feature_flags: p.feature_flags, 
     points_balance: p.points_balance || 0,
-    activeCount: counts[p.id] || 0, // 填入實際計算的數量
+    activeCount: counts[p.id] || 0, 
     joinDate: p.created_at,
     has_claimed_welcome_gift: p.has_claimed_welcome_gift
   }));
@@ -187,11 +183,9 @@ export const getPaywallPhase = async (): Promise<string> => {
   return data;
 };
 
-// ✅ 這個函式必須被匯出，usePaywall 才能讀取
 export const getFeatureRuntime = async (featureKey: string): Promise<FeatureConfig | null> => {
     const { data } = await supabase.from('feature_configs').select('*').eq('feature_key', featureKey).maybeSingle();
     if (data) return data as FeatureConfig;
-    // 如果找不到設定，回傳預設值
     return { 
         feature_key: featureKey, 
         name: '未知功能', 
@@ -232,14 +226,14 @@ const mapClientToEntity = (data: any): Client => ({
     birthHour: data.birth_hour ?? data.birthHour,
     birthMinute: data.birth_minute ?? data.birthMinute,
     type: data.type,
-    majorStars: data.major_stars
+    majorStars: data.major_stars,
+    is_favorite: data.is_favorite ?? false // [新增]
 });
 
 export const loadClients = async (loadAllForAdmin = false): Promise<Client[]> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
   
-  // [修正] 改用 checkIsSuperAdmin 忽略大小寫差異，解決權限判定問題
   const isSuperViewer = checkIsSuperAdmin(user.email);
   
   let query = supabase.from('clients').select('*').order('created_at', { ascending: false });
@@ -282,6 +276,7 @@ export const saveClient = async (clientData: any): Promise<string | null> => {
         if (clientData.birthMinute !== undefined) dbPayload.birth_minute = clientData.birthMinute;
         if (clientData.type) dbPayload.type = clientData.type;
         if (clientData.majorStars) dbPayload.major_stars = clientData.majorStars;
+        if (clientData.is_favorite !== undefined) dbPayload.is_favorite = clientData.is_favorite; // [新增]
         const { error } = await supabase.from('clients').update(dbPayload).eq('id', clientData.id);
         return !error ? clientData.id : null;
     } else {
@@ -297,7 +292,8 @@ export const saveClient = async (clientData: any): Promise<string | null> => {
             birth_hour: clientData.birthHour,
             birth_minute: clientData.birthMinute,
             type: clientData.type,
-            major_stars: clientData.majorStars
+            major_stars: clientData.majorStars,
+            is_favorite: clientData.is_favorite ?? false // [新增]
         };
         const { data, error } = await supabase.from('clients').insert(dbPayload).select().single();
         if (error) throw error;
@@ -307,6 +303,12 @@ export const saveClient = async (clientData: any): Promise<string | null> => {
 
 export const deleteClient = async (id: string): Promise<boolean> => {
     const { error } = await supabase.from('clients').update({ is_deleted: true }).eq('id', id);
+    return !error;
+};
+
+// [新增] 切換最愛狀態
+export const toggleFavorite = async (id: string, is_favorite: boolean): Promise<boolean> => {
+    const { error } = await supabase.from('clients').update({ is_favorite }).eq('id', id);
     return !error;
 };
 
@@ -422,7 +424,6 @@ export const claimWelcomeGift = async (): Promise<boolean> => {
     return false;
 };
 
-// [關鍵修正] 在這裡修復了該學員遇到的崩潰問題
 export const consumeDivinationV2 = async (options?: any, guestToken?: string | null): Promise<{ success: boolean; message?: string; newBalance?: number; ok?: boolean; skipped?: boolean }> => {
     const { data: { user } } = await supabase.auth.getUser();
     
@@ -447,8 +448,6 @@ export const consumeDivinationV2 = async (options?: any, guestToken?: string | n
 
     if (error) return { success: false, message: error.message };
 
-    // [修正] 增加 data 是否存在的判斷，防止 RPC 回傳 null 導致 "null is not an object"
-    // 當 data 為 null 時，視為失敗並顯示預設錯誤訊息
     if (!data || !data.success) {
         return { success: false, message: data?.message || '交易失敗，請稍後再試 (System Error)' };
     }

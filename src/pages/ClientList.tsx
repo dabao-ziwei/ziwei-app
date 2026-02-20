@@ -1,7 +1,7 @@
+// FILE: src/pages/ClientList.tsx
 import React, { useEffect, useState, useMemo } from 'react';
-import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, UserCog, LogOut, User, Sparkles, Network, ArrowLeft, Wrench, X, Filter } from 'lucide-react';
-// ✅ [關鍵] 引入正確的資料庫函式
-import { loadClients, deleteClient, getMyProfile, getUsedChartCount, checkIsSuperAdmin, type Client, type UserProfile } from '../db';
+import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, UserCog, LogOut, User, Sparkles, Network, ArrowLeft, Wrench, X, Filter, Star } from 'lucide-react';
+import { loadClients, deleteClient, getMyProfile, getUsedChartCount, checkIsSuperAdmin, toggleFavorite, type Client, type UserProfile } from '../db';
 import { supabase } from '../supabase';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { ZHI } from '../logic/constants';
@@ -32,16 +32,18 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const initialQ = searchParams.get('q') || '';
   const initialG = (searchParams.get('g') as 'all' | '男' | '女') || 'all';
   const initialStar = searchParams.get('star') || null;
+  const initialFav = searchParams.get('fav') === '1'; // [新增] 最愛過濾狀態
 
   const [inputValue, setInputValue] = useState(initialQ); 
   const [searchTerm, setSearchTerm] = useState(initialQ); 
   
   const [filterGender, setFilterGender] = useState<'all'|'男'|'女'>(initialG);
   const [filterStar, setFilterStar] = useState<string | null>(initialStar);
+  const [filterFavorite, setFilterFavorite] = useState<boolean>(initialFav); // [新增]
 
   // --- 2. 資料狀態 (Client 陣列) ---
   const [clients, setClients] = useState<Client[]>([]); 
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null); // [新增] 用於前端過濾
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null); 
   
   // 展開/收合 分類
   const [expandedCats, setExpandedCats] = useState<string[]>(() => {
@@ -71,12 +73,11 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const [isDivinationModalOpen, setIsDivinationModalOpen] = useState(false);
   const [relationClient, setRelationClient] = useState<Client | null>(null);
 
-  // ✅ [已修復] 這裡補上了 toggleCat 函式
   const toggleCat = (cat: string) => {
     setExpandedCats(prev => 
       prev.includes(cat) 
-        ? prev.filter(c => c !== cat) // 若已展開則收合
-        : [...prev, cat]              // 若已收合則展開
+        ? prev.filter(c => c !== cat) 
+        : [...prev, cat]              
     );
   };
 
@@ -86,8 +87,9 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
       if (searchTerm) newParams.set('q', searchTerm);
       if (filterGender !== 'all') newParams.set('g', filterGender);
       if (filterStar) newParams.set('star', filterStar);
+      if (filterFavorite) newParams.set('fav', '1'); // [新增]
       if (searchParams.toString() !== newParams.toString()) setSearchParams(newParams, { replace: true });
-  }, [searchTerm, filterGender, filterStar, searchParams, setSearchParams]);
+  }, [searchTerm, filterGender, filterStar, filterFavorite, searchParams, setSearchParams]);
 
   useEffect(() => { localStorage.setItem(STORAGE_KEY_CATS, JSON.stringify(expandedCats)); }, [expandedCats]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_FILTER, JSON.stringify(showOnlyMine)); }, [showOnlyMine]);
@@ -105,19 +107,10 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         const profile = await getMyProfile();
         setUserProfile(profile);
 
-        // 判斷是否為 Admin
         const isSuper = checkIsSuperAdmin(profile?.email);
-        
-        // [關鍵修正] 
-        // 只有當「是超級管理員」且「showOnlyMine 為 false (關閉)」時，
-        // 才傳入 true 給 loadClients 以載入全部資料。
-        // 否則 loadClients(false) 只會載入當前使用者的資料。
         const shouldLoadAll = isSuper && !showOnlyMine;
         
-        // 呼叫 db.ts 的 loadClients (傳入正確的布林值)
         const data = await loadClients(shouldLoadAll); 
-        
-        // 確保 data 是陣列
         const loadedClients = Array.isArray(data) ? data : [];
         
         setClients(loadedClients);
@@ -134,7 +127,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     }
   };
 
-  // 當 showOnlyMine 切換時，重新執行 refreshData
   useEffect(() => {
     refreshData();
     const channel = supabase.channel('client_list_changes')
@@ -143,7 +135,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     return () => { supabase.removeChannel(channel); };
   }, [showOnlyMine]); 
 
-  // 接收從 Dashboard 傳來的快速占卜指令
   useEffect(() => {
       if (location.state && (location.state as any).openDivination) {
           setIsDivinationModalOpen(true);
@@ -197,22 +188,40 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     if (confirm('確定要刪除此命盤嗎？')) { await deleteClient(id); refreshData(); }
   };
 
+  // [新增] 處理最愛切換
+  const handleToggleFav = async (e: React.MouseEvent, id: string, currentFav: boolean) => {
+      e.stopPropagation();
+      const newFav = !currentFav;
+      
+      // 樂觀更新 (Optimistic UI)
+      setClients(prev => prev.map(c => c.id === id ? { ...c, is_favorite: newFav } : c));
+      
+      try {
+          const success = await toggleFavorite(id, newFav);
+          if (!success) {
+              // 若失敗則還原
+              setClients(prev => prev.map(c => c.id === id ? { ...c, is_favorite: currentFav } : c));
+              alert('設定最愛失敗，請檢查網路連線');
+          }
+      } catch (err) {
+          setClients(prev => prev.map(c => c.id === id ? { ...c, is_favorite: currentFav } : c));
+      }
+  };
+
   // --- 列表過濾 ---
   const filtered = useMemo(() => {
       return clients.filter(c => {
         const term = searchTerm.toLowerCase();
-        // 搜尋的是「姓名」或「建立者 Email」，不是 User Email
         const match = !term || (c.name || '').toLowerCase().includes(term) || (c.birthYear || '').toString().includes(term) || (c.creatorEmail || '').toLowerCase().includes(term);
         const genderMatch = filterGender === 'all' || c.gender === filterGender;
         const starMatch = !filterStar || (c.majorStars || '').includes(filterStar);
+        const favMatch = !filterFavorite || c.is_favorite === true; // [新增]
         
-        // 這裡不需要再過濾 owner，因為 refreshData 已經根據 showOnlyMine 決定了
-        // loadClients 回傳的資料範圍就是正確的
-        return match && genderMatch && starMatch;
+        return match && genderMatch && starMatch && favMatch;
       });
-  }, [clients, searchTerm, filterGender, filterStar]);
+  }, [clients, searchTerm, filterGender, filterStar, filterFavorite]);
 
-  // --- 列表分組 (產生卡片的關鍵) ---
+  // --- 列表分組 ---
   const groupedData = useMemo(() => {
       const groups: Record<string, Client[]> = {};
       
@@ -276,7 +285,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                 <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="w-12 h-full bg-white border border-slate-200 hover:bg-slate-50 rounded-xl flex items-center justify-center text-slate-600 shadow-sm"><Menu size={20} /></button>
                 {isMenuOpen && <div className="absolute top-14 right-0 w-52 bg-white rounded-xl shadow-xl border border-gray-100 z-50 p-2">
                     {userProfile?.can_use_divination && <button onClick={() => { setIsDivinationModalOpen(true); setIsMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-purple-50 flex items-center gap-2 text-purple-700 font-bold border-b border-gray-50"><Sparkles size={18} /> 紫微占卜</button>}
-                    {/* 這裡雖然有 UserCog，但它只是選單裡的一個選項，不是主畫面 */}
                     {userProfile?.role === 'admin' && <button onClick={() => { setIsUserMgmtOpen(true); setIsMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-2 text-gray-700 font-medium"><UserCog size={16} /> 使用者管理</button>}
                     <button onClick={() => supabase.auth.signOut()} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 font-bold flex gap-2"><LogOut size={16}/> 登出系統</button>
                 </div>}
@@ -284,10 +292,13 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
               </div>
         </div>
         <div className="flex gap-2 items-center">
+             {/* [新增] 最愛與性別過濾 */}
              <div className="bg-slate-100 p-1 rounded-lg flex items-center shrink-0">
-                  <button onClick={() => setFilterGender('all')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${filterGender === 'all' ? 'bg-white shadow' : 'text-slate-400'}`}>全部</button>
-                  <button onClick={() => setFilterGender('女')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1 ${filterGender === '女' ? 'bg-pink-500 text-white shadow-sm' : 'text-slate-400 hover:text-pink-500'}`}>女</button>
-                  <button onClick={() => setFilterGender('男')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1 ${filterGender === '男' ? 'bg-blue-500 text-white shadow-sm' : 'text-slate-400 hover:text-blue-500'}`}>男</button>
+                  <button onClick={() => setFilterFavorite(!filterFavorite)} className={`px-3 sm:px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1 sm:mr-1 ${filterFavorite ? 'bg-yellow-50 text-yellow-600 shadow-sm border border-yellow-200' : 'text-slate-400 hover:text-yellow-500'}`} title="只顯示最愛"><Star size={14} className={filterFavorite ? "fill-current" : ""} /> <span className="hidden sm:inline">最愛</span></button>
+                  <div className="hidden sm:block w-px h-4 bg-slate-200 mx-1"></div>
+                  <button onClick={() => setFilterGender('all')} className={`px-3 sm:px-4 py-1.5 rounded-md text-xs font-bold transition-all ${filterGender === 'all' ? 'bg-white shadow' : 'text-slate-400'}`}>全部</button>
+                  <button onClick={() => setFilterGender('女')} className={`px-3 sm:px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1 ${filterGender === '女' ? 'bg-pink-500 text-white shadow-sm' : 'text-slate-400 hover:text-pink-500'}`}>女</button>
+                  <button onClick={() => setFilterGender('男')} className={`px-3 sm:px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1 ${filterGender === '男' ? 'bg-blue-500 text-white shadow-sm' : 'text-slate-400 hover:text-blue-500'}`}>男</button>
              </div>
              <div className="flex-1 overflow-x-auto no-scrollbar flex items-center gap-2">
                 {filterStar && <button onClick={() => setFilterStar(null)} className="shrink-0 p-1.5 rounded-full bg-slate-200"><X size={14} /></button>}
@@ -304,20 +315,17 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
             const isDiv = cat === '紫占';
             return (
               <div key={cat} className={`bg-white rounded-2xl border ${isDiv?'border-purple-200':'border-slate-100'} shadow-sm overflow-hidden transition-all duration-300`}>
-                {/* 這是卡片分組標題 */}
                 <button onClick={() => toggleCat(cat)} className={`w-full flex justify-between items-center p-4 transition-colors ${isDiv?'bg-purple-50 hover:bg-purple-100/80':'bg-slate-50 hover:bg-slate-100/80'}`}>
                   <div className="flex items-center gap-3"><span className={`font-bold text-base ${isDiv?'text-purple-800':'text-slate-700'}`}>{cat}</span><span className={`text-xs font-bold px-2 py-0.5 rounded-full ${items.length > 0 ? (isDiv?'bg-purple-200 text-purple-700':'bg-blue-100 text-blue-600') : 'bg-slate-200 text-slate-500'}`}>{items.length}</span></div>
                   <div className="text-slate-400">{isOpen ? <ChevronDown size={20}/> : <ChevronRight size={20}/>}</div>
                 </button>
                 
-                {/* 這是展開後的卡片清單 */}
                 {isOpen && <div className="divide-y divide-slate-50">{items.map(c => {
-                    const isMine = c.user_id === currentUserId; // 修正：判斷此命盤是否屬於當前登入者
+                    const isMine = c.user_id === currentUserId; 
                     const isZ = c.type === '紫占';
                     return (
                         <div key={c.id} onClick={() => navigate(isZ ? `/divination/${c.id}` : `/chart/${c.id}`)} className={`group relative p-3 sm:p-4 cursor-pointer transition-colors flex items-center justify-between gap-3 ${isZ?'hover:bg-purple-50/50':'hover:bg-blue-50/50'}`}>
                             <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0 overflow-hidden">
-                                {/* 圓形性別圖示 */}
                                 <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-sm shrink-0 ${isZ?'bg-gradient-to-br from-purple-500 to-indigo-600':(c.gender==='男'?'bg-gradient-to-br from-blue-400 to-blue-600':'bg-gradient-to-br from-pink-400 to-pink-600')}`}>{isZ?<Sparkles size={16}/>:c.gender}</div>
                                 <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 flex-1 min-w-0">
                                     <div className="flex items-center gap-2"><span className="font-bold text-base sm:text-lg text-slate-700 truncate max-w-[120px] sm:max-w-none">{c.name}</span>{c.majorStars && (<span className="text-[10px] sm:text-[11px] font-medium text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 whitespace-nowrap">{c.majorStars}</span>)}</div>
@@ -325,9 +333,12 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                                 </div>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
-                                {/* 如果不是我建立的，顯示建立者 Email */}
                                 {!isMine && c.creatorEmail && (<div className="hidden sm:flex items-center gap-1 text-[10px] text-gray-400 bg-gray-50 px-2 py-1 rounded border border-gray-100 select-none mr-1"><User size={10} /><span>建立者:</span><span className="max-w-[120px] truncate" title={c.creatorEmail}>{c.creatorEmail}</span></div>)}
                                 <div className="flex gap-1">
+                                    {/* [新增] 星星收藏按鈕 */}
+                                    <button onClick={(e) => handleToggleFav(e, c.id, !!c.is_favorite)} className={`p-2 rounded-full transition-colors ${c.is_favorite ? 'text-yellow-500 hover:bg-yellow-50 hover:text-yellow-600' : 'text-slate-300 hover:text-yellow-500 hover:bg-yellow-50'}`} title={c.is_favorite ? "移除最愛" : "加入最愛"}>
+                                        <Star size={18} className={c.is_favorite ? "fill-current" : ""} />
+                                    </button>
                                     {!isZ && isMine && <button onClick={(e)=>{e.stopPropagation();setRelationClient(c)}} className="p-2 rounded-full text-slate-400 hover:text-green-600 hover:bg-green-100 transition-colors" title="設定人際關係"><Network size={18}/></button>}
                                     {!isZ && <button onClick={(e)=>{e.stopPropagation();if(isMine)onEdit(c)}} className={`p-2 rounded-full transition-colors ${isMine&&(!userProfile||userProfile.role==='admin'||c.editCount<userProfile.maxEditsPerChart)?'text-slate-400 hover:text-blue-600 hover:bg-blue-100':'text-gray-200 cursor-not-allowed'}`} disabled={!isMine||(userProfile?.role!=='admin'&&c.editCount>=userProfile?.maxEditsPerChart)}><Edit2 size={18}/></button>}
                                     <button onClick={(e)=>{if(isMine)handleDelete(e,c.id);else e.stopPropagation()}} className={`p-2 rounded-full transition-colors ${isMine?'text-slate-400 hover:text-red-600 hover:bg-red-100':'text-gray-200 cursor-not-allowed'}`} title="刪除" disabled={!isMine}><Trash2 size={18}/></button>
@@ -342,7 +353,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         <div className="h-10"></div>
       </div>
       
-      {/* 傳入 isOpen 屬性來正確控制 Modal 顯示 */}
       <UserManagementModal isOpen={isUserMgmtOpen} onClose={() => setIsUserMgmtOpen(false)} />
       <DivinationSetupModal isOpen={isDivinationModalOpen} onClose={() => setIsDivinationModalOpen(false)} onConfirm={handleCreateDivination} />
       {relationClient && <RelationshipModal isOpen={!!relationClient} onClose={() => setRelationClient(null)} currentClient={relationClient} />}
