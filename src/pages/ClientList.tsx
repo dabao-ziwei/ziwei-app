@@ -1,6 +1,6 @@
 // FILE: src/pages/ClientList.tsx
 import React, { useEffect, useState, useMemo } from 'react';
-import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, UserCog, LogOut, User, Sparkles, Network, ArrowLeft, Wrench, X, Filter, Star } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, UserCog, LogOut, User, Sparkles, Network, ArrowLeft, Wrench, X, Star } from 'lucide-react';
 import { loadClients, deleteClient, getMyProfile, getUsedChartCount, checkIsSuperAdmin, toggleFavorite, type Client, type UserProfile } from '../db';
 import { supabase } from '../supabase';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
@@ -13,7 +13,6 @@ import { ZiWeiEngine } from '../logic/engine';
 
 const CATEGORIES = ["我", "家人", "朋友", "客戶", "名人", "其他", "紫占"];
 const MAJOR_STARS = ['紫微', '天機', '太陽', '武曲', '天同', '廉貞', '天府', '太陰', '貪狼', '巨門', '天相', '天梁', '七殺', '破軍'];
-const SUPER_ADMIN_EMAIL = 'stephenwu.0926@gmail.com';
 
 const STORAGE_KEY_CATS = 'ziwei_expanded_cats';
 const STORAGE_KEY_FILTER = 'ziwei_filter_only_mine';
@@ -29,17 +28,17 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // --- 1. 狀態管理 ---
-  const initialQ = searchParams.get('q') || '';
+  // 文字搜尋完全脫離 URL 同步，保持最純粹的本地狀態，確保輸入法與游標絕對穩定
+  const [inputValue, setInputValue] = useState(''); 
+  
+  // 過濾按鈕的狀態 (保留 URL 同步功能，因為點擊按鈕不會有游標問題)
   const initialG = (searchParams.get('g') as 'all' | '男' | '女') || 'all';
   const initialStar = searchParams.get('star') || null;
-  const initialFav = searchParams.get('fav') === '1'; // [新增] 最愛過濾狀態
+  const initialFav = searchParams.get('fav') === '1';
 
-  const [inputValue, setInputValue] = useState(initialQ); 
-  const [searchTerm, setSearchTerm] = useState(initialQ); 
-  
   const [filterGender, setFilterGender] = useState<'all'|'男'|'女'>(initialG);
   const [filterStar, setFilterStar] = useState<string | null>(initialStar);
-  const [filterFavorite, setFilterFavorite] = useState<boolean>(initialFav); // [新增]
+  const [filterFavorite, setFilterFavorite] = useState<boolean>(initialFav);
 
   // --- 2. 資料狀態 (Client 陣列) ---
   const [clients, setClients] = useState<Client[]>([]); 
@@ -81,21 +80,22 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     );
   };
 
-  // --- Effects ---
+  // --- Effects: URL 參數同步 (僅限按鈕過濾器) ---
   useEffect(() => {
       const newParams = new URLSearchParams();
-      if (searchTerm) newParams.set('q', searchTerm);
       if (filterGender !== 'all') newParams.set('g', filterGender);
       if (filterStar) newParams.set('star', filterStar);
-      if (filterFavorite) newParams.set('fav', '1'); // [新增]
-      if (searchParams.toString() !== newParams.toString()) setSearchParams(newParams, { replace: true });
-  }, [searchTerm, filterGender, filterStar, filterFavorite, searchParams, setSearchParams]);
+      if (filterFavorite) newParams.set('fav', '1'); 
+      
+      // 避免不必要的重繪
+      if (searchParams.toString() !== newParams.toString()) {
+          setSearchParams(newParams, { replace: true });
+      }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterGender, filterStar, filterFavorite]); 
 
   useEffect(() => { localStorage.setItem(STORAGE_KEY_CATS, JSON.stringify(expandedCats)); }, [expandedCats]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_FILTER, JSON.stringify(showOnlyMine)); }, [showOnlyMine]);
-
-  const handleSearchTrigger = () => setSearchTerm(inputValue);
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') handleSearchTrigger(); };
 
   // --- 核心資料載入 ---
   const refreshData = async () => {
@@ -133,6 +133,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => refreshData())
         .subscribe();
     return () => { supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showOnlyMine]); 
 
   useEffect(() => {
@@ -188,18 +189,15 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     if (confirm('確定要刪除此命盤嗎？')) { await deleteClient(id); refreshData(); }
   };
 
-  // [新增] 處理最愛切換
   const handleToggleFav = async (e: React.MouseEvent, id: string, currentFav: boolean) => {
       e.stopPropagation();
       const newFav = !currentFav;
       
-      // 樂觀更新 (Optimistic UI)
       setClients(prev => prev.map(c => c.id === id ? { ...c, is_favorite: newFav } : c));
       
       try {
           const success = await toggleFavorite(id, newFav);
           if (!success) {
-              // 若失敗則還原
               setClients(prev => prev.map(c => c.id === id ? { ...c, is_favorite: currentFav } : c));
               alert('設定最愛失敗，請檢查網路連線');
           }
@@ -208,18 +206,18 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
       }
   };
 
-  // --- 列表過濾 ---
+  // --- 列表過濾 (最乾淨的本地即時過濾，無延遲無閃爍) ---
   const filtered = useMemo(() => {
       return clients.filter(c => {
-        const term = searchTerm.toLowerCase();
+        const term = inputValue.toLowerCase();
         const match = !term || (c.name || '').toLowerCase().includes(term) || (c.birthYear || '').toString().includes(term) || (c.creatorEmail || '').toLowerCase().includes(term);
         const genderMatch = filterGender === 'all' || c.gender === filterGender;
         const starMatch = !filterStar || (c.majorStars || '').includes(filterStar);
-        const favMatch = !filterFavorite || c.is_favorite === true; // [新增]
+        const favMatch = !filterFavorite || c.is_favorite === true; 
         
         return match && genderMatch && starMatch && favMatch;
       });
-  }, [clients, searchTerm, filterGender, filterStar, filterFavorite]);
+  }, [clients, inputValue, filterGender, filterStar, filterFavorite]);
 
   // --- 列表分組 ---
   const groupedData = useMemo(() => {
@@ -278,8 +276,17 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
       <div className="p-4 bg-white/50 backdrop-blur-sm border-b border-slate-100 shrink-0 sticky top-0 z-10 flex flex-col gap-3">
         <div className="flex gap-2">
             <div className="relative flex-1">
-                <button className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full hover:bg-slate-100 text-slate-400 hover:text-blue-500 transition-colors" onClick={handleSearchTrigger}><Search size={18}/></button>
-                <input type="text" placeholder="輸入姓名或年份搜尋..." className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all text-slate-700 shadow-sm" value={inputValue} onChange={e=>setInputValue(e.target.value)} onKeyDown={handleKeyDown} />
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                    <Search size={18}/>
+                </div>
+                {/* 最純粹的輸入框，沒有 onKeyDown 沒有 blur 攔截 */}
+                <input 
+                    type="text" 
+                    placeholder="輸入姓名或年份即時搜尋..." 
+                    className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all text-slate-700 shadow-sm" 
+                    value={inputValue} 
+                    onChange={(e) => setInputValue(e.target.value)} 
+                />
             </div>
              <div className="relative">
                 <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="w-12 h-full bg-white border border-slate-200 hover:bg-slate-50 rounded-xl flex items-center justify-center text-slate-600 shadow-sm"><Menu size={20} /></button>
@@ -292,7 +299,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
               </div>
         </div>
         <div className="flex gap-2 items-center">
-             {/* [新增] 最愛與性別過濾 */}
              <div className="bg-slate-100 p-1 rounded-lg flex items-center shrink-0">
                   <button onClick={() => setFilterFavorite(!filterFavorite)} className={`px-3 sm:px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1 sm:mr-1 ${filterFavorite ? 'bg-yellow-50 text-yellow-600 shadow-sm border border-yellow-200' : 'text-slate-400 hover:text-yellow-500'}`} title="只顯示最愛"><Star size={14} className={filterFavorite ? "fill-current" : ""} /> <span className="hidden sm:inline">最愛</span></button>
                   <div className="hidden sm:block w-px h-4 bg-slate-200 mx-1"></div>
@@ -307,7 +313,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         </div>
       </div>
 
-      {/* 命盤卡片列表渲染 */}
+      {/* 命盤卡片列表渲染 - 移除所有可能導致閃爍的 opacity 變化 */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {loading ? <div className="flex justify-center py-10 text-slate-400 animate-pulse">載入中...</div> : filtered.length === 0 ? <div className="text-center py-20 text-slate-400">查無資料</div> : groupedData.sortedKeys.map(cat => {
             const items = groupedData.groups[cat];
@@ -335,7 +341,6 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                             <div className="flex items-center gap-2 shrink-0">
                                 {!isMine && c.creatorEmail && (<div className="hidden sm:flex items-center gap-1 text-[10px] text-gray-400 bg-gray-50 px-2 py-1 rounded border border-gray-100 select-none mr-1"><User size={10} /><span>建立者:</span><span className="max-w-[120px] truncate" title={c.creatorEmail}>{c.creatorEmail}</span></div>)}
                                 <div className="flex gap-1">
-                                    {/* [新增] 星星收藏按鈕 */}
                                     <button onClick={(e) => handleToggleFav(e, c.id, !!c.is_favorite)} className={`p-2 rounded-full transition-colors ${c.is_favorite ? 'text-yellow-500 hover:bg-yellow-50 hover:text-yellow-600' : 'text-slate-300 hover:text-yellow-500 hover:bg-yellow-50'}`} title={c.is_favorite ? "移除最愛" : "加入最愛"}>
                                         <Star size={18} className={c.is_favorite ? "fill-current" : ""} />
                                     </button>
