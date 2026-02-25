@@ -1,23 +1,20 @@
+// FILE: src/pages/Dashboard.tsx
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
     Sparkles, Menu, LogOut, Loader2, PlusCircle, 
-    FileText, Globe, Sliders, Coins, Gift, ShoppingCart, ArrowRight
+    FileText, Globe, Sliders, Gift, ShoppingCart, ArrowRight
 } from 'lucide-react';
 import { supabase } from '../supabase';
 import { 
     loadClients, saveClient, getMyProfile, checkIsSuperAdmin, 
-    type Client, type UserProfile, consumeDivinationV2, 
-    claimWelcomeGift, getFeatureRuntime
+    type Client, type UserProfile,
+    claimWelcomeGift
 } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
 import { calculateDailyFortune, type DailyFortune } from '../logic/fortune';
 import { FortuneWidget } from '../components/FortuneWidget';
-import { LuckyDivinationModal } from '../components/LuckyDivinationModal';
-import { LuckyDivinationGame } from '../components/LuckyDivinationGame';
 import { getFeaturePermission } from '../logic/permissions';
-import { usePaywall, type PaywallMode } from '../hooks/usePaywall';
-import PaywallModal from '../components/Paywall/PaywallModal';
 
 const OFFICIAL_SITE_URL = 'https://www.dabao.life';
 
@@ -28,10 +25,8 @@ interface WizardProps {
     isTestMode: boolean;
 }
 
-// [修正] 優化後的精靈元件：包含完整的時間輸入與自動跳焦點邏輯
 const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCancelTest, isTestMode }) => {
     const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
-    // 改用 string 方便輸入處理，最後送出再轉 number
     const [formData, setFormData] = useState({ 
         name: '', 
         gender: '' as '男'|'女'|'', 
@@ -39,18 +34,14 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
     });
     const [loadingText, setLoadingText] = useState('正在連結星曜數據...');
 
-    // Refs 用於自動跳焦點
     const yearRef = useRef<HTMLInputElement>(null);
     const monthRef = useRef<HTMLInputElement>(null);
     const dayRef = useRef<HTMLInputElement>(null);
     const hourRef = useRef<HTMLInputElement>(null);
     const minuteRef = useRef<HTMLInputElement>(null);
 
-    // 自動聚焦
     useEffect(() => {
-        if (step === 3) {
-            setTimeout(() => yearRef.current?.focus(), 100);
-        }
+        if (step === 3) setTimeout(() => yearRef.current?.focus(), 100);
     }, [step]);
 
     useEffect(() => {
@@ -60,7 +51,6 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
             
             const finalTimer = setTimeout(async () => {
                 try {
-                    // 轉回數字格式
                     const finalData = {
                         ...formData,
                         year: parseInt(formData.year),
@@ -72,7 +62,6 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
                     await onComplete(finalData);
                 } catch(e) {
                     console.error(e);
-                    // alert('發生錯誤，請檢查資料'); // 避免干擾，通常 onComplete 會處理
                     setStep(3);
                 }
             }, 2500);
@@ -81,27 +70,16 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
         }
     }, [step, formData, onComplete]);
 
-    // 輸入處理：限制長度並自動跳下一格
-    const handleDateInput = (
-        e: React.ChangeEvent<HTMLInputElement>, 
-        field: keyof typeof formData, 
-        maxLen: number, 
-        nextRef?: React.RefObject<HTMLInputElement>
-    ) => {
+    const handleDateInput = (e: React.ChangeEvent<HTMLInputElement>, field: keyof typeof formData, maxLen: number, nextRef?: React.RefObject<HTMLInputElement>) => {
         const val = e.target.value.replace(/\D/g, '').slice(0, maxLen);
         setFormData(prev => ({ ...prev, [field]: val }));
-        
         if (val.length === maxLen && nextRef?.current) {
             nextRef.current.focus();
             nextRef.current.select();
         }
     };
 
-    const handleKeyDown = (
-        e: React.KeyboardEvent<HTMLInputElement>,
-        currentVal: string,
-        prevRef?: React.RefObject<HTMLInputElement>
-    ) => {
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, currentVal: string, prevRef?: React.RefObject<HTMLInputElement>) => {
         if (e.key === 'Backspace' && currentVal === '' && prevRef?.current) {
             e.preventDefault();
             prevRef.current.focus();
@@ -123,7 +101,6 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
         setStep(4); 
     };
     
-    // Step 1: 姓名
     if(step===1) return (
         <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 text-center text-slate-800 animate-in fade-in zoom-in duration-300">
             <h1 className="text-2xl font-bold mb-4 text-slate-900">歡迎來到大寶紫微</h1>
@@ -142,7 +119,6 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
         </div>
     );
     
-    // Step 2: 性別
     if(step===2) return (
         <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 text-center text-slate-800 animate-in slide-in-from-right duration-300">
             <h1 className="text-2xl font-bold mb-8 text-slate-900">您的生理性別是？</h1>
@@ -166,14 +142,12 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
         </div>
     );
     
-    // Step 3: 出生時間 (恢復好用的介面)
     if(step===3) return (
         <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 text-center text-slate-800 animate-in slide-in-from-right duration-300">
             <h1 className="text-2xl font-bold mb-2 text-slate-900">出生時間</h1>
             <p className="text-xs text-slate-400 mb-8">請輸入西元出生年月日時分</p>
             
             <div className="space-y-6 mb-10">
-                {/* 年月日 */}
                 <div className="flex items-center justify-center gap-2">
                     <div className="flex flex-col gap-1 w-24">
                         <input 
@@ -214,7 +188,6 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
                     </div>
                 </div>
 
-                {/* 時分 */}
                 <div className="flex items-center justify-center gap-2">
                     <div className="flex flex-col gap-1 w-20">
                         <input 
@@ -259,7 +232,6 @@ const OnboardingWizard: React.FC<WizardProps> = ({ userProfile, onComplete, onCa
         </div>
     );
     
-    // Step 4: Loading
     return (
         <div className="text-white text-center mt-32 animate-in fade-in duration-700">
             <div className="relative w-24 h-24 mx-auto mb-8">
@@ -282,19 +254,9 @@ export const Dashboard: React.FC = () => {
   
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [forceOnboarding, setForceOnboarding] = useState(false);
-
-  // 權限與 Paywall 相關
-  const [isPaywallOpen, setIsPaywallOpen] = useState(false);
-  const [paywallMode, setPaywallMode] = useState<PaywallMode>('CONFIRM_DEDUCT');
-  const { checkAccess } = usePaywall(userProfile);
-  const canLuckyDivination = useMemo(() => getFeaturePermission(userProfile, 'lucky_divination'), [userProfile]);
-
-  // 新功能狀態
-  const [isGameOpen, setIsGameOpen] = useState(false);
   const [showGiftModal, setShowGiftModal] = useState(false);
-  const [showCostConfirm, setShowCostConfirm] = useState(false);
-  const [divinationCost, setDivinationCost] = useState(50);
-  const [isProcessingDivination, setIsProcessingDivination] = useState(false);
+
+  const canLuckyDivination = useMemo(() => getFeaturePermission(userProfile, 'lucky_divination'), [userProfile]);
 
   const initDashboard = async () => {
     setLoading(true);
@@ -347,56 +309,13 @@ export const Dashboard: React.FC = () => {
           setShowGiftModal(false);
           const updated = await getMyProfile(); 
           setUserProfile(updated);
-          alert('🎉 領取成功！您已獲得 99 點，可立即體驗吉凶占卜。');
+          alert('🎉 領取成功！您已獲得 7 天無限暢測期，可立即體驗吉凶占卜。');
       } else {
           alert('領取失敗，請稍後再試');
       }
   };
 
-  const handleDivinationClick = async () => {
-    if (canLuckyDivination !== 'enabled') return;
-
-    const config = await getFeatureRuntime('lucky_divination');
-    
-    if (config && !config.is_paid) {
-        setIsGameOpen(true);
-        return;
-    }
-    
-    const cost = config?.price || 50;
-    setDivinationCost(cost);
-    setShowCostConfirm(true);
-  };
-
-  const handleConfirmDivination = async () => {
-    setIsProcessingDivination(true);
-    
-    const result = await consumeDivinationV2();
-    
-    setIsProcessingDivination(false);
-    setShowCostConfirm(false);
-
-    if (result.success) {
-        if (result.newBalance !== undefined && userProfile) {
-            setUserProfile({ ...userProfile, points_balance: result.newBalance });
-        }
-        setIsGameOpen(true);
-    } else {
-        if (confirm(`點數不足！此服務需要 ${divinationCost} 點，您的餘額不足。\n\n是否前往商店儲值？`)) {
-            navigate('/store'); 
-        }
-    }
-  };
-
   if (loading) return <div className="flex h-screen items-center justify-center bg-slate-950"><Loader2 className="animate-spin text-slate-500" /></div>;
-
-  if (isGameOpen) {
-      return (
-          <div className="fixed inset-0 z-[100] bg-black">
-              <LuckyDivinationGame onClose={() => setIsGameOpen(false)} />
-          </div>
-      );
-  }
 
   return (
     <div className="h-screen w-full bg-slate-950 flex flex-col font-sans overflow-hidden relative text-white">
@@ -430,31 +349,18 @@ export const Dashboard: React.FC = () => {
                 </div>
                 
                 <h1 className="hidden md:block text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-slate-200 to-slate-400 tracking-widest">大寶 | 紫微斗數</h1>
-            
-                {/* [手機版] 點數顯示 */}
-                <div className="md:hidden flex items-center gap-1.5 bg-slate-800/80 px-3 py-1.5 rounded-full border border-slate-700/50 active:scale-95 transition-transform" onClick={() => navigate('/store')}>
-                    <Coins size={14} className="text-yellow-400" />
-                    <span className="text-sm font-mono font-bold text-yellow-400">
-                        {userProfile?.points_balance || 0} 點數
-                    </span>
-                </div>
             </div>
 
             <div className="flex items-center gap-4">
                 <div className="hidden md:flex items-center gap-3">
-                    {/* [電腦版] 點數顯示 (加字、換 icon) */}
-                    <div className="flex items-center gap-2 px-3 py-2 bg-slate-800/80 rounded-lg border border-slate-700/50 mr-2 cursor-pointer hover:bg-slate-700 transition-colors group" onClick={() => navigate('/store')}>
-                        <Coins size={16} className="text-yellow-400" />
-                        <span className="text-sm font-bold text-yellow-400 font-mono tracking-tight">
-                            {userProfile?.points_balance || 0} 點數
-                        </span>
-                        <div className="w-[1px] h-4 bg-slate-600 mx-1"></div>
-                        <ShoppingCart size={16} className="text-slate-400 group-hover:text-white transition-colors" />
-                    </div>
+                    <button onClick={() => navigate('/store')} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/80 rounded-lg border border-slate-700/50 hover:bg-slate-700 transition-colors group">
+                        <ShoppingCart size={16} className="text-yellow-400 group-hover:text-white transition-colors" />
+                        <span className="text-sm font-bold text-yellow-400 tracking-tight">訂閱方案中心</span>
+                    </button>
 
                     <a href={OFFICIAL_SITE_URL} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-slate-800/50 hover:bg-amber-600/30 text-slate-300 hover:text-amber-300 rounded-lg text-sm font-bold flex items-center gap-2 transition-all border border-slate-700/50 hover:border-amber-500/30"><Globe size={16} /> 大寶官網</a>
                     <button onClick={() => navigate('/list')} className="px-4 py-2 bg-slate-800/50 hover:bg-blue-600/30 text-slate-300 hover:text-blue-300 rounded-lg text-sm font-bold flex items-center gap-2 transition-all border border-slate-700/50 hover:border-blue-500/30"><FileText size={16} /> 命盤列表</button>
-                    <button onClick={handleDivinationClick} disabled={canLuckyDivination === 'disabled'} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all border border-slate-700/50 ${canLuckyDivination === 'enabled' ? 'bg-slate-800/50 hover:bg-purple-600/30 text-slate-300 hover:text-purple-300 hover:border-purple-500/30' : 'bg-slate-900/50 text-slate-600 cursor-not-allowed'}`}><Sparkles size={16} /> 吉凶占卜</button>
+                    <button onClick={() => navigate('/lucky')} disabled={canLuckyDivination === 'disabled'} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all border border-slate-700/50 ${canLuckyDivination === 'enabled' ? 'bg-slate-800/50 hover:bg-purple-600/30 text-slate-300 hover:text-purple-300 hover:border-purple-500/30' : 'bg-slate-900/50 text-slate-600 cursor-not-allowed'}`}><Sparkles size={16} /> 吉凶占卜</button>
                 </div>
             </div>
         </header>
@@ -479,7 +385,7 @@ export const Dashboard: React.FC = () => {
                 <div className="w-12 h-12 rounded-full flex items-center justify-center transition-all mb-[-10px] transform translate-y-[-8px] shadow-lg bg-slate-800/80 border border-slate-700/50 group-hover:bg-amber-900/30 group-hover:border-amber-500/50"><Globe size={22} className="text-slate-300 group-hover:text-amber-400" /></div>
                 <span className="text-[10px] font-bold text-slate-500 group-hover:text-amber-400">大寶官網</span>
             </a>
-            <button onClick={handleDivinationClick} disabled={canLuckyDivination === 'disabled'} className="flex flex-col items-center gap-1 group w-16">
+            <button onClick={() => navigate('/lucky')} disabled={canLuckyDivination === 'disabled'} className="flex flex-col items-center gap-1 group w-16">
                 <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-colors ${canLuckyDivination === 'enabled' ? 'bg-slate-800/50 group-hover:bg-purple-600/20' : 'bg-slate-800/30 cursor-not-allowed'}`}><Sparkles size={20} className={`${canLuckyDivination === 'enabled' ? 'text-purple-400' : 'text-slate-600'}`} /></div>
                 <span className={`text-[10px] font-bold ${canLuckyDivination === 'enabled' ? 'text-slate-500 group-hover:text-purple-400' : 'text-slate-700'}`}>吉凶占卜</span>
             </button>
@@ -498,7 +404,7 @@ export const Dashboard: React.FC = () => {
                     <h3 className="text-2xl font-bold text-white mb-2">會員專屬禮</h3>
                     <p className="text-slate-300 text-sm leading-relaxed mb-6">
                         大寶老師為您準備了一份見面禮！<br/>
-                        領取後您將獲得 <span className="text-yellow-400 font-bold text-lg">99 點數</span>，<br/>
+                        領取後您將獲得 <span className="text-yellow-400 font-bold text-lg">7 天無限暢測期</span>，<br/>
                         可以用來立即體驗吉凶占卜服務。
                     </p>
                     <button 
@@ -510,42 +416,6 @@ export const Dashboard: React.FC = () => {
                 </div>
             </div>
         )}
-
-        {/* 占卜扣點確認 Modal */}
-        {showCostConfirm && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-                <div className="bg-slate-900 border border-slate-700 w-full max-w-xs rounded-2xl shadow-2xl p-6 text-center">
-                    <div className="mb-4 flex justify-center">
-                        <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center">
-                            <Sparkles size={32} className="text-purple-400" />
-                        </div>
-                    </div>
-                    <h3 className="text-xl font-bold text-white mb-2">開始吉凶占卜</h3>
-                    <p className="text-slate-400 text-sm mb-6">
-                        本次占卜將扣除 <span className="text-yellow-400 font-bold text-lg mx-1">{divinationCost}</span> 點數。
-                    </p>
-                    <div className="space-y-3">
-                        <button 
-                            onClick={handleConfirmDivination}
-                            disabled={isProcessingDivination}
-                            className="w-full py-2.5 bg-white text-slate-900 hover:bg-slate-200 rounded-xl font-bold transition-colors"
-                        >
-                            {isProcessingDivination ? '處理中...' : '確認扣點並開始'}
-                        </button>
-                        <button 
-                            onClick={() => setShowCostConfirm(false)}
-                            className="w-full py-2.5 text-slate-500 hover:text-slate-300 font-bold transition-colors"
-                        >
-                            取消
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {/* 保留舊的 Modal 與 Paywall 作為備用 (或給其他功能使用) */}
-        <LuckyDivinationModal isOpen={false} onClose={() => {}} /> 
-        <PaywallModal isOpen={isPaywallOpen} mode={paywallMode} balance={(userProfile as any)?.points_balance ?? 0} cost={0} announcement="" onDeductConfirm={()=>{}} onSoftProceed={()=>{}} onGoToTopup={()=>{}} onLogin={()=>{}} onClose={() => setIsPaywallOpen(false)} />
     </div>
   );
 };

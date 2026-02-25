@@ -1,6 +1,7 @@
+// FILE: src/components/Admin/FeatureConfigPanel.tsx
 import React, { useEffect, useState } from 'react';
 import { Save, RefreshCw, AlertCircle, DollarSign, Power, MessageSquare } from 'lucide-react';
-import { getFeatureConfigs, updateFeatureConfig } from '../../db'; // 從 db 引入
+import { getFeatureConfigs, updateFeatureConfig } from '../../db'; 
 import type { FeatureConfig } from '../../types/store';
 
 export const FeatureConfigPanel: React.FC = () => {
@@ -8,7 +9,6 @@ export const FeatureConfigPanel: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [savingId, setSavingId] = useState<string | null>(null);
 
-    // 載入設定
     const loadData = async () => {
         setLoading(true);
         try {
@@ -26,14 +26,12 @@ export const FeatureConfigPanel: React.FC = () => {
         loadData();
     }, []);
 
-    // 處理欄位變更 (本地 State 更新)
     const handleChange = (key: string, field: keyof FeatureConfig, value: any) => {
         setFeatures(prev => prev.map(f => 
             f.feature_key === key ? { ...f, [field]: value } : f
         ));
     };
 
-    // 儲存單一設定到資料庫
     const handleSave = async (feature: FeatureConfig) => {
         setSavingId(feature.feature_key);
         try {
@@ -44,10 +42,7 @@ export const FeatureConfigPanel: React.FC = () => {
                 price: feature.price,
                 announcement: feature.announcement
             });
-            if (success) {
-                // alert(`${feature.name} 設定已更新`); 
-                // 不彈跳視窗干擾，用按鈕狀態回饋即可
-            } else {
+            if (!success) {
                 alert('更新失敗');
             }
         } catch (e) {
@@ -75,7 +70,6 @@ export const FeatureConfigPanel: React.FC = () => {
                     <div key={feature.feature_key} className={`bg-white rounded-xl p-5 border-l-4 shadow-sm transition-all hover:shadow-md ${feature.is_active ? 'border-green-500' : 'border-gray-300 opacity-75'}`}>
                         <div className="flex flex-col md:flex-row gap-6 items-start md:items-center">
                             
-                            {/* 1. 功能名稱與開關 */}
                             <div className="flex-1 min-w-[200px]">
                                 <div className="flex items-center gap-3 mb-2">
                                     <div className="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
@@ -95,7 +89,6 @@ export const FeatureConfigPanel: React.FC = () => {
                                 <p className="text-xs text-gray-400 font-mono pl-14">{feature.feature_key}</p>
                             </div>
 
-                            {/* 2. 付費設定 */}
                             <div className="flex-1 flex items-center gap-4 bg-gray-50 p-3 rounded-lg border border-gray-100">
                                 <label className="flex items-center gap-2 cursor-pointer select-none">
                                     <input 
@@ -105,7 +98,8 @@ export const FeatureConfigPanel: React.FC = () => {
                                         onChange={(e) => handleChange(feature.feature_key, 'is_paid', e.target.checked)}
                                         disabled={!feature.is_active}
                                     />
-                                    <span className={`text-sm font-bold ${feature.is_paid ? 'text-purple-700' : 'text-gray-400'}`}>需付費</span>
+                                    {/* [修改] 顯示文字調整 */}
+                                    <span className={`text-sm font-bold ${feature.is_paid ? 'text-purple-700' : 'text-gray-400'}`}>是否收費</span>
                                 </label>
 
                                 {feature.is_paid && (
@@ -122,7 +116,6 @@ export const FeatureConfigPanel: React.FC = () => {
                                 )}
                             </div>
 
-                            {/* 3. 公告文字 */}
                             <div className="flex-[2] w-full">
                                 <div className="relative">
                                     <MessageSquare size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -136,9 +129,8 @@ export const FeatureConfigPanel: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* 4. 儲存按鈕 */}
                             <button 
-                                onClick={() => handleSave(feature)} 
+                                onClick={() => handleSave(feature)}
                                 disabled={savingId === feature.feature_key}
                                 className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-all shadow-sm ${
                                     savingId === feature.feature_key 

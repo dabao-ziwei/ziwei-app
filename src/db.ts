@@ -48,7 +48,7 @@ export interface Client {
   editCount?: number;
   creatorEmail?: string;
   is_deleted?: boolean;
-  is_favorite?: boolean; // [新增] 最愛標記
+  is_favorite?: boolean;
 }
 
 export interface Relationship {
@@ -227,7 +227,7 @@ const mapClientToEntity = (data: any): Client => ({
     birthMinute: data.birth_minute ?? data.birthMinute,
     type: data.type,
     majorStars: data.major_stars,
-    is_favorite: data.is_favorite ?? false // [新增]
+    is_favorite: data.is_favorite ?? false
 });
 
 export const loadClients = async (loadAllForAdmin = false): Promise<Client[]> => {
@@ -235,9 +235,7 @@ export const loadClients = async (loadAllForAdmin = false): Promise<Client[]> =>
   if (!user) return [];
   
   const isSuperViewer = checkIsSuperAdmin(user.email);
-  
   let query = supabase.from('clients').select('*').order('created_at', { ascending: false });
-  
   if (!isSuperViewer || !loadAllForAdmin) {
       query = query.eq('user_id', user.id).eq('is_deleted', false);
   }
@@ -276,7 +274,7 @@ export const saveClient = async (clientData: any): Promise<string | null> => {
         if (clientData.birthMinute !== undefined) dbPayload.birth_minute = clientData.birthMinute;
         if (clientData.type) dbPayload.type = clientData.type;
         if (clientData.majorStars) dbPayload.major_stars = clientData.majorStars;
-        if (clientData.is_favorite !== undefined) dbPayload.is_favorite = clientData.is_favorite; // [新增]
+        if (clientData.is_favorite !== undefined) dbPayload.is_favorite = clientData.is_favorite;
         const { error } = await supabase.from('clients').update(dbPayload).eq('id', clientData.id);
         return !error ? clientData.id : null;
     } else {
@@ -293,7 +291,7 @@ export const saveClient = async (clientData: any): Promise<string | null> => {
             birth_minute: clientData.birthMinute,
             type: clientData.type,
             major_stars: clientData.majorStars,
-            is_favorite: clientData.is_favorite ?? false // [新增]
+            is_favorite: clientData.is_favorite ?? false
         };
         const { data, error } = await supabase.from('clients').insert(dbPayload).select().single();
         if (error) throw error;
@@ -306,14 +304,13 @@ export const deleteClient = async (id: string): Promise<boolean> => {
     return !error;
 };
 
-// [新增] 切換最愛狀態
 export const toggleFavorite = async (id: string, is_favorite: boolean): Promise<boolean> => {
     const { error } = await supabase.from('clients').update({ is_favorite }).eq('id', id);
     return !error;
 };
 
 export const getUsedChartCount = async (userId: string): Promise<number> => {
-    const { count, error } = await supabase.from('clients').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('is_deleted', false);
+    const { count } = await supabase.from('clients').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('is_deleted', false);
     return count || 0;
 };
 
@@ -343,19 +340,19 @@ export const getUserCustomRelationTypes = async (): Promise<string[]> => {
     return [];
 };
 
-// --- Points & Store Logic ---
+// --- Store & Subscription Logic ---
 
 export const getPointPacks = async (showInactive = false): Promise<PointPack[]> => {
     let query = supabase.from('point_packs').select('*').order('price_ntd', { ascending: true });
     if (!showInactive) {
         query = query.eq('is_active', true);
     }
-    const { data, error } = await query;
+    const { data } = await query;
     return data || [];
 };
 
 export const getPointsLedger = async (userId: string): Promise<PointsLedger[]> => {
-    const { data, error } = await supabase.from('points_ledger').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+    const { data } = await supabase.from('points_ledger').select('*').eq('user_id', userId).order('created_at', { ascending: false });
     return data || [];
 };
 
@@ -385,6 +382,7 @@ export const createPointTransaction = async (packId: string): Promise<string | n
         price_ntd_snapshot: pack.price_ntd,
         base_points_snapshot: pack.base_points,
         bonus_points_snapshot: pack.bonus_points,
+        first_time_bonus_points_snapshot: pack.first_time_bonus_points || 0, 
         status: 'PENDING',
         provider: 'ECPAY'
     }).select().single();
@@ -410,49 +408,63 @@ export const claimWelcomeGift = async (): Promise<boolean> => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
 
-    const { error } = await supabase.rpc('admin_adjust_points', {
-        p_target_user_id: user.id,
-        p_delta: 99,
-        p_reason: '會員迎新禮 (Welcome Gift)',
-        p_admin_id: user.id 
-    });
+    const profile = await getMyProfile();
+    if (!profile) return false;
 
-    if (!error) {
-        await supabase.from('profiles').update({ has_claimed_welcome_gift: true }).eq('id', user.id);
-        return true;
+    let newExpiry = new Date();
+    if (profile.accessExpiry) {
+        const currentExpiry = new Date(profile.accessExpiry);
+        if (currentExpiry > new Date()) {
+            newExpiry = currentExpiry;
+        }
     }
-    return false;
+    newExpiry.setDate(newExpiry.getDate() + 7); 
+
+    const { error } = await supabase.from('profiles').update({ 
+        access_expiry: newExpiry.toISOString(),
+        has_claimed_welcome_gift: true 
+    }).eq('id', user.id);
+
+    return !error;
 };
 
-export const consumeDivinationV2 = async (options?: any, guestToken?: string | null): Promise<{ success: boolean; message?: string; newBalance?: number; ok?: boolean; skipped?: boolean }> => {
-    const { data: { user } } = await supabase.auth.getUser();
+// [修改] 核心權限驗證：優先檢查「是否收費」
+export const consumeDivinationV2 = async (options?: any, guestToken?: string | null): Promise<{ success: boolean; message?: string; remainingTrials?: number; ok?: boolean; skipped?: boolean }> => {
     
-    if (typeof options === 'number' && guestToken) {
-         return { success: false, message: '請先登入' };
-    }
-
-    if (!user) return { success: false, message: '請先登入' };
-
+    // 1. 檢查功能設定 (Feature Config)
     const config = await getFeatureRuntime('lucky_divination');
     
+    // [關鍵修改] 如果後台設定為「不收費」，直接回傳成功，不檢查 VIP，也不扣除免費次數
     if (config && !config.is_paid) {
         return { success: true, message: '目前免費', skipped: true };
     }
 
-    const cost = config?.price ?? FALLBACK_COST; 
-
-    const { data, error } = await supabase.rpc('deduct_points_for_divination', {
-        p_user_id: user.id,
-        p_cost: cost
-    });
-
-    if (error) return { success: false, message: error.message };
-
-    if (!data || !data.success) {
-        return { success: false, message: data?.message || '交易失敗，請稍後再試 (System Error)' };
-    }
+    // 2. 以下為收費模式邏輯
+    const { data: { user } } = await supabase.auth.getUser();
     
-    return { success: true, newBalance: data.new_balance };
+    // VIP 驗證 (如果已登入)
+    if (user) {
+        const { data: profile } = await supabase.from('profiles').select('access_expiry').eq('id', user.id).single();
+        if (profile && profile.access_expiry) {
+            const expiry = new Date(profile.access_expiry);
+            if (expiry > new Date()) {
+                return { success: true, message: 'VIP', skipped: true };
+            }
+        }
+    }
+
+    // 免費次數驗證 (LocalStorage)
+    const storageKey = 'dabao_divination_trials';
+    const usedTrials = parseInt(localStorage.getItem(storageKey) || '0', 10);
+    const MAX_TRIALS = 3;
+
+    if (usedTrials < MAX_TRIALS) {
+        localStorage.setItem(storageKey, (usedTrials + 1).toString());
+        return { success: true, remainingTrials: MAX_TRIALS - usedTrials - 1 };
+    }
+
+    // 次數用盡且非 VIP
+    return { success: false, message: '免費次數已用完，請升級訂閱方案解鎖無限次數。' };
 };
 
 export const consumeFeature = async (featureKey: string, cost: number) => {
@@ -460,10 +472,41 @@ export const consumeFeature = async (featureKey: string, cost: number) => {
 };
 
 export const simulatePaymentSuccess = async (transactionId: string): Promise<boolean> => {
-    const { error } = await supabase.rpc('simulate_payment_success', {
-        p_transaction_id: transactionId
-    });
-    return !error;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+
+    const { data: trans } = await supabase.from('point_transactions').select('*').eq('id', transactionId).single();
+    if (!trans) return false;
+
+    const { count, error: countError } = await supabase
+        .from('point_transactions')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('point_pack_id', trans.point_pack_id)
+        .eq('status', 'SUCCESS');
+
+    const isFirstTime = count === 0;
+    const firstTimeBonus = isFirstTime ? (trans.first_time_bonus_points_snapshot || 0) : 0;
+
+    const daysToAdd = (trans.base_points_snapshot || 0) + (trans.bonus_points_snapshot || 0) + firstTimeBonus;
+
+    const { data: profile } = await supabase.from('profiles').select('access_expiry').eq('id', user.id).single();
+    if (!profile) return false;
+
+    let newExpiry = new Date();
+    if (profile.access_expiry) {
+        const currentExpiry = new Date(profile.access_expiry);
+        if (currentExpiry > new Date()) {
+            newExpiry = currentExpiry;
+        }
+    }
+    newExpiry.setDate(newExpiry.getDate() + daysToAdd);
+
+    const { error: updateError } = await supabase.from('profiles').update({ access_expiry: newExpiry.toISOString() }).eq('id', user.id);
+    if (updateError) return false;
+
+    const { error: transError } = await supabase.from('point_transactions').update({ status: 'SUCCESS' }).eq('id', transactionId);
+    return !transError;
 };
 
 // --- Divination Content ---

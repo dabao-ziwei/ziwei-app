@@ -1,11 +1,10 @@
-// FILE: src/components/Chart/DualChart.tsx
 import React, { useMemo, useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PalaceGrid } from './PalaceGrid';
 import { ZiWeiEngine } from '../../logic/engine';
-import { GAN, SIHUA_TABLE, PALACE_NAMES, ZHI } from '../../logic/constants';
+import { GAN, SIHUA_TABLE, ZHI } from '../../logic/constants';
 import { Loader2, ChevronLeft, Lock, Unlock, ArrowRightLeft } from 'lucide-react';
-import { Lunar, LunarYear } from 'lunar-typescript';
+import { Solar } from 'lunar-typescript';
 import type { Client } from '../../db';
 
 interface DualChartProps {
@@ -13,152 +12,76 @@ interface DualChartProps {
 }
 
 const getSiHuaMap = (ganIndex: number) => {
-  if (ganIndex < 0 || ganIndex > 9) return {};
-  const ganChar = GAN[ganIndex];
-  const stars = SIHUA_TABLE[ganChar];
-  if (!stars) return {};
-  return {
-    [stars[0]]: '祿',
-    [stars[1]]: '權',
-    [stars[2]]: '科',
-    [stars[3]]: '忌',
-  } as Record<string, '祿' | '權' | '科' | '忌'>;
+    if (ganIndex < 0 || ganIndex > 9) return {};
+    const ganChar = GAN[ganIndex];
+    const stars = SIHUA_TABLE[ganChar];
+    if (!stars) return {};
+    return {
+        [stars[0]]: '祿',
+        [stars[1]]: '權',
+        [stars[2]]: '科',
+        [stars[3]]: '忌',
+    } as Record<string, '祿' | '權' | '科' | '忌'>;
 };
 
-// [修正] 補足流年需要的天干地支與虛歲資料
+// 輔助：產生 10 年流年列表 (合盤精簡版：只顯示西元年)
 const getLiuNianList = (engine: ZiWeiEngine, chartData: any, daXianSeq: number) => {
-  if (!engine || !chartData || daXianSeq < 0) return [];
-  
-  const startPos = engine.getMingPos();
-  const direction = chartData.direction || 1;
-  const offset = daXianSeq * direction;
-  const daXianPalaceIdx = (startPos + offset + 120) % 12;
-  const palace = chartData.palaces[daXianPalaceIdx];
-  
-  if (!palace) return [];
-  
-  const startYear = chartData.lunarYear + palace.ages[0];
-  const startAge = palace.ages[0];
-  const list = [];
-  for (let i = 0; i < 10; i++) {
-    const year = startYear + i;
-    const age = startAge + i;
-    let gan = (year - 4) % 10;
-    if (gan < 0) gan += 10;
-    let zhi = (year - 4) % 12;
-    if (zhi < 0) zhi += 12;
-    const ganZhi = `${GAN[gan]}${ZHI[zhi]}`;
+    if (!engine || !chartData || daXianSeq < 0) return [];
     
-    list.push({ year, age, ganZhi });
-  }
-  return list;
+    const startPos = engine.getMingPos();
+    const direction = chartData.direction || 1;
+    const offset = daXianSeq * direction;
+    const daXianPalaceIdx = (startPos + offset + 120) % 12;
+    const palace = chartData.palaces[daXianPalaceIdx];
+    
+    if (!palace) return [];
+    
+    const startYear = chartData.lunarYear + palace.ages[0];
+    const list = [];
+    for (let i = 0; i < 10; i++) {
+        const year = startYear + i;
+        list.push({ year, label: `${year}` });
+    }
+    return list;
 };
 
+// 輔助：計算當前大限 Index
 const getCurrentDaLimitIndex = (chartData: any, engine: ZiWeiEngine) => {
-  if (!chartData || !engine) return -1;
-  
-  const currentYear = new Date().getFullYear();
-  const startPos = engine.getMingPos();
-  const direction = chartData.direction || 1;
-  
-  for (let i = 0; i < 10; i++) {
-    const idx = (startPos + i * direction + 120) % 12;
-    const p = chartData.palaces[idx];
-    const startYear = chartData.lunarYear + p.ages[0];
-    const endYear = chartData.lunarYear + p.ages[1];
+    if (!chartData || !engine) return 0;
     
-    if (currentYear >= startYear && currentYear <= endYear) {
-      return i;
+    const now = new Date();
+    const solar = Solar.fromYmd(now.getFullYear(), now.getMonth() + 1, now.getDate());
+    const currentLunarYear = solar.getLunar().getYear(); 
+    
+    const virtualAge = currentLunarYear - chartData.lunarYear + 1;
+
+    const startPos = engine.getMingPos();
+    const direction = chartData.direction || 1;
+    
+    for (let i = 0; i < 10; i++) {
+        const idx = (startPos + i * direction + 120) % 12;
+        const p = chartData.palaces[idx];
+        if (virtualAge >= p.ages[0] && virtualAge <= p.ages[1]) {
+            return i;
+        }
     }
-  }
-  return -1;
+    return 0;
 };
 
+// 【修正】區分早晚子的切換邏輯
 const calcNextHour = (currentHour: number, delta: number) => {
-  const currentZhiIdx = Math.floor((currentHour + 1) / 2) % 12;
-  let nextZhiIdx = currentZhiIdx + delta;
-  if (nextZhiIdx < 0) nextZhiIdx = 11;
-  if (nextZhiIdx > 11) nextZhiIdx = 0;
-  return nextZhiIdx === 0 ? 0 : nextZhiIdx * 2;
-};
-
-const calcLiuMonthDay = (chartData: any, liuYear: number | null, liuMonth: number | null, isLiuMonthLeap: boolean, liuDay: number | null) => {
-    if (!chartData || !liuYear || liuMonth === null) {
-        return { liuMonthIdx: -1, liuDayIdx: -1, liuMonthGan: -1, liuDayGan: -1 };
+    const hours = [0, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23];
+    let currentIndex = hours.indexOf(currentHour);
+    if (currentIndex === -1) {
+        // 如果輸入的是偶數小時（如2點），找最近的
+        currentIndex = hours.findIndex(h => h >= currentHour);
     }
-
-    const yearZhi = (liuYear - 4) % 12;
-    const douJunPalace = chartData.palaces[2];
-    const douJunName = douJunPalace.name;
-    const nameIdx = PALACE_NAMES.indexOf(douJunName);
-    const offset = (12 - nameIdx) % 12;
-    const flowMonthAnchor = (yearZhi + offset) % 12;
-
-    const lunarYear = LunarYear.fromYear(liuYear);
-    const leapMonth = lunarYear.getLeapMonth();
-
-    let monthSteps = liuMonth - 1;
-    if (leapMonth > 0) {
-        if (liuMonth > leapMonth) {
-            monthSteps += 1;
-        } else if (liuMonth === leapMonth && isLiuMonthLeap) {
-            monthSteps += 1;
-        }
-    }
-    const flowMonthIdx = (flowMonthAnchor + monthSteps) % 12;
-
-    const effectiveMonth = isLiuMonthLeap ? -Math.abs(liuMonth) : Math.abs(liuMonth);
-    const naturalMonthObj = Lunar.fromYmd(liuYear, effectiveMonth, 1);
-    const mGan = naturalMonthObj.getMonthGanIndex();
-
-    if (liuDay === null) {
-        return { liuMonthIdx: flowMonthIdx, liuDayIdx: -1, liuMonthGan: mGan, liuDayGan: -1 };
-    }
-
-    const flowDayIdx = (flowMonthIdx + (liuDay - 1)) % 12;
-
-    const naturalDayObj = Lunar.fromYmd(liuYear, effectiveMonth, liuDay);
-    const dGan = naturalDayObj.getDayGanIndex();
-
-    return { liuMonthIdx: flowMonthIdx, liuDayIdx: flowDayIdx, liuMonthGan: mGan, liuDayGan: dGan };
-};
-
-const createGetRelativeNames = (chart: any, daSeq: number, daList: any[], liuYear: number | null, xiaoMingIdx: number, showXiao: boolean, monthIdx: number, dayIdx: number) => {
-    return (currentIdx: number) => {
-        let daName, liuName, xiaoName, yueName, riName;
-
-        if (daSeq >= 0 && daList[daSeq]) {
-            const daMingIdx = daList[daSeq].palaceIdx;
-            const offset = (daMingIdx - currentIdx + 12) % 12;
-            daName = `大${PALACE_NAMES[offset].substring(0, 1)}`;
-        }
-
-        if (liuYear && chart) {
-            const liuZhi = (liuYear - 4) % 12;
-            const liuMingIdx = chart.palaces.findIndex((p: any) => p.zhiIndex === liuZhi);
-            if (liuMingIdx >= 0) {
-                const offset = (liuMingIdx - currentIdx + 12) % 12;
-                liuName = `流${PALACE_NAMES[offset].substring(0, 1)}`;
-            }
-        }
-
-        if (xiaoMingIdx >= 0 && showXiao) {
-            const offset = (xiaoMingIdx - currentIdx + 12) % 12;
-            xiaoName = `小${PALACE_NAMES[offset].substring(0, 1)}`;
-        }
-
-        if (monthIdx >= 0) {
-            const offset = (monthIdx - currentIdx + 12) % 12;
-            yueName = `月${PALACE_NAMES[offset].substring(0, 1)}`;
-        }
-
-        if (dayIdx >= 0) {
-            const offset = (dayIdx - currentIdx + 12) % 12;
-            riName = `日${PALACE_NAMES[offset].substring(0, 1)}`;
-        }
-
-        return { daName, liuName, xiaoName, yueName, riName };
-    };
+    
+    let nextIndex = currentIndex + delta;
+    if (nextIndex < 0) nextIndex = hours.length - 1;
+    if (nextIndex >= hours.length) nextIndex = 0;
+    
+    return hours[nextIndex];
 };
 
 export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
@@ -175,33 +98,19 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   }, [clientA, clientB, navigate]);
 
   const [isLocked, setIsLocked] = useState(true);
-  
-  // 跨盤飛化狀態
   const [activeSide, setActiveSide] = useState<'A' | 'B' | null>(null);
   const [flyingPalace, setFlyingPalace] = useState<number | null>(null);
 
-  // 自盤飛化狀態 (獨立運作)
-  const [selfFlyingA, setSelfFlyingA] = useState<number | null>(null);
-  const [selfFlyingB, setSelfFlyingB] = useState<number | null>(null);
-
-  // Client A State
   const [hourA, setHourA] = useState(clientA?.birthHour || 0);
   const [daSeqA, setDaSeqA] = useState(-1);
   const [liuYearA, setLiuYearA] = useState<number | null>(null);
-  const [liuMonthA, setLiuMonthA] = useState<number | null>(null);
-  const [isLiuMonthLeapA, setIsLiuMonthLeapA] = useState<boolean>(false);
-  const [liuDayA, setLiuDayA] = useState<number | null>(null);
   const [showXiaoA, setShowXiaoA] = useState(false);
   const [isTwinA, setIsTwinA] = useState(false);
   const [reverseMapA, setReverseMapA] = useState<Record<string, boolean>>({});
 
-  // Client B State
   const [hourB, setHourB] = useState(clientB?.birthHour || 0);
   const [daSeqB, setDaSeqB] = useState(-1);
   const [liuYearB, setLiuYearB] = useState<number | null>(null);
-  const [liuMonthB, setLiuMonthB] = useState<number | null>(null);
-  const [isLiuMonthLeapB, setIsLiuMonthLeapB] = useState<boolean>(false);
-  const [liuDayB, setLiuDayB] = useState<number | null>(null);
   const [showXiaoB, setShowXiaoB] = useState(false);
   const [isTwinB, setIsTwinB] = useState(false);
   const [reverseMapB, setReverseMapB] = useState<Record<string, boolean>>({});
@@ -273,7 +182,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       return engineB.getChartData();
   }, [engineB, daSeqB, liuYearB, showXiaoB]);
 
-  // [修正] 在大限清單中加入干支 (ganZhi)
   const daListA = useMemo(() => {
       if (!engineA || !chartA) return [];
       const list = [];
@@ -290,7 +198,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
               startYear: startYear, 
               endYear: endYear, 
               name: `${['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'][i]}限`,
-              ganZhi: `${GAN[p.ganIndex]}${ZHI[p.zhiIndex]}`,
               label: `${p.ages[0]}-${p.ages[1]}`,
               startAge: p.ages[0],
               endAge: p.ages[1]
@@ -315,7 +222,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
               startYear: startYear, 
               endYear: endYear, 
               name: `${['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'][i]}限`,
-              ganZhi: `${GAN[p.ganIndex]}${ZHI[p.zhiIndex]}`,
               label: `${p.ages[0]}-${p.ages[1]}`,
               startAge: p.ages[0],
               endAge: p.ages[1]
@@ -324,26 +230,9 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       return list;
   }, [chartB, engineB]);
 
-  const xiaoXianMingIdxA = useMemo(() => {
-      if (!liuYearA || !chartA || !engineA) return -1;
-      const virtualAge = liuYearA - chartA.lunarYear + 1;
-      return engineA.getXiaoXianPos(virtualAge);
-  }, [liuYearA, chartA, engineA]);
-
-  const xiaoXianMingIdxB = useMemo(() => {
-      if (!liuYearB || !chartB || !engineB) return -1;
-      const virtualAge = liuYearB - chartB.lunarYear + 1;
-      return engineB.getXiaoXianPos(virtualAge);
-  }, [liuYearB, chartB, engineB]);
-
-  const timeParamsA = useMemo(() => calcLiuMonthDay(chartA, liuYearA, liuMonthA, isLiuMonthLeapA, liuDayA), [chartA, liuYearA, liuMonthA, isLiuMonthLeapA, liuDayA]);
-  const timeParamsB = useMemo(() => calcLiuMonthDay(chartB, liuYearB, liuMonthB, isLiuMonthLeapB, liuDayB), [chartB, liuYearB, liuMonthB, isLiuMonthLeapB, liuDayB]);
-
   const handleToggleReverseA = () => {
     let key = '';
-    if (liuDayA !== null && liuMonthA !== null && liuYearA !== null) key = `ri-${liuYearA}-${liuMonthA}-${liuDayA}`;
-    else if (liuMonthA !== null && liuYearA !== null) key = `yue-${liuYearA}-${liuMonthA}`;
-    else if (liuYearA !== null) key = `liu-${liuYearA}`;
+    if (liuYearA !== null) key = `liu-${liuYearA}`;
     else if (daSeqA >= 0) key = `da-${daSeqA}`;
     else return;
     setReverseMapA(prev => ({ ...prev, [key]: !prev[key] }));
@@ -351,9 +240,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
 
   const handleToggleReverseB = () => {
     let key = '';
-    if (liuDayB !== null && liuMonthB !== null && liuYearB !== null) key = `ri-${liuYearB}-${liuMonthB}-${liuDayB}`;
-    else if (liuMonthB !== null && liuYearB !== null) key = `yue-${liuYearB}-${liuMonthB}`;
-    else if (liuYearB !== null) key = `liu-${liuYearB}`;
+    if (liuYearB !== null) key = `liu-${liuYearB}`;
     else if (daSeqB >= 0) key = `da-${daSeqB}`;
     else return;
     setReverseMapB(prev => ({ ...prev, [key]: !prev[key] }));
@@ -361,79 +248,34 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
 
   const isDaRevA = daSeqA >= 0 ? !!reverseMapA[`da-${daSeqA}`] : false;
   const isLiuRevA = liuYearA ? !!reverseMapA[`liu-${liuYearA}`] : false;
-  const isYueRevA = liuYearA && liuMonthA ? !!reverseMapA[`yue-${liuYearA}-${liuMonthA}`] : false;
-  const isRiRevA = liuYearA && liuMonthA && liuDayA ? !!reverseMapA[`ri-${liuYearA}-${liuMonthA}-${liuDayA}`] : false;
-  
-  let isCurrentRevA = false;
-  if (liuDayA !== null) isCurrentRevA = isRiRevA;
-  else if (liuMonthA !== null) isCurrentRevA = isYueRevA;
-  else if (liuYearA !== null) isCurrentRevA = isLiuRevA;
-  else if (daSeqA >= 0) isCurrentRevA = isDaRevA;
-  const reverseFlagsA = { da: isDaRevA, liu: isLiuRevA, yue: isYueRevA, ri: isRiRevA };
+  const isCurrentRevA = liuYearA !== null ? isLiuRevA : (daSeqA >= 0 ? isDaRevA : false);
+  const reverseFlagsA = { da: isDaRevA, liu: isLiuRevA, yue: false, ri: false };
 
   const isDaRevB = daSeqB >= 0 ? !!reverseMapB[`da-${daSeqB}`] : false;
   const isLiuRevB = liuYearB ? !!reverseMapB[`liu-${liuYearB}`] : false;
-  const isYueRevB = liuYearB && liuMonthB ? !!reverseMapB[`yue-${liuYearB}-${liuMonthB}`] : false;
-  const isRiRevB = liuYearB && liuMonthB && liuDayB ? !!reverseMapB[`ri-${liuYearB}-${liuMonthB}-${liuDayB}`] : false;
-  
-  let isCurrentRevB = false;
-  if (liuDayB !== null) isCurrentRevB = isRiRevB;
-  else if (liuMonthB !== null) isCurrentRevB = isYueRevB;
-  else if (liuYearB !== null) isCurrentRevB = isLiuRevB;
-  else if (daSeqB >= 0) isCurrentRevB = isDaRevB;
-  const reverseFlagsB = { da: isDaRevB, liu: isLiuRevB, yue: isYueRevB, ri: isRiRevB };
+  const isCurrentRevB = liuYearB !== null ? isLiuRevB : (daSeqB >= 0 ? isDaRevB : false);
+  const reverseFlagsB = { da: isDaRevB, liu: isLiuRevB, yue: false, ri: false };
 
   const syncTime = (source: 'A' | 'B', year: number | null) => {
       if (!isLocked) return; 
+
       if (source === 'A') {
-          setLiuYearB(year); 
-          setLiuMonthB(null);
-          setLiuDayB(null);
-          if (year !== null) {
+          if (year === null) {
+              setLiuYearB(null);
+          } else {
+              setLiuYearB(year); 
               const targetDa = daListB.find(d => year >= d.startYear && year <= d.endYear);
               if (targetDa) setDaSeqB(targetDa.seq);
           }
       } else {
-          setLiuYearA(year);
-          setLiuMonthA(null);
-          setLiuDayA(null);
-          if (year !== null) {
+          if (year === null) {
+              setLiuYearA(null);
+          } else {
+              setLiuYearA(year); 
               const targetDa = daListA.find(d => year >= d.startYear && year <= d.endYear);
               if (targetDa) setDaSeqA(targetDa.seq);
           }
       }
-  };
-
-  const handleSetLiuMonthA = (m: number | null, isLeap: boolean) => {
-      setLiuMonthA(m);
-      setIsLiuMonthLeapA(isLeap);
-      setLiuDayA(null);
-      if (isLocked) {
-          setLiuMonthB(m);
-          setIsLiuMonthLeapB(isLeap);
-          setLiuDayB(null);
-      }
-  };
-
-  const handleSetLiuMonthB = (m: number | null, isLeap: boolean) => {
-      setLiuMonthB(m);
-      setIsLiuMonthLeapB(isLeap);
-      setLiuDayB(null);
-      if (isLocked) {
-          setLiuMonthA(m);
-          setIsLiuMonthLeapA(isLeap);
-          setLiuDayA(null);
-      }
-  };
-
-  const handleSetLiuDayA = (d: number | null) => {
-      setLiuDayA(d);
-      if (isLocked) setLiuDayB(d);
-  };
-
-  const handleSetLiuDayB = (d: number | null) => {
-      setLiuDayB(d);
-      if (isLocked) setLiuDayA(d);
   };
 
   const handlePalaceClick = (side: 'A' | 'B', index: number) => {
@@ -446,21 +288,11 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       }
   };
 
-  const handleTriggerClickA = (index: number) => {
-      setSelfFlyingA(prev => prev === index ? null : index);
-  };
-
-  const handleTriggerClickB = (index: number) => {
-      setSelfFlyingB(prev => prev === index ? null : index);
-  };
-
   const handleChangeHourA = (delta: number) => {
       const newHour = calcNextHour(hourA, delta);
       setHourA(newHour);
       setDaSeqA(-1); setLiuYearA(null); setShowXiaoA(false);
-      setLiuMonthA(null); setLiuDayA(null);
       setFlyingPalace(null); setActiveSide(null);
-      setSelfFlyingA(null); setSelfFlyingB(null); 
       setReverseMapA({});
   };
 
@@ -468,9 +300,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       const newHour = calcNextHour(hourB, delta);
       setHourB(newHour);
       setDaSeqB(-1); setLiuYearB(null); setShowXiaoB(false);
-      setLiuMonthB(null); setLiuDayB(null);
       setFlyingPalace(null); setActiveSide(null);
-      setSelfFlyingA(null); setSelfFlyingB(null); 
       setReverseMapB({});
   };
 
@@ -485,53 +315,34 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       const gan = chartB.palaces[flyingPalace].ganIndex;
       return getSiHuaMap(gan);
   }, [activeSide, flyingPalace, chartB]);
-
-  const selfFlyMapA = useMemo(() => {
-      if (selfFlyingA === null || !chartA) return undefined;
-      const gan = chartA.palaces[selfFlyingA].ganIndex;
-      return getSiHuaMap(gan);
-  }, [selfFlyingA, chartA]);
-
-  const selfFlyMapB = useMemo(() => {
-      if (selfFlyingB === null || !chartB) return undefined;
-      const gan = chartB.palaces[selfFlyingB].ganIndex;
-      return getSiHuaMap(gan);
-  }, [selfFlyingB, chartB]);
-
-  const activeLookupA = { ...(flyMapBtoA || {}), ...(selfFlyMapA || {}) };
-  const activeLookupB = { ...(flyMapAtoB || {}), ...(selfFlyMapB || {}) };
   
   const currentRealTimeA = useMemo(() => {
-      const year = new Date().getFullYear();
-      if (!daListA || daListA.length === 0) return undefined;
-      const daSeq = daListA.findIndex(d => year >= d.startYear && year <= d.endYear);
-      return { year, daSeq: daSeq >= 0 ? daSeq : -1 };
-  }, [daListA]);
+      const now = new Date();
+      const solar = Solar.fromYmd(now.getFullYear(), now.getMonth() + 1, now.getDate());
+      const currentLunarYear = solar.getLunar().getYear();
+
+      if (!chartA) return undefined;
+      const virtualAge = currentLunarYear - chartA.lunarYear + 1;
+      
+      const daSeq = daListA.findIndex(d => virtualAge >= d.startAge && virtualAge <= d.endAge);
+      const displayYear = chartA.lunarYear + virtualAge; 
+
+      return { year: displayYear, daSeq: daSeq >= 0 ? daSeq : -1 };
+  }, [chartA, daListA]);
 
   const currentRealTimeB = useMemo(() => {
-      const year = new Date().getFullYear();
-      if (!daListB || daListB.length === 0) return undefined;
-      const daSeq = daListB.findIndex(d => year >= d.startYear && year <= d.endYear);
-      return { year, daSeq: daSeq >= 0 ? daSeq : -1 };
-  }, [daListB]);
+      const now = new Date();
+      const solar = Solar.fromYmd(now.getFullYear(), now.getMonth() + 1, now.getDate());
+      const currentLunarYear = solar.getLunar().getYear();
 
-  let currentHourZhiA = '';
-  if (clientA) {
-      const zhiIdxA = Math.floor((hourA + 1) / 2) % 12;
-      currentHourZhiA = ZHI[zhiIdxA] || '';
-      if (zhiIdxA === 0) {
-          currentHourZhiA = hourA === 23 ? '晚子' : '早子';
-      }
-  }
+      if (!chartB) return undefined;
+      const virtualAge = currentLunarYear - chartB.lunarYear + 1;
+      const daSeq = daListB.findIndex(d => virtualAge >= d.startAge && virtualAge <= d.endAge);
+      const displayYear = chartB.lunarYear + virtualAge;
 
-  let currentHourZhiB = '';
-  if (clientB) {
-      const zhiIdxB = Math.floor((hourB + 1) / 2) % 12;
-      currentHourZhiB = ZHI[zhiIdxB] || '';
-      if (zhiIdxB === 0) {
-          currentHourZhiB = hourB === 23 ? '晚子' : '早子';
-      }
-  }
+      return { year: displayYear, daSeq: daSeq >= 0 ? daSeq : -1 };
+  }, [chartB, daListB]);
+
 
   if (!clientA || !clientB || !chartA || !chartB) {
       return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin"/></div>;
@@ -541,34 +352,51 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   const getDummyCoords = () => ({ x: 0, y: 0 });
   const dummyNav = () => {};
 
-  const getRelativeNamesA = createGetRelativeNames(chartA, daSeqA, daListA, liuYearA, xiaoXianMingIdxA, showXiaoA, timeParamsA.liuMonthIdx, timeParamsA.liuDayIdx);
-  const getRelativeNamesB = createGetRelativeNames(chartB, daSeqB, daListB, liuYearB, xiaoXianMingIdxB, showXiaoB, timeParamsB.liuMonthIdx, timeParamsB.liuDayIdx);
-
-  // [修正] UI 佈局調整：加入干支與虛歲，並改為上下兩行排版，加上 no-scrollbar 確保滑動不破版
   const renderControlBar = (
-      daList: any[], daSeq: number, setDaSeq: any, setLiuYear: any, targetLiuYearSetter: any, engine: ZiWeiEngine, chart: any, liuYear: number | null, source: 'A' | 'B', realTime: { year: number; daSeq: number } | undefined
+      daList: any[], 
+      daSeq: number, 
+      setDaSeq: any, 
+      setLiuYear: any,
+      targetLiuYearSetter: any,
+      engine: ZiWeiEngine,
+      chart: any,
+      liuYear: number | null,
+      source: 'A' | 'B',
+      realTime: { year: number; daSeq: number } | undefined
   ) => (
       <>
-        {/* 大限列 */}
-        <div className="h-11 bg-white border-t border-gray-200 flex overflow-x-auto no-scrollbar shrink-0">
+        <div className="h-12 bg-white border-t border-gray-200 flex overflow-x-auto scrollbar-hide shrink-0">
             <div className="flex w-full">
                 {daList.map(limit => (
-                    <button key={limit.seq} onClick={() => { setDaSeq(limit.seq); setLiuYear(null); if(isLocked) { targetLiuYearSetter(null); if (source === 'A') { setLiuMonthB(null); setLiuDayB(null); } else { setLiuMonthA(null); setLiuDayA(null); } } }} className={`px-1 py-1 text-[12px] border-r border-gray-100 whitespace-nowrap flex-1 min-w-[70px] flex flex-col items-center justify-center relative ${daSeq === limit.seq ? 'bg-gray-700 text-white font-bold' : 'text-gray-600 hover:bg-gray-50 font-medium'}`}>
-                        {realTime && realTime.daSeq === limit.seq && <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
-                        <span>{limit.name} {limit.ganZhi}</span>
+                    <button key={limit.seq} 
+                        onClick={() => { 
+                            setDaSeq(limit.seq); 
+                            setLiuYear(null); 
+                            if(isLocked) targetLiuYearSetter(null); 
+                        }}
+                        className={`px-1 py-1 text-[10px] border-r border-gray-100 whitespace-nowrap flex-1 min-w-[50px] flex flex-col items-center justify-center relative ${daSeq === limit.seq ? 'bg-gray-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+                    >
+                        {realTime && realTime.daSeq === limit.seq && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
+                        <span>{limit.name}</span>
+                        <span className="text-[9px] opacity-80 scale-90">{limit.label}</span>
                     </button>
                 ))}
             </div>
         </div>
-
-        {/* 流年列 */}
+        
         {daSeq >= 0 && (
-            <div className="h-[52px] bg-blue-50 border-t border-blue-100 flex overflow-x-auto no-scrollbar shrink-0">
+            <div className="h-9 bg-blue-50 border-t border-blue-100 flex overflow-x-auto scrollbar-hide shrink-0">
                 {getLiuNianList(engine, chart, daSeq).map(item => (
-                    <button key={item.year} onClick={() => { const newYear = liuYear === item.year ? null : item.year; setLiuYear(newYear); syncTime(source, newYear); }} className={`px-1 py-1 border-r border-blue-200 whitespace-nowrap flex-1 min-w-[55px] flex flex-col items-center justify-center relative ${liuYear === item.year ? 'bg-blue-600 text-white' : 'text-blue-600 hover:bg-blue-100'}`}>
-                        {realTime && realTime.year === item.year && <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
-                        <span className="text-[11px] font-bold leading-tight mt-0.5">{item.year}</span>
-                        <span className="text-[10px] leading-tight transform scale-90 origin-top opacity-90">{item.ganZhi} {item.age}</span>
+                    <button key={item.year}
+                        onClick={() => { 
+                            const newYear = liuYear === item.year ? null : item.year;
+                            setLiuYear(newYear);
+                            syncTime(source, newYear);
+                        }}
+                        className={`px-1 text-[11px] font-medium border-r border-blue-200 whitespace-nowrap flex-1 min-w-[40px] relative ${liuYear === item.year ? 'bg-blue-600 text-white' : 'text-blue-600 hover:bg-blue-100'}`}
+                    >
+                        {realTime && realTime.year === item.year && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
+                        {item.label}
                     </button>
                 ))}
             </div>
@@ -578,122 +406,139 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
 
   return (
     <div className="flex flex-col h-screen w-full bg-slate-100 overflow-hidden">
+        {/* Header */}
         <div className="flex justify-between items-center px-4 py-2 bg-white border-b border-gray-200 shadow-sm shrink-0 z-50 h-[56px]">
             <div className="flex items-center gap-3">
-                <button onClick={() => navigate(-1)} className="bg-white text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center gap-1.5 text-sm font-bold shadow-sm"><ChevronLeft size={16} /> 返回</button>
-                <div className="flex items-center gap-2 text-sm font-bold text-slate-700"><span className="text-blue-600">{clientA.name}</span><ArrowRightLeft size={14} className="text-gray-400" /><span className="text-pink-600">{clientB.name}</span></div>
+                <button onClick={() => navigate(-1)} className="bg-white text-gray-700 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center gap-1.5 text-sm font-bold shadow-sm">
+                    <ChevronLeft size={16} /> 返回
+                </button>
+                <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                    <span className="text-blue-600">{clientA.name}</span>
+                    <ArrowRightLeft size={14} className="text-gray-400" />
+                    <span className="text-pink-600">{clientB.name}</span>
+                </div>
             </div>
-            <button onClick={() => setIsLocked(!isLocked)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${isLocked ? 'bg-amber-100 text-amber-700 border-amber-300' : 'bg-gray-100 text-gray-500 border-gray-300'}`}>
-                {isLocked ? <Lock size={14} /> : <Unlock size={14} />} {isLocked ? '時間鎖定' : '獨立操作'}
+
+            <button 
+                onClick={() => setIsLocked(!isLocked)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${isLocked ? 'bg-amber-100 text-amber-700 border-amber-300' : 'bg-gray-100 text-gray-500 border-gray-300'}`}
+            >
+                {isLocked ? <Lock size={14} /> : <Unlock size={14} />}
+                {isLocked ? '時間鎖定' : '獨立操作'}
             </button>
         </div>
 
+        {/* Dual Grid Container */}
         <div className="flex-1 flex overflow-hidden relative">
+            
+            {/* Left Chart (A) */}
             <div className="flex-1 flex flex-col border-r-2 border-gray-300 relative min-w-0">
                 <div className="flex-1 relative min-h-0">
-                    <PalaceGrid 
-                        client={clientA} 
-                        chartData={chartA} 
-                        relationships={[]} 
-                        historyStack={[]} 
-                        mode="standard" 
-                        selectedPalace={null} 
-                        flyingPalace={selfFlyingA !== null ? selfFlyingA : (activeSide === 'A' ? flyingPalace : null)} 
-                        daXianSeq={daSeqA} 
-                        liuNianYear={liuYearA} 
-                        showXiaoXian={showXiaoA} 
-                        isReverse={isCurrentRevA} 
-                        reverseFlags={reverseFlagsA} 
-                        onToggleInverted={handleToggleReverseA} 
-                        isTwinMode={isTwinA} 
-                        externalGan={null} 
-                        flyingStarsLookup={activeLookupA} 
-                        benMingMajorStarsStr="" 
-                        currentHourZhi={currentHourZhiA} 
-                        isTimeModified={hourA !== clientA.birthHour} 
-                        connections={dummyConnections} 
+                    <PalaceGrid
+                        client={clientA}
+                        chartData={chartA}
+                        relationships={[]}
+                        historyStack={[]}
+                        mode="standard"
+                        selectedPalace={null}
+                        flyingPalace={activeSide === 'A' ? flyingPalace : null}
+                        daXianSeq={daSeqA}
+                        liuNianYear={liuYearA}
+                        showXiaoXian={showXiaoA}
+                        
+                        isReverse={isCurrentRevA}
+                        reverseFlags={reverseFlagsA}
+                        onToggleInverted={handleToggleReverseA}
+                        
+                        isTwinMode={isTwinA}
+                        externalGan={null}
+                        flyingStarsLookup={flyMapBtoA}
+                        benMingMajorStarsStr=""
+                        currentHourZhi={(() => {
+                            let zhi = ZHI[Math.floor((hourA + 1) / 2) % 12];
+                            if (Math.floor((hourA + 1) / 2) % 12 === 0) zhi = (hourA === 23 ? '晚子' : '早子');
+                            return zhi;
+                        })()}
+                        isTimeModified={hourA !== clientA.birthHour}
+                        connections={dummyConnections}
                         daXianList={daListA} 
-                        xiaoXianMingIdx={xiaoXianMingIdxA} 
-                        getRelativeNames={getRelativeNamesA} 
-                        getIsBenMingMing={(idx) => idx === engineA!.getMingPos()} 
-                        getAnchorCoord={getDummyCoords} 
-                        onHistoryBack={dummyNav} 
-                        onNavigate={dummyNav} 
-                        onCompatibility={dummyNav} 
-                        onChangeHour={handleChangeHourA} 
-                        onResetTime={() => setHourA(clientA.birthHour)} 
-                        onToggleTwin={() => setIsTwinA(!isTwinA)} 
-                        onToggleSmallLimit={() => setShowXiaoA(!showXiaoA)} 
-                        onPalaceClick={(idx) => handlePalaceClick('A', idx)} 
-                        onTriggerClick={(idx) => handleTriggerClickA(idx)} 
+                        xiaoXianMingIdx={-1}
+                        getRelativeNames={(idx) => {
+                            let daName = undefined;
+                            if (daSeqA >= 0 && daListA[daSeqA]?.palaceIdx === idx) daName = '大命';
+                            return { daName };
+                        }}
+                        getIsBenMingMing={(idx) => idx === engineA!.getMingPos()}
+                        getAnchorCoord={getDummyCoords}
+                        onHistoryBack={dummyNav}
+                        onNavigate={dummyNav}
+                        onCompatibility={dummyNav}
+                        onChangeHour={handleChangeHourA}
+                        onResetTime={() => setHourA(clientA.birthHour)}
+                        onToggleTwin={() => setIsTwinA(!isTwinA)}
+                        onToggleSmallLimit={() => setShowXiaoA(!showXiaoA)}
+                        onPalaceClick={(idx) => handlePalaceClick('A', idx)}
+                        onTriggerClick={() => {}}
                         currentRealTime={currentRealTimeA}
-                        showCompass={false} 
-                        liuMonth={liuMonthA}
-                        isLiuMonthLeap={isLiuMonthLeapA}
-                        liuDay={liuDayA}
-                        onSetLiuMonth={handleSetLiuMonthA}
-                        onSetLiuDay={handleSetLiuDayA}
-                        liuMonthGan={timeParamsA.liuMonthGan}
-                        liuDayGan={timeParamsA.liuDayGan}
-                        liuMonthIdx={timeParamsA.liuMonthIdx}
-                        liuDayIdx={timeParamsA.liuDayIdx}
                     />
                 </div>
                 {renderControlBar(daListA, daSeqA, setDaSeqA, setLiuYearA, setLiuYearB, engineA!, chartA, liuYearA, 'A', currentRealTimeA)}
             </div>
 
+            {/* Right Chart (B) */}
             <div className="flex-1 flex flex-col relative min-w-0">
                 <div className="flex-1 relative min-h-0">
-                    <PalaceGrid 
-                        client={clientB} 
-                        chartData={chartB} 
-                        relationships={[]} 
-                        historyStack={[]} 
-                        mode="standard" 
-                        selectedPalace={null} 
-                        flyingPalace={selfFlyingB !== null ? selfFlyingB : (activeSide === 'B' ? flyingPalace : null)} 
-                        daXianSeq={daSeqB} 
-                        liuNianYear={liuYearB} 
-                        showXiaoXian={showXiaoB} 
-                        isReverse={isCurrentRevB} 
-                        reverseFlags={reverseFlagsB} 
-                        onToggleInverted={handleToggleReverseB} 
-                        isTwinMode={isTwinB} 
-                        externalGan={null} 
-                        flyingStarsLookup={activeLookupB} 
-                        benMingMajorStarsStr="" 
-                        currentHourZhi={currentHourZhiB} 
-                        isTimeModified={hourB !== clientB.birthHour} 
-                        connections={dummyConnections} 
+                    <PalaceGrid
+                        client={clientB}
+                        chartData={chartB}
+                        relationships={[]}
+                        historyStack={[]}
+                        mode="standard"
+                        selectedPalace={null}
+                        flyingPalace={activeSide === 'B' ? flyingPalace : null}
+                        daXianSeq={daSeqB}
+                        liuNianYear={liuYearB}
+                        showXiaoXian={showXiaoB}
+                        
+                        isReverse={isCurrentRevB}
+                        reverseFlags={reverseFlagsB}
+                        onToggleInverted={handleToggleReverseB}
+
+                        isTwinMode={isTwinB}
+                        externalGan={null}
+                        flyingStarsLookup={flyMapAtoB}
+                        benMingMajorStarsStr=""
+                        currentHourZhi={(() => {
+                            let zhi = ZHI[Math.floor((hourB + 1) / 2) % 12];
+                            if (Math.floor((hourB + 1) / 2) % 12 === 0) zhi = (hourB === 23 ? '晚子' : '早子');
+                            return zhi;
+                        })()}
+                        isTimeModified={hourB !== clientB.birthHour}
+                        connections={dummyConnections}
                         daXianList={daListB} 
-                        xiaoXianMingIdx={xiaoXianMingIdxB} 
-                        getRelativeNames={getRelativeNamesB} 
-                        getIsBenMingMing={(idx) => idx === engineB!.getMingPos()} 
-                        getAnchorCoord={getDummyCoords} 
-                        onHistoryBack={dummyNav} 
-                        onNavigate={dummyNav} 
-                        onCompatibility={dummyNav} 
-                        onChangeHour={handleChangeHourB} 
-                        onResetTime={() => setHourB(clientB.birthHour)} 
-                        onToggleTwin={() => setIsTwinB(!isTwinB)} 
-                        onToggleSmallLimit={() => setShowXiaoB(!showXiaoB)} 
-                        onPalaceClick={(idx) => handlePalaceClick('B', idx)} 
-                        onTriggerClick={(idx) => handleTriggerClickB(idx)} 
+                        xiaoXianMingIdx={-1}
+                        getRelativeNames={(idx) => {
+                            let daName = undefined;
+                            if (daSeqB >= 0 && daListB[daSeqB]?.palaceIdx === idx) daName = '大命';
+                            return { daName };
+                        }}
+                        getIsBenMingMing={(idx) => idx === engineB!.getMingPos()}
+                        getAnchorCoord={getDummyCoords}
+                        onHistoryBack={dummyNav}
+                        onNavigate={dummyNav}
+                        onCompatibility={dummyNav}
+                        onChangeHour={handleChangeHourB}
+                        onResetTime={() => setHourB(clientB.birthHour)}
+                        onToggleTwin={() => setIsTwinB(!isTwinB)}
+                        onToggleSmallLimit={() => setShowXiaoB(!showXiaoB)}
+                        onPalaceClick={(idx) => handlePalaceClick('B', idx)}
+                        onTriggerClick={() => {}}
                         currentRealTime={currentRealTimeB}
-                        showCompass={false}
-                        liuMonth={liuMonthB}
-                        isLiuMonthLeap={isLiuMonthLeapB}
-                        liuDay={liuDayB}
-                        onSetLiuMonth={handleSetLiuMonthB}
-                        onSetLiuDay={handleSetLiuDayB}
-                        liuMonthGan={timeParamsB.liuMonthGan}
-                        liuDayGan={timeParamsB.liuDayGan}
-                        liuMonthIdx={timeParamsB.liuMonthIdx}
-                        liuDayIdx={timeParamsB.liuDayIdx}
                     />
                 </div>
                 {renderControlBar(daListB, daSeqB, setDaSeqB, setLiuYearB, setLiuYearA, engineB!, chartB, liuYearB, 'B', currentRealTimeB)}
             </div>
+
         </div>
     </div>
   );

@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react';
 import { issueGuestToken, getPaywallPhase, getFeatureRuntime } from '../db';
 
-// ✅ [關鍵修正] 必須匯出這些常數，SingleChart 才能使用
 export const DIVINATION_COST = 50;
 export const FEATURE_YEARLY_ADVICE_ENABLED = false;
 
@@ -27,7 +26,10 @@ export type PaywallMode =
   | 'CONFIRM_DEDUCT' 
   | 'INSUFFICIENT' 
   | 'MUST_LOGIN' 
-  | 'GUEST_ALREADY_USED';
+  | 'GUEST_ALREADY_USED'
+  | 'TRIAL_AVAILABLE'
+  | 'VIP_ACCESS'
+  | 'REQUIRE_SUBSCRIPTION';
 
 export const usePaywall = (userProfile: any) => {
   const [dbPhase, setDbPhase] = useState<string | null>(null);
@@ -48,9 +50,7 @@ export const usePaywall = (userProfile: any) => {
         const phase = await getPaywallPhase();
         const normalized = normalizePhase(phase);
         if (normalized) setDbPhase(normalized);
-      } catch (e) {
-        // Fallback
-      }
+      } catch (e) {}
     };
     fetchPhase();
   }, []);
@@ -65,17 +65,9 @@ export const usePaywall = (userProfile: any) => {
     let cost = DIVINATION_COST; 
     let announcement = '';
 
-    // 1. 訪客邏輯
-    if (!isMember) {
-        return { canAccess: true, mode: 'GUEST_FREE', cost, announcement };
-    }
+    if (!isMember) return { canAccess: true, mode: 'GUEST_FREE', cost, announcement };
+    if (!freeDivinationUsed) return { canAccess: true, mode: 'MEMBER_FREE', cost, announcement };
 
-    // 2. 會員邏輯 - 免費額度
-    if (!freeDivinationUsed) {
-      return { canAccess: true, mode: 'MEMBER_FREE', cost, announcement };
-    }
-
-    // 3. Phase 邏輯
     switch (activePhase) {
       case 'SOFT_LAUNCH':
         return { canAccess: true, mode: 'SOFT_NOTICE', cost, announcement };
