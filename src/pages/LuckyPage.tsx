@@ -1,44 +1,62 @@
-import React, { useState } from 'react';
+// FILE: src/pages/LuckyPage.tsx
+import React, { useState, useEffect } from 'react';
 import { LuckyDivinationGame } from '../components/LuckyDivinationGame';
-import { usePaywall } from '../hooks/usePaywall';
-import { issueGuestToken, consumeFeature } from '../db';
-import { Sparkles, ArrowRight, Globe, Loader2 } from 'lucide-react';
-
-const FEATURE_KEY = 'lucky_divination';
+import { getMyProfile, consumeDivinationV2, getFeatureRuntime } from '../db';
+import { Sparkles, ArrowRight, Globe, Loader2, Lock, ShoppingBag } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export const LuckyPage = () => {
+  const navigate = useNavigate();
   const [view, setView] = useState<'LANDING' | 'GAME'>('LANDING');
-  const { runtime, loading } = usePaywall(FEATURE_KEY);
+  const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [isVip, setIsVip] = useState(false);
+  const [remainingTrials, setRemainingTrials] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
+  
+  // [新增] 狀態：是否收費模式
+  const [isPaidMode, setIsPaidMode] = useState(false);
+
+  useEffect(() => {
+      const init = async () => {
+          // 1. 讀取收費設定
+          const config = await getFeatureRuntime('lucky_divination');
+          const paidMode = config ? config.is_paid : false; // 預設免費
+          setIsPaidMode(paidMode);
+
+          // 2. 讀取 VIP 狀態
+          const p = await getMyProfile();
+          let vip = false;
+          if (p && p.accessExpiry) {
+              if (new Date(p.accessExpiry) > new Date()) {
+                  vip = true;
+              }
+          }
+          setIsVip(vip);
+
+          // 3. 讀取免費次數 (僅在收費模式下有意義)
+          const storageKey = 'dabao_divination_trials';
+          const usedTrials = parseInt(localStorage.getItem(storageKey) || '0', 10);
+          setRemainingTrials(Math.max(0, 3 - usedTrials));
+
+          setLoading(false);
+      };
+      init();
+  }, []);
 
   const handleStart = async () => {
     setActionLoading(true);
     setMessage(null);
     try {
-      let token = localStorage.getItem('dabao_guest_token');
-      if (!token) {
-        const res = await issueGuestToken();
-        if (res.success && res.token) {
-          token = res.token;
-          localStorage.setItem('dabao_guest_token', token);
-        } else {
-          throw new Error('無法初始化訪客身份');
-        }
-      }
-
-      const result = await consumeFeature(FEATURE_KEY, token);
+      const result = await consumeDivinationV2();
 
       if (result.success) {
+        if (result.remainingTrials !== undefined) {
+            setRemainingTrials(result.remainingTrials);
+        }
         setView('GAME');
       } else {
-        if (result.mode === 'LOGIN_REQUIRED') {
-            setMessage('免費次數已用完，請登入或註冊以繼續使用。');
-        } else if (result.mode === 'TOKEN_REQUIRED') {
-            setMessage('系統驗證失敗，請重整頁面後再試。');
-        } else {
-            setMessage(result.message || '暫無法使用此功能');
-        }
+        setMessage(result.message || '免費次數已用完，請升級訂閱方案解鎖無限次數。');
       }
     } catch (e: any) {
       setMessage(e.message || '發生未知錯誤');
@@ -66,12 +84,17 @@ export const LuckyPage = () => {
 
         <div>
           <h1 className="text-3xl font-bold tracking-widest mb-4">吉凶占卜</h1>
-          {runtime?.announcement?.enabled && (
-             <div className="bg-white/5 border border-white/10 p-4 rounded-xl text-sm mb-4 text-left">
-               <p className="font-bold text-amber-400 mb-1">{runtime.announcement.title}</p>
-               <p className="opacity-80 leading-relaxed">{runtime.announcement.body}</p>
+          
+          {/* [修改] 只有在「收費模式」且「非VIP」且「還有次數」時，才顯示剩餘次數提示 */}
+          {isPaidMode && !isVip && remainingTrials > 0 && (
+             <div className="bg-white/5 border border-purple-500/30 p-4 rounded-xl text-sm mb-4 text-left shadow-lg">
+               <p className="font-bold text-amber-400 mb-2">🎁 免費體驗中</p>
+               <p className="opacity-90 leading-relaxed text-slate-300">
+                   您還有 <span className="font-bold text-white text-xl mx-1">{remainingTrials}</span> 次免費體驗機會。<br/>本功能將轉為訂閱制，請把握機會。
+               </p>
              </div>
           )}
+          
           <p className="text-slate-400 leading-relaxed">
             誠心想著你要詢問的事情，<br/>透過星曜感應，取得當下的指引。
           </p>
@@ -84,10 +107,14 @@ export const LuckyPage = () => {
                 </div>
             )}
 
-            {message === '免費次數已用完，請登入或註冊以繼續使用。' ? (
-                 <button onClick={() => window.location.href='/login'} className="w-full py-4 bg-emerald-600 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-emerald-900/30">
-                    註冊掌握完整運勢 <ArrowRight size={20}/>
-                 </button>
+            {/* [修改] 只有在「收費模式」且「非VIP」且「次數用盡」時，才顯示鎖頭與升級按鈕 */}
+            {isPaidMode && !isVip && remainingTrials <= 0 ? (
+                 <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 text-center shadow-2xl mt-4">
+                     <div className="w-12 h-12 bg-amber-100/10 text-amber-400 rounded-full flex items-center justify-center mx-auto mb-4"><Lock size={24}/></div>
+                     <h3 className="text-lg font-bold text-white mb-2">免費次數已用盡</h3>
+                     <p className="text-slate-400 text-sm mb-6">升級訂閱方案，解鎖無限次數的吉凶占卜與完整命理解析。</p>
+                     <button onClick={() => navigate('/store')} className="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg hover:brightness-110 transition-all"><ShoppingBag size={18}/> 前往升級</button>
+                 </div>
             ) : (
                 <button 
                   onClick={handleStart} 

@@ -1,3 +1,4 @@
+// FILE: src/pages/SystemAdmin.tsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Database, ShoppingBag, Users, Sliders, LogOut, Settings } from 'lucide-react';
@@ -35,7 +36,7 @@ export const SystemAdmin: React.FC = () => {
                         <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-2">營運管理</div>
                         
                         <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-bold transition-all ${activeTab === 'users' ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200' : 'text-gray-600 hover:bg-gray-50'}`}><Users size={18} /> 使用者與點數</button>
-                        <button onClick={() => setActiveTab('products')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-bold transition-all ${activeTab === 'products' ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200' : 'text-gray-600 hover:bg-gray-50'}`}><ShoppingBag size={18} /> 點數商品管理</button>
+                        <button onClick={() => setActiveTab('products')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-bold transition-all ${activeTab === 'products' ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200' : 'text-gray-600 hover:bg-gray-50'}`}><ShoppingBag size={18} /> 占卜商品管理</button>
                         <button onClick={() => setActiveTab('config')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-bold transition-all ${activeTab === 'config' ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200' : 'text-gray-600 hover:bg-gray-50'}`}><Settings size={18} /> 功能營運設定</button>
                         
                         <div className="border-t border-gray-100 my-4"></div>
@@ -47,7 +48,6 @@ export const SystemAdmin: React.FC = () => {
                 </aside>
 
                 <main className="flex-1 overflow-hidden relative bg-slate-50 flex flex-col">
-                    {/* [修正] 傳入 isEmbedded={true} 讓 UserManagementModal 正確顯示 */}
                     {activeTab === 'users' && <div className="w-full h-full animate-in fade-in zoom-in duration-200"><UserManagementModal isEmbedded={true} /></div>}
                     {activeTab === 'products' && <div className="w-full h-full overflow-y-auto p-8 animate-in fade-in slide-in-from-bottom-4 duration-300"><div className="max-w-5xl mx-auto"><ProductManagement /></div></div>}
                     {activeTab === 'config' && <div className="w-full h-full overflow-y-auto p-8 animate-in fade-in slide-in-from-bottom-4 duration-300"><div className="max-w-4xl mx-auto"><FeatureConfigPanel /></div></div>}
