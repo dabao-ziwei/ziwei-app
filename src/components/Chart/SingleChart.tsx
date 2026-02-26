@@ -245,9 +245,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
     if (mode === 'divination') return displayEngine.getChartData();
 
-    // ✅ 關鍵：未選大限時，計算用「第一大限」的 daGan（不是 -1）
-    const effectiveDaXianSeq = daXianSeq === -1 ? 0 : daXianSeq;
-
     let daGan = -1,
       liuGan = -1,
       liuZhi = -1,
@@ -256,12 +253,14 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     const startPos = displayEngine.getMingPos();
     const direction = tempBaseData.direction || 1;
 
-    if (effectiveDaXianSeq >= 0) {
-      const offset = effectiveDaXianSeq * direction;
+    // ✅ 修正點：嚴格判定！只有在使用者真正選了大限 (daXianSeq >= 0) 時，才取出大限天干 (daGan)
+    if (daXianSeq >= 0) {
+      const offset = daXianSeq * direction;
       const daXianPalaceIdx = (startPos + offset + 120) % 12;
       const p = tempBaseData.palaces[daXianPalaceIdx];
       if (p) daGan = p.ganIndex;
     }
+    
     if (liuNianYear) {
       liuGan = (liuNianYear - 4) % 10;
       liuZhi = (liuNianYear - 4) % 12;
@@ -383,7 +382,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     }
   };
 
-  // [P0 Fix] Atomic Handler for Guest (Retry) & Member
   const handleDivinationClick = async () => {
     const access = checkAccess();
     if (access.canAccess) {
@@ -509,7 +507,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     return list;
   }, [baseChartData, baseEngine, mode]);
 
-  // ✅ 永遠使用「有效大限」：未選 = 0
+  // ✅ 底部流年列專用：未選大限時，預設顯示第一大限 (0) 的流年
   const effectiveDaXianSeq = daXianSeq === -1 ? 0 : daXianSeq;
 
   const liuNianList = useMemo(() => {
@@ -577,7 +575,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   };
 
   const handleLiuNianClick = (year: number) => {
-    // ✅ 若目前未選大限，仍可直接點流年：視覺上不一定要強制選，但計算已用 effectiveDaXianSeq
     setLiuNianYear(liuNianYear === year ? null : year);
     setLiuMonth(null);
     setLiuDay(null);
