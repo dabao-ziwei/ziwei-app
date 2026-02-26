@@ -1,9 +1,10 @@
+// FILE: src/components/AddChartModal.tsx
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Loader2, Link as LinkIcon, Search } from 'lucide-react'; 
+import { X, Loader2, Link as LinkIcon, Search, Clock } from 'lucide-react'; 
 import { loadClients, type Client } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
 import { TagSelect } from './TagSelect'; 
-import { ZHI } from '../logic/constants'; // 引入 ZHI 以顯示時辰
+import { ZHI } from '../logic/constants'; 
 
 interface AddChartModalProps {
   isOpen: boolean;
@@ -13,14 +14,49 @@ interface AddChartModalProps {
 }
 
 const CATEGORIES = ['我', '家人', '朋友', '客戶', '名人', '其他'];
-
-// 鎖定預設項目，不亂加
 const DEFAULT_RELATIONS = ['配偶', '情侶', '父親', '母親', '子女', '哥哥', '姐姐', '弟弟', '妹妹', '親戚', '朋友'];
 
-// 輔助：格式化完整時間顯示
+// --- 時辰快捷選單對照表 ---
+const SHI_CHEN_OPTIONS = [
+  { label: '或選時辰', value: '' },
+  { label: '早子 (00-01)', value: '00' },
+  { label: '晚子 (23-00)', value: '23' },
+  { label: '丑 (01-03)', value: '02' },
+  { label: '寅 (03-05)', value: '04' },
+  { label: '卯 (05-07)', value: '06' },
+  { label: '辰 (07-09)', value: '08' },
+  { label: '巳 (09-11)', value: '10' },
+  { label: '午 (11-13)', value: '12' },
+  { label: '未 (13-15)', value: '14' },
+  { label: '申 (15-17)', value: '16' },
+  { label: '酉 (17-19)', value: '18' },
+  { label: '戌 (19-21)', value: '20' },
+  { label: '亥 (21-23)', value: '22' }
+];
+
+// 根據輸入的小時，自動推算對應的時辰 value
+const getShichenValue = (hh: string) => {
+    if (!hh) return '';
+    const h = parseInt(hh, 10);
+    if (isNaN(h)) return '';
+    if (h === 0) return '00';
+    if (h === 23) return '23';
+    if (h === 1 || h === 2) return '02';
+    if (h === 3 || h === 4) return '04';
+    if (h === 5 || h === 6) return '06';
+    if (h === 7 || h === 8) return '08';
+    if (h === 9 || h === 10) return '10';
+    if (h === 11 || h === 12) return '12';
+    if (h === 13 || h === 14) return '14';
+    if (h === 15 || h === 16) return '16';
+    if (h === 17 || h === 18) return '18';
+    if (h === 19 || h === 20) return '20';
+    if (h === 21 || h === 22) return '22';
+    return '';
+};
+
 const formatFullDate = (c: Client) => {
     const min = c.birthMinute.toString().padStart(2, '0');
-    // 計算地支
     const zhiIdx = Math.floor((c.birthHour + 1) / 2) % 12;
     let zhi = ZHI[zhiIdx];
     if (zhiIdx === 0 && c.birthHour === 23) zhi = '晚子';
@@ -42,7 +78,6 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
   const [category, setCategory] = useState('客戶');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 快速關聯狀態
   const [linkTarget, setLinkTarget] = useState<Client | null>(null);
   const [linkType, setLinkType] = useState('配偶');
   const [isSearchingLink, setIsSearchingLink] = useState(false);
@@ -58,7 +93,6 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
   useEffect(() => {
     if (isOpen) {
       loadClients().then(setAllClients);
-      // 這裡不再載入自訂關係，只使用 DEFAULT_RELATIONS
       
       if (editData) {
         setName(editData.name);
@@ -79,7 +113,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
         setMinute('');
         setCategory('客戶');
         setLinkTarget(null);
-        setLinkType('配偶'); // 重置為預設
+        setLinkType('配偶');
       }
       setTimeout(() => yearRef.current?.focus(), 100);
     }
@@ -109,6 +143,14 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
       e.preventDefault();
       prevRef.current.focus();
     }
+  };
+
+  const handleShiChenChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const selectedValue = e.target.value;
+      if (selectedValue !== '') {
+          setHour(selectedValue);
+          setMinute('00');
+      }
   };
 
   const handleSubmit = async () => {
@@ -195,18 +237,37 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="輸入姓名" className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 w-full">
             <label className="text-xs font-bold text-gray-500 block">時間 (西元 / 24小時制)</label>
-            <div className="flex items-center gap-2">
-              <input ref={yearRef} type="text" inputMode="numeric" pattern="[0-9]*" value={year} onChange={(e) => handleDateInput(e, setYear, 4, monthRef)} onKeyDown={(e) => handleKeyDown(e, year, undefined)} placeholder="YYYY" className="px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none w-[28%]" />
-              <span className="text-gray-400">-</span>
-              <input ref={monthRef} type="text" inputMode="numeric" pattern="[0-9]*" value={month} onChange={(e) => handleDateInput(e, setMonth, 2, dayRef)} onKeyDown={(e) => handleKeyDown(e, month, yearRef)} placeholder="MM" className="px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none w-[18%]" />
-              <span className="text-gray-400">-</span>
-              <input ref={dayRef} type="text" inputMode="numeric" pattern="[0-9]*" value={day} onChange={(e) => handleDateInput(e, setDay, 2, hourRef)} onKeyDown={(e) => handleKeyDown(e, day, monthRef)} placeholder="DD" className="px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none w-[18%]" />
-              <span className="text-gray-300 mx-1">|</span>
-              <input ref={hourRef} type="text" inputMode="numeric" pattern="[0-9]*" value={hour} onChange={(e) => handleDateInput(e, setHour, 2, minuteRef)} onKeyDown={(e) => handleKeyDown(e, hour, dayRef)} placeholder="hh" className="px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none w-[18%]" />
-              <span className="text-gray-400">:</span>
-              <input ref={minuteRef} type="text" inputMode="numeric" pattern="[0-9]*" value={minute} onChange={(e) => handleDateInput(e, setMinute, 2, undefined)} onKeyDown={(e) => handleKeyDown(e, minute, hourRef)} placeholder="mm" className="px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none w-[18%]" />
+            
+            {/* --- 動態彈性排版，防止右側被截斷 --- */}
+            <div className="flex items-center gap-1 sm:gap-1.5 w-full">
+              <input ref={yearRef} type="text" inputMode="numeric" pattern="[0-9]*" value={year} onChange={(e) => handleDateInput(e, setYear, 4, monthRef)} onKeyDown={(e) => handleKeyDown(e, year, undefined)} placeholder="YYYY" className="flex-[1.5] min-w-0 px-1 sm:px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+              <span className="text-gray-400 shrink-0">-</span>
+              <input ref={monthRef} type="text" inputMode="numeric" pattern="[0-9]*" value={month} onChange={(e) => handleDateInput(e, setMonth, 2, dayRef)} onKeyDown={(e) => handleKeyDown(e, month, yearRef)} placeholder="MM" className="flex-1 min-w-0 px-1 sm:px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+              <span className="text-gray-400 shrink-0">-</span>
+              <input ref={dayRef} type="text" inputMode="numeric" pattern="[0-9]*" value={day} onChange={(e) => handleDateInput(e, setDay, 2, hourRef)} onKeyDown={(e) => handleKeyDown(e, day, monthRef)} placeholder="DD" className="flex-1 min-w-0 px-1 sm:px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+              <span className="text-gray-300 shrink-0 mx-0.5">|</span>
+              <input ref={hourRef} type="text" inputMode="numeric" pattern="[0-9]*" value={hour} onChange={(e) => handleDateInput(e, setHour, 2, minuteRef)} onKeyDown={(e) => handleKeyDown(e, hour, dayRef)} placeholder="hh" className="flex-1 min-w-0 px-1 sm:px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+              <span className="text-gray-400 shrink-0">:</span>
+              <input ref={minuteRef} type="text" inputMode="numeric" pattern="[0-9]*" value={minute} onChange={(e) => handleDateInput(e, setMinute, 2, undefined)} onKeyDown={(e) => handleKeyDown(e, minute, hourRef)} placeholder="mm" className="flex-1 min-w-0 px-1 sm:px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+              
+              <div className="relative flex-[2.2] min-w-0 ml-1 shrink-0">
+                <select 
+                    value={getShichenValue(hour)}
+                    onChange={handleShiChenChange}
+                    className="w-full appearance-none bg-blue-50 border border-blue-200 text-blue-700 font-bold text-xs py-2 pl-1.5 pr-6 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap"
+                >
+                    {SHI_CHEN_OPTIONS.map((opt, idx) => (
+                        <option key={idx} value={opt.value} disabled={opt.value === ''} className="text-gray-700">
+                            {opt.label}
+                        </option>
+                    ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-1.5 text-blue-500">
+                    <Clock size={12} />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -250,7 +311,6 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
                                         className="p-2 hover:bg-blue-50 cursor-pointer text-sm flex justify-between items-center"
                                     >
                                         <span className="font-medium text-gray-700">{c.name}</span>
-                                        {/* 完整時間顯示 (Requirement 1) */}
                                         <span className="text-gray-400 text-xs">{formatFullDate(c)}</span>
                                     </div>
                                 ))}
@@ -264,7 +324,6 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
                             <span className="font-bold text-blue-800">{linkTarget.name}</span>
                             <span className="text-gray-600">的...</span>
                         </div>
-                        {/* 這裡僅使用 DEFAULT_RELATIONS，不包含自訂項目 (Requirement 2) */}
                         <TagSelect 
                             options={DEFAULT_RELATIONS} 
                             value={linkType} 
