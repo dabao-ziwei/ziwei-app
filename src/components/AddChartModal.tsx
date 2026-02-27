@@ -1,6 +1,6 @@
 // FILE: src/components/AddChartModal.tsx
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Loader2, Link as LinkIcon, Search, Clock } from 'lucide-react'; 
+import { X, Loader2, Link as LinkIcon, Search, Clock, Star } from 'lucide-react'; 
 import { loadClients, type Client } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
 import { TagSelect } from './TagSelect'; 
@@ -76,6 +76,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
   const [minute, setMinute] = useState('');
   
   const [category, setCategory] = useState('客戶');
+  const [isFavorite, setIsFavorite] = useState(false); // [新增] 最愛狀態
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [linkTarget, setLinkTarget] = useState<Client | null>(null);
@@ -102,7 +103,8 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
         setDay(editData.birthDay.toString().padStart(2, '0'));
         setHour(editData.birthHour.toString().padStart(2, '0'));
         setMinute(editData.birthMinute.toString().padStart(2, '0'));
-        setCategory(editData.type);
+        setCategory(editData.type || '客戶');
+        setIsFavorite(editData.is_favorite ?? false); // 載入最愛狀態
       } else {
         setGender('女');
         setName('');
@@ -112,6 +114,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
         setHour('');
         setMinute('');
         setCategory('客戶');
+        setIsFavorite(false);
         setLinkTarget(null);
         setLinkType('配偶');
       }
@@ -184,7 +187,8 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
         birthHour,
         birthMinute,
         type: category as any,
-        majorStars: majorStarNames
+        majorStars: majorStarNames,
+        is_favorite: isFavorite // [新增] 將最愛狀態送出
       };
 
       const payload: any = { ...clientData };
@@ -240,7 +244,6 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
           <div className="space-y-2 w-full">
             <label className="text-xs font-bold text-gray-500 block">時間 (西元 / 24小時制)</label>
             
-            {/* --- 動態彈性排版，防止右側被截斷 --- */}
             <div className="flex items-center gap-1 sm:gap-1.5 w-full">
               <input ref={yearRef} type="text" inputMode="numeric" pattern="[0-9]*" value={year} onChange={(e) => handleDateInput(e, setYear, 4, monthRef)} onKeyDown={(e) => handleKeyDown(e, year, undefined)} placeholder="YYYY" className="flex-[1.5] min-w-0 px-1 sm:px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
               <span className="text-gray-400 shrink-0">-</span>
@@ -273,7 +276,22 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
 
           <div className="space-y-2">
             <label className="text-xs font-bold text-gray-500 block">分類</label>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 items-center">
+              {/* --- 新增：將最愛按鈕放在分類的最前面 --- */}
+              <button
+                onClick={() => setIsFavorite(!isFavorite)}
+                className={`px-3 py-1.5 rounded-full text-sm font-bold transition-all flex items-center gap-1 border ${
+                  isFavorite 
+                    ? 'bg-yellow-50 text-yellow-600 border-yellow-300 shadow-sm' 
+                    : 'bg-white text-gray-400 border-gray-200 hover:text-yellow-500 hover:border-yellow-200'
+                }`}
+                title={isFavorite ? "移除最愛" : "加入最愛"}
+              >
+                <Star size={14} className={isFavorite ? "fill-current" : ""} /> 最愛
+              </button>
+              
+              <div className="w-px h-4 bg-gray-200 mx-1"></div>
+              
               {CATEGORIES.map(cat => (
                 <button key={cat} onClick={() => setCategory(cat)} className={`px-4 py-1.5 rounded-full text-sm transition-all border ${category === cat ? 'bg-red-600 text-white border-red-600 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`}>{cat}</button>
               ))}

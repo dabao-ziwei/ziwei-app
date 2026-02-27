@@ -14,10 +14,11 @@ import {
   type YearAdviceRule,
   consumeDivinationV2,
   issueGuestToken,
+  toggleFavorite // [新增] 引入切換最愛的 API
 } from '../../db';
 import { ZiWeiEngine } from '../../logic/engine';
 import { GAN, ZHI, PALACE_NAMES, SIHUA_TABLE } from '../../logic/constants';
-import { Loader2, UserPlus, X, ChevronLeft, Camera, Users, Compass, Sparkles, MessageCircle } from 'lucide-react';
+import { Loader2, UserPlus, X, ChevronLeft, Camera, Users, Compass, Sparkles, MessageCircle, Star } from 'lucide-react'; // [新增] 引入 Star 圖示
 import { getFeaturePermission } from '../../logic/permissions';
 import { Lunar, LunarYear } from 'lunar-typescript';
 import { YearlyAnalysisBoard } from './YearlyAnalysisBoard';
@@ -253,7 +254,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     const startPos = displayEngine.getMingPos();
     const direction = tempBaseData.direction || 1;
 
-    // ✅ 修正點：嚴格判定！只有在使用者真正選了大限 (daXianSeq >= 0) 時，才取出大限天干 (daGan)
     if (daXianSeq >= 0) {
       const offset = daXianSeq * direction;
       const daXianPalaceIdx = (startPos + offset + 120) % 12;
@@ -340,6 +340,30 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
   const handleCompatibility = (target: Client) => {
     alert(`即將與 ${target.name} 進行合盤分析 (開發中)`);
+  };
+
+  // --- [新增] 切換最愛狀態邏輯 (樂觀更新) ---
+  const handleToggleFavorite = async () => {
+      if (!client || !client.id || client.id.startsWith('temp-')) return;
+      
+      const currentFav = !!client.is_favorite;
+      const newFav = !currentFav;
+      
+      // 樂觀更新 UI
+      setClient(prev => prev ? { ...prev, is_favorite: newFav } : prev);
+      
+      try {
+          const success = await toggleFavorite(client.id, newFav);
+          if (!success) {
+              // 失敗時退回狀態
+              setClient(prev => prev ? { ...prev, is_favorite: currentFav } : prev);
+              alert('設定最愛失敗，請檢查網路連線');
+          }
+      } catch (err) {
+          // 失敗時退回狀態
+          setClient(prev => prev ? { ...prev, is_favorite: currentFav } : prev);
+          console.error("Toggle Favorite Error:", err);
+      }
   };
 
   const benMingMajorStarsStr = useMemo(() => {
@@ -507,7 +531,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     return list;
   }, [baseChartData, baseEngine, mode]);
 
-  // ✅ 底部流年列專用：未選大限時，預設顯示第一大限 (0) 的流年
   const effectiveDaXianSeq = daXianSeq === -1 ? 0 : daXianSeq;
 
   const liuNianList = useMemo(() => {
@@ -715,6 +738,19 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
             >
               <Compass size={16} />
             </button>
+
+            {/* --- 新增：命盤介面的加入最愛按鈕 --- */}
+            {(!client?.id?.startsWith('temp-')) && (
+              <button
+                onClick={handleToggleFavorite}
+                className={`px-3 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all text-sm font-bold shadow-sm border
+                  ${client?.is_favorite ? 'bg-yellow-50 text-yellow-600 border-yellow-300' : 'bg-white text-gray-400 border-gray-300 hover:text-yellow-500 hover:bg-yellow-50'}
+                `}
+                title={client?.is_favorite ? "移除最愛" : "加入最愛"}
+              >
+                <Star size={16} className={client?.is_favorite ? "fill-current" : ""} />
+              </button>
+            )}
 
             {FEATURE_YEARLY_ADVICE_ENABLED && (
               <button
@@ -939,7 +975,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         </div>
       )}
 
-      {/* --- 底部：流年列（永遠顯示；未選大限 = 第一大限） --- */}
+      {/* --- 底部：流年列 --- */}
       {mode !== 'divination' && daXianList.length > 0 && (
         <div className="shrink-0 bg-slate-50 border-t border-gray-200 w-full z-40 overflow-hidden">
           <div className="flex overflow-x-auto no-scrollbar w-full">
