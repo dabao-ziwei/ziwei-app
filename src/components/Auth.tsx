@@ -1,6 +1,7 @@
+// FILE: src/components/Auth.tsx
 import React, { useState } from 'react';
 import { supabase } from '../supabase';
-import { Lock, Mail, Loader2, Cpu, CheckSquare, Square, ArrowLeft, Globe } from 'lucide-react';
+import { Lock, Mail, Loader2, Cpu, CheckSquare, Square, ArrowLeft, Globe, ShieldCheck } from 'lucide-react';
 import { APP_CONFIG } from '../config';
 import { getErrorMessage } from '../logic/errorMapping';
 
@@ -69,8 +70,8 @@ export const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative overflow-y-auto">
-      <div className="bg-white w-full max-w-sm p-8 rounded-2xl shadow-xl border border-slate-100 relative overflow-hidden z-10">
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 relative overflow-y-auto">
+      <div className="bg-white w-full max-w-sm p-8 rounded-2xl shadow-xl border border-slate-100 relative overflow-hidden z-10 my-auto">
         
         {/* 頂部裝飾條 */}
         <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-500 to-cyan-400"></div>
@@ -172,7 +173,6 @@ export const Auth = () => {
               
               <span className="text-slate-200">|</span>
 
-              {/* [修正] 官網連結直接並列在此 */}
               <a 
                 href="https://www.dabao.life" 
                 target="_blank" 
@@ -197,8 +197,19 @@ export const Auth = () => {
 
       </div>
       
-      <div className="absolute bottom-4 text-slate-400 text-xs font-mono opacity-50">
-        © {new Date().getFullYear()} {APP_CONFIG.appName}
+      {/* 頁面最底部：服務條款與版權宣告 */}
+      <div className="w-full flex flex-col items-center gap-3 text-slate-400 text-xs mt-8 pb-4">
+        <a 
+          href="/legal" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="flex items-center gap-1.5 hover:text-slate-600 transition-colors underline underline-offset-4"
+        >
+          <ShieldCheck size={14} /> 服務條款與隱私權政策
+        </a>
+        <div className="font-mono opacity-60">
+          © {new Date().getFullYear()} {APP_CONFIG.appName}
+        </div>
       </div>
     </div>
   );
