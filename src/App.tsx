@@ -1,3 +1,5 @@
+// FILE: src/App.tsx
+import { LegalPage } from './pages/LegalPage';
 import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet, useNavigate } from 'react-router-dom';
 import { ChartBoard } from './components/ChartBoard';
@@ -9,17 +11,16 @@ import { Dashboard } from './pages/Dashboard';
 import { saveClient, type Client } from './db';
 import { supabase } from './supabase';
 import { Loader2 } from 'lucide-react';
-import { RequireMeChart } from './components/RequireMeChart'; // [新增]
+import { RequireMeChart } from './components/RequireMeChart'; 
 
 import { DualChart } from './components/Chart/DualChart';
 import { CompatibilitySetup } from './pages/CompatibilitySetup';
 import { LuckyPage } from './pages/LuckyPage'; 
 import { StorePage } from './pages/StorePage';
 import { SystemAdmin } from './pages/SystemAdmin';
+import { BookingPage } from './pages/BookingPage';
 
-// [效能監控] Vercel Speed Insights
 import { SpeedInsights } from "@vercel/speed-insights/react";
-// [流量分析] Vercel Analytics
 import { Analytics } from "@vercel/analytics/react";
 
 function App() {
@@ -84,7 +85,6 @@ function App() {
     if (!session) return <Navigate to="/login" replace />;
     return (
       <div className="w-full h-screen bg-[#f8f9fa]">
-        {/* [關鍵修改] 使用 RequireMeChart 包裹 Outlet，強制要求命盤 */}
         <RequireMeChart>
             <Outlet />
         </RequireMeChart>
@@ -110,9 +110,16 @@ function App() {
       <Routes>
         <Route path="/login" element={!session ? <Auth /> : <Navigate to="/" replace />} />
         
-        {/* 公開占卜頁面 */}
+        {/* ========================================== */}
+        {/* 公開頁面區 (免登入即可訪問) */}
+        {/* ========================================== */}
         <Route path="/lucky" element={<LuckyPage />} />
+        <Route path="/booking" element={<BookingPage />} /> 
+        <Route path="/legal" element={<LegalPage />} /> {/* 移出來了！現在 LINE 審核看得到了 */}
         
+        {/* ========================================== */}
+        {/* 保護頁面區 (必須登入) */}
+        {/* ========================================== */}
         <Route element={<ProtectedLayout />}>
           <Route path="/" element={<Dashboard />} />
           
@@ -136,7 +143,6 @@ function App() {
           <Route path="/compatibility" element={<CompatibilitySetup />} />
           <Route path="/dual-chart" element={<DualChart />} />
           <Route path="/divination" element={<ChartBoard mode="divination" />} />
-          
           <Route path="/admin" element={<SystemAdmin />} />
           <Route path="/store" element={<StorePage />} />
         </Route>
