@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
     Sparkles, Menu, LogOut, Loader2, PlusCircle, 
-    FileText, Globe, Sliders, Gift, ShoppingCart, ArrowRight
+    FileText, Globe, Sliders, Gift, ShoppingCart, ArrowRight, Calendar
 } from 'lucide-react';
 import { supabase } from '../supabase';
 import { 
@@ -353,6 +353,14 @@ export const Dashboard: React.FC = () => {
 
             <div className="flex items-center gap-4">
                 <div className="hidden md:flex items-center gap-3">
+                    
+                    {/* [物理性隱藏] 預約按鈕已徹底註解掉，測試請手動輸入網址 /booking */}
+                    {/*
+                    <button onClick={() => navigate('/booking')} className="px-4 py-2 bg-emerald-800/40 hover:bg-emerald-600/50 text-emerald-300 rounded-lg text-sm font-bold flex items-center gap-2 transition-all border border-emerald-700/50">
+                        <Calendar size={16} /> 預約諮詢
+                    </button>
+                    */}
+
                     <button onClick={() => navigate('/store')} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/80 rounded-lg border border-slate-700/50 hover:bg-slate-700 transition-colors group">
                         <ShoppingCart size={16} className="text-yellow-400 group-hover:text-white transition-colors" />
                         <span className="text-sm font-bold text-yellow-400 tracking-tight">訂閱方案中心</span>
@@ -376,7 +384,16 @@ export const Dashboard: React.FC = () => {
         </main>
         
         {/* Mobile Bottom Bar */}
-        <div className="shrink-0 px-6 py-4 pb-8 bg-[#0f172a]/90 backdrop-blur-xl border-t border-white/5 flex justify-evenly items-center z-50 md:hidden">
+        <div className="shrink-0 px-2 py-4 pb-8 bg-[#0f172a]/90 backdrop-blur-xl border-t border-white/5 flex justify-evenly items-center z-50 md:hidden">
+            
+            {/* [物理性隱藏] 預約按鈕已徹底註解掉，測試請手動輸入網址 /booking */}
+            {/*
+            <button onClick={() => navigate('/booking')} className="flex flex-col items-center gap-1 group w-16">
+                <div className="w-10 h-10 rounded-2xl bg-slate-800/50 group-hover:bg-emerald-600/20 flex items-center justify-center transition-colors"><Calendar size={20} className="text-slate-400 group-hover:text-emerald-400" /></div>
+                <span className="text-[10px] text-slate-500 group-hover:text-emerald-400 font-bold">線上預約</span>
+            </button>
+            */}
+
             <button onClick={() => navigate('/list')} className="flex flex-col items-center gap-1 group w-16">
                 <div className="w-10 h-10 rounded-2xl bg-slate-800/50 group-hover:bg-blue-600/20 flex items-center justify-center transition-colors"><FileText size={20} className="text-slate-400 group-hover:text-blue-400" /></div>
                 <span className="text-[10px] text-slate-500 group-hover:text-blue-400 font-bold">命盤列表</span>
