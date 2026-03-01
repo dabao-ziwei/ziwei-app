@@ -389,7 +389,6 @@ export const getReservations = async (startDate: string, endDate: string): Promi
     return data || [];
 };
 
-// [新增] 獨立抓取所有未來的客戶訂單（排除私人保留的 BLOCKED），供對帳總覽與匯出使用
 export const getAllFutureReservations = async (): Promise<Reservation[]> => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -408,13 +407,12 @@ export const bookReservation = async (payload: any): Promise<boolean> => {
     return data === true; 
 };
 
-// [修改] 寫入私人保留區塊 API：加入 UUID 防錯與防呆機制
 export const addScheduleBlock = async (payload: { start_time: string, end_time: string }): Promise<boolean> => {
     const durationMins = (new Date(payload.end_time).getTime() - new Date(payload.start_time).getTime()) / 60000;
     if (durationMins <= 0) return false;
     
     const { error } = await supabase.from('reservations').insert({
-        id: crypto.randomUUID(), // 強制注入 ID 解決 Supabase 報錯
+        id: crypto.randomUUID(), 
         service_type: '私人行程',
         duration_mins: durationMins,
         start_time: payload.start_time,
@@ -446,4 +444,14 @@ export const saveBookingService = async (service: Partial<ServiceType>): Promise
 export const deleteBookingService = async (id: string): Promise<boolean> => {
     const { error } = await supabase.from('booking_services').delete().eq('id', id);
     return !error;
+};
+
+// [新增] 抓取所有歷史預約紀錄，用來做黑名單與統計分析
+export const getAllReservationsHistory = async (): Promise<Reservation[]> => {
+    const { data } = await supabase
+        .from('reservations')
+        .select('*')
+        .neq('status', 'BLOCKED') // 排除私人行程
+        .order('start_time', { ascending: false });
+    return data || [];
 };
