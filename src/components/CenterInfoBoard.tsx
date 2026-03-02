@@ -373,6 +373,10 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     setIsDayPickerOpen(false);
   };
 
+  // [新增] 判斷陰陽
+  const yinYangStr = chartData?.direction === 1 ? '陽' : '陰';
+  const genderStr = client.gender;
+
   return (
     <div className="col-span-2 row-span-2 flex z-10 relative overflow-visible p-0.5 h-full w-full" onClick={closePickers}>
       <div className={`flex w-full h-full bg-white`}>
@@ -439,7 +443,8 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
             {chartData && (
               <div className="text-[10px] text-gray-500 font-medium mt-1 space-y-0.5">
                 <div>
-                  {client.gender} | {chartData.bureau}
+                  {/* [修正] 加入陰陽顯示 */}
+                  {yinYangStr}{genderStr} | {chartData.bureau}
                 </div>
                 <div className="font-mono">
                   命主：{chartData.mingZhu}　身主：{chartData.shenZhu}
