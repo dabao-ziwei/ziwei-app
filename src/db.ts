@@ -168,15 +168,27 @@ export const loadClients = async (loadAllForAdmin = false): Promise<Client[]> =>
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
   const isSuperViewer = checkIsSuperAdmin(user.email);
-  let query = supabase.from('clients').select('*').order('created_at', { ascending: false });
-  if (!isSuperViewer || !loadAllForAdmin) { query = query.eq('user_id', user.id).eq('is_deleted', false); }
+  
+  // [關鍵修正]：無論是不是管理員，強制排除已刪除 (is_deleted = true) 的資料
+  let query = supabase.from('clients')
+    .select('*')
+    .eq('is_deleted', false)
+    .order('created_at', { ascending: false });
+    
+  // 如果不是管理員，或管理員沒有要求看全部，就只篩選出自己的命盤
+  if (!isSuperViewer || !loadAllForAdmin) { 
+      query = query.eq('user_id', user.id); 
+  }
+  
   const { data, error } = await query;
   if (error) return [];
+  
   let userIdToEmailMap: Record<string, string> = {};
   if (isSuperViewer && loadAllForAdmin) {
       const { data: profiles } = await supabase.from('profiles').select('id, email');
       if (profiles) profiles.forEach(p => userIdToEmailMap[p.id] = p.email);
   }
+  
   return data.map((item: any) => ({ ...mapClientToEntity(item), creatorEmail: userIdToEmailMap[item.user_id] || '', is_deleted: item.is_deleted }));
 };
 
