@@ -1,6 +1,6 @@
 // FILE: src/pages/StorePage.tsx
 import React, { useEffect, useState } from 'react';
-import { getPointPacks, createPointTransaction, simulatePaymentSuccess, getMyProfile } from '../db';
+import { getPointPacks, getMyProfile, supabase } from '../db';
 import { ArrowLeft, ShoppingBag, Loader2, CalendarClock, Sparkles, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { PointPack } from '../types/store';
@@ -9,16 +9,25 @@ export const StorePage: React.FC = () => {
   const navigate = useNavigate();
   const [packages, setPackages] = useState<PointPack[]>([]);
   const [loading, setLoading] = useState(true);
-  const [processingId, setProcessingId] = useState<string | null>(null);
   const [userExpiry, setUserExpiry] = useState<string | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
     const init = async () => {
       setLoading(true);
+      
+      // 檢查登入狀態
+      const { data: { session } } = await supabase.auth.getSession();
+      setIsLoggedIn(!!session);
+
       const packs = await getPointPacks(false); 
       setPackages(packs);
-      const profile = await getMyProfile();
-      setUserExpiry(profile?.accessExpiry || null);
+      
+      if (session) {
+        const profile = await getMyProfile();
+        setUserExpiry(profile?.accessExpiry || null);
+      }
+      
       setLoading(false);
     };
     init();
@@ -28,7 +37,14 @@ export const StorePage: React.FC = () => {
   const expiryText = isVip ? new Date(userExpiry!).toLocaleDateString() : '未訂閱';
 
   const handlePurchase = async (pkg: PointPack) => {
-    // [修改] 金流串接前，暫時顯示測試訊息
+    if (!isLoggedIn) {
+      // 記住目標，導向登入，登入後會自動跳轉回來
+      sessionStorage.setItem('redirectTarget', '/store');
+      navigate('/login');
+      return;
+    }
+    
+    // 金流過渡期：已登入者點擊直接顯示測試訊息
     alert('目前商品功能測試中，敬請期待');
   };
 
@@ -44,10 +60,12 @@ export const StorePage: React.FC = () => {
                 <ShoppingBag className="text-purple-600" /> 訂閱方案中心
             </h1>
         </div>
-        <div className="bg-slate-100 px-3 py-1.5 rounded-full flex items-center gap-2 text-xs font-bold text-slate-600">
-            <CalendarClock size={14} className="text-purple-600" />
-            VIP 到期日: <span className="text-purple-600 text-sm ml-1">{expiryText}</span>
-        </div>
+        {isLoggedIn && (
+            <div className="bg-slate-100 px-3 py-1.5 rounded-full flex items-center gap-2 text-xs font-bold text-slate-600">
+                <CalendarClock size={14} className="text-purple-600" />
+                VIP 到期日: <span className="text-purple-600 text-sm ml-1">{expiryText}</span>
+            </div>
+        )}
       </div>
 
       {/* 捲動區域 */}
@@ -109,7 +127,7 @@ export const StorePage: React.FC = () => {
                                     onClick={() => handlePurchase(pkg)}
                                     className="w-full py-3 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg"
                                 >
-                                    {`NT$ ${pkg.price_ntd} 購買`}
+                                    {`NT$ ${pkg.price_ntd} ${isLoggedIn ? '購買' : '登入購買'}`}
                                 </button>
                                 </div>
                             </div>

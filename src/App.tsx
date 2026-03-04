@@ -36,6 +36,15 @@ function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
+      
+      // 初次載入若已登入，檢查是否有跳轉目標
+      if (session) {
+        const redirectTarget = sessionStorage.getItem('redirectTarget');
+        if (redirectTarget) {
+          sessionStorage.removeItem('redirectTarget');
+          navigate(redirectTarget);
+        }
+      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
@@ -45,6 +54,16 @@ function App() {
         setLoading(false);
         return;
       }
+      
+      // 登入或註冊成功後，自動導回原本想去的頁面
+      if (event === 'SIGNED_IN' && newSession) {
+        const redirectTarget = sessionStorage.getItem('redirectTarget');
+        if (redirectTarget) {
+          sessionStorage.removeItem('redirectTarget');
+          setTimeout(() => navigate(redirectTarget), 100);
+        }
+      }
+
       setSession((prevSession: any) => {
           if (prevSession?.user?.id === newSession?.user?.id) {
               return prevSession; 
@@ -55,7 +74,7 @@ function App() {
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [navigate]);
 
   const handleSaveClient = async (clientData: any) => {
     try {
@@ -115,7 +134,8 @@ function App() {
         {/* ========================================== */}
         <Route path="/lucky" element={<LuckyPage />} />
         <Route path="/booking" element={<BookingPage />} /> 
-        <Route path="/legal" element={<LegalPage />} /> {/* 移出來了！現在 LINE 審核看得到了 */}
+        <Route path="/legal" element={<LegalPage />} />
+        <Route path="/store" element={<StorePage />} /> {/* 移出保護區，讓商品公開展示 */}
         
         {/* ========================================== */}
         {/* 保護頁面區 (必須登入) */}
@@ -144,7 +164,6 @@ function App() {
           <Route path="/dual-chart" element={<DualChart />} />
           <Route path="/divination" element={<ChartBoard mode="divination" />} />
           <Route path="/admin" element={<SystemAdmin />} />
-          <Route path="/store" element={<StorePage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

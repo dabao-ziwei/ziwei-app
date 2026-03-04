@@ -1,7 +1,7 @@
 // FILE: src/pages/BookingPage.tsx
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Clock, User, MessageCircle, Mail, ArrowRight, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, AlertTriangle, Zap, Copy } from 'lucide-react';
+import { Calendar, Clock, User, MessageCircle, Mail, ArrowRight, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, AlertTriangle, Zap, Copy, CreditCard } from 'lucide-react';
 import { getScheduleExceptions, getReservations, bookReservation, getBookingServices, getBookingSettings } from '../db';
 import type { ServiceType, ScheduleException, Reservation, BookingSettings } from '../types/booking';
 
@@ -155,9 +155,22 @@ export const BookingPage: React.FC = () => {
                 client_line_id: formData.lineId,
                 client_email: formData.email
             });
-            if (success) setIsSuccess(true);
-            else { alert('預約失敗，該時段已被預約，請重新選擇。'); setSelectedSlot(null); loadMonthData(currentMonth.getFullYear(), currentMonth.getMonth()); }
-        } catch (err) { alert('系統錯誤，請稍後再試。'); } finally { setIsSubmitting(false); }
+            
+            // 偽裝跳轉延遲 (Magic Trick for Transition)
+            setTimeout(() => {
+                if (success) setIsSuccess(true);
+                else { 
+                    alert('預約失敗，該時段已被預約，請重新選擇。'); 
+                    setSelectedSlot(null); 
+                    loadMonthData(currentMonth.getFullYear(), currentMonth.getMonth()); 
+                }
+                setIsSubmitting(false);
+            }, 1500);
+            
+        } catch (err) { 
+            alert('系統錯誤，請稍後再試。'); 
+            setIsSubmitting(false);
+        }
     };
 
     if (isSuccess) {
@@ -195,10 +208,12 @@ export const BookingPage: React.FC = () => {
                         金額：<span className={`font-bold ${bookingMode === 'urgent' ? 'text-red-600' : 'text-slate-700'}`}>{priceText}</span>
                     </p>
                     
-                    <div className="bg-red-50 border-2 border-red-500 rounded-xl p-5 mb-6 text-left shadow-sm">
-                        <div className="flex items-center gap-2 text-red-700 font-bold mb-3 text-lg"><AlertTriangle size={22}/> 重要防佔位提醒</div>
-                        <p className="text-sm text-red-800 leading-relaxed font-medium">
-                            您的預約目前僅為「保留狀態」。<br/>請務必於 <span className="font-extrabold text-xl text-red-600 underline decoration-wavy decoration-red-400 underline-offset-4">{timeoutHours} 小時內</span> 聯繫官方 LINE 小幫手並完成付款，否則系統將自動釋出名額。
+                    {/* 系統升級提示過渡區塊 */}
+                    <div className="bg-amber-50 border-2 border-amber-400 rounded-xl p-5 mb-6 text-left shadow-sm">
+                        <div className="flex items-center gap-2 text-amber-700 font-bold mb-3 text-lg"><AlertTriangle size={22}/> 系統升級提示</div>
+                        <p className="text-sm text-amber-800 leading-relaxed font-medium">
+                            目前線上信用卡系統維護與綠界審核中。本次預約請先透過下方 LINE 與小幫手進行<span className="font-bold underline">人工確認與匯款</span>。<br/><br/>
+                            請務必於 <span className="font-extrabold text-red-600">{timeoutHours} 小時內</span> 完成聯繫，否則系統將自動釋出名額。
                         </p>
                     </div>
                     
@@ -249,11 +264,13 @@ export const BookingPage: React.FC = () => {
             </header>
 
             <main className="max-w-4xl mx-auto p-4 sm:p-6 mt-4 space-y-6 flex-1 w-full flex flex-col">
+                {/* Mode Switcher */}
                 <div className="flex bg-slate-200 p-1.5 rounded-2xl mb-2 shrink-0 max-w-lg mx-auto w-full">
                     <button onClick={() => setBookingMode('general')} className={`flex-1 py-3.5 rounded-xl font-bold text-sm transition-all duration-300 ${bookingMode === 'general' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>一般預約</button>
                     <button onClick={() => setBookingMode('urgent')} className={`flex-1 py-3.5 rounded-xl font-bold text-sm transition-all duration-300 flex items-center justify-center gap-1.5 ${bookingMode === 'urgent' ? 'bg-gradient-to-r from-red-600 to-rose-500 text-white shadow-md' : 'text-slate-500 hover:text-red-500'}`}><Zap size={16} className={bookingMode === 'urgent' ? 'animate-pulse' : ''} /> 急件預約 (24H內)</button>
                 </div>
 
+                {/* Step 1 */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 shrink-0">
                     <h2 className="text-lg font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">1. 選擇諮詢項目</h2>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -276,6 +293,7 @@ export const BookingPage: React.FC = () => {
                     </div>
                 </div>
 
+                {/* Step 2 */}
                 <div className={`transition-all duration-500 shrink-0 ${step >= 2 ? 'opacity-100 translate-y-0' : 'opacity-50 pointer-events-none translate-y-4 hidden'}`}>
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                         <div className="flex justify-between items-end mb-4 border-b border-slate-100 pb-2"><h2 className="text-lg font-bold text-slate-800">2. 選擇日期與時間</h2></div>
@@ -337,24 +355,49 @@ export const BookingPage: React.FC = () => {
                     </div>
                 </div>
 
+                {/* Step 3 */}
                 <div className={`transition-all duration-500 shrink-0 flex-1 flex flex-col ${step >= 3 && selectedSlot ? 'opacity-100 translate-y-0' : 'opacity-50 pointer-events-none translate-y-4 hidden'}`}>
                     <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex-1">
-                        <h2 className="text-lg font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">3. 填寫聯絡資料</h2>
+                        <h2 className="text-lg font-bold text-slate-800 mb-6 border-b border-slate-100 pb-2">3. 填寫聯絡資料</h2>
+                        
                         <div className="space-y-4">
                             <div><label className="block text-sm font-bold text-slate-600 mb-1">您的稱呼 <span className="text-red-500">*</span></label><div className="relative"><User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input required type="text" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="例如：王先生 / 陳小姐" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} /></div></div>
                             <div><label className="block text-sm font-bold text-slate-600 mb-1">LINE ID (聯絡付款用) <span className="text-red-500">*</span></label><div className="relative"><MessageCircle className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input required type="text" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none" placeholder="請開放允許利用 ID 加入好友" value={formData.lineId} onChange={e => setFormData({...formData, lineId: e.target.value})} /></div></div>
                             <div><label className="block text-sm font-bold text-slate-600 mb-1">聯絡信箱 (選填)</label><div className="relative"><Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input type="email" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="example@email.com" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} /></div></div>
                         </div>
-                        <button type="submit" disabled={isSubmitting || !selectedSlot} className={`w-full mt-8 py-4 text-white font-bold rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 ${bookingMode === 'urgent' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}>{isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <>保留此時段 <ArrowRight size={20} /></>}</button>
                         
-                        {/* [新增] 條款宣告 */}
-                        <p className="text-center text-xs text-slate-400 mt-4">
+                        {/* 綠界過渡期假按鈕 */}
+                        {(() => {
+                            const { currentPrice } = getPriceDetails(selectedService, globalSettings, bookingMode);
+                            return (
+                                <button type="submit" disabled={isSubmitting || !selectedSlot} className={`w-full mt-8 py-4 text-white font-bold rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 ${bookingMode === 'urgent' ? 'bg-red-600 hover:bg-red-700' : 'bg-slate-900 hover:bg-slate-800'}`}>
+                                    {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <><CreditCard size={20} /> 信用卡授權 (NT$ {currentPrice}) <ArrowRight size={20} /></>}
+                                </button>
+                            );
+                        })()}
+                        
+                        {/* 第三方支付聲明 */}
+                        <p className="text-[10px] text-gray-400 mt-3 text-center leading-relaxed">
+                            * 點擊按鈕後，系統將建立訂單並跳轉至「綠界科技 ECPay」第三方安全支付平台進行信用卡授權。<br/>完成付款後，您的預約才算正式成立。<br/>
                             繼續預約即代表您同意本站的 <a href="/legal" target="_blank" rel="noopener noreferrer" className="underline hover:text-slate-600 transition-colors">服務條款與隱私權政策</a>
                         </p>
                     </form>
                 </div>
+
+                {/* 客服聯絡資訊 (獨立顯示於所有步驟下方) */}
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 flex items-start gap-3 shrink-0 shadow-sm mt-4">
+                    <Mail className="text-blue-600 shrink-0 mt-0.5" size={24} />
+                    <div>
+                        <h4 className="text-base font-bold text-blue-900 mb-1">客服聯絡資訊</h4>
+                        <p className="text-sm text-blue-800 leading-relaxed">
+                            若對預約流程或服務有任何問題，請來信：
+                            <a href="mailto:dabao@dabao.life" className="font-bold underline hover:text-blue-900 ml-1">dabao@dabao.life</a><br/>
+                            或透過大寶官方 LINE 與我們聯繫。
+                        </p>
+                    </div>
+                </div>
                 
-                {/* [新增] 填表頁尾條款 */}
+                {/* 填表頁尾條款 */}
                 <footer className="w-full text-center py-6 text-xs text-slate-400 mt-auto">
                     <a href="/legal" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 transition-colors underline underline-offset-2">服務條款與隱私權政策</a>
                 </footer>
