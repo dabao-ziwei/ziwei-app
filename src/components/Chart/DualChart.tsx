@@ -1,3 +1,4 @@
+// FILE: src/components/Chart/DualChart.tsx
 import React, { useMemo, useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PalaceGrid } from './PalaceGrid';
@@ -45,15 +46,11 @@ const getLiuNianList = (engine: ZiWeiEngine, chartData: any, daXianSeq: number) 
     return list;
 };
 
-// 輔助：計算當前大限 Index
+// 輔助：計算當前大限 Index (依據西元年曆比對 UI 顯示的年份區間)
 const getCurrentDaLimitIndex = (chartData: any, engine: ZiWeiEngine) => {
     if (!chartData || !engine) return 0;
-    
     const now = new Date();
-    const solar = Solar.fromYmd(now.getFullYear(), now.getMonth() + 1, now.getDate());
-    const currentLunarYear = solar.getLunar().getYear(); 
-    
-    const virtualAge = currentLunarYear - chartData.lunarYear + 1;
+    const currentYear = now.getFullYear();
 
     const startPos = engine.getMingPos();
     const direction = chartData.direction || 1;
@@ -61,7 +58,9 @@ const getCurrentDaLimitIndex = (chartData: any, engine: ZiWeiEngine) => {
     for (let i = 0; i < 10; i++) {
         const idx = (startPos + i * direction + 120) % 12;
         const p = chartData.palaces[idx];
-        if (virtualAge >= p.ages[0] && virtualAge <= p.ages[1]) {
+        const startYear = chartData.lunarYear + p.ages[0];
+        const endYear = chartData.lunarYear + p.ages[1];
+        if (currentYear >= startYear && currentYear <= endYear) {
             return i;
         }
     }
@@ -318,29 +317,18 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   
   const currentRealTimeA = useMemo(() => {
       const now = new Date();
-      const solar = Solar.fromYmd(now.getFullYear(), now.getMonth() + 1, now.getDate());
-      const currentLunarYear = solar.getLunar().getYear();
-
+      const year = now.getFullYear();
       if (!chartA) return undefined;
-      const virtualAge = currentLunarYear - chartA.lunarYear + 1;
-      
-      const daSeq = daListA.findIndex(d => virtualAge >= d.startAge && virtualAge <= d.endAge);
-      const displayYear = chartA.lunarYear + virtualAge; 
-
-      return { year: displayYear, daSeq: daSeq >= 0 ? daSeq : -1 };
+      const daSeq = daListA.findIndex(d => year >= d.startYear && year <= d.endYear);
+      return { year, daSeq: daSeq >= 0 ? daSeq : -1 };
   }, [chartA, daListA]);
 
   const currentRealTimeB = useMemo(() => {
       const now = new Date();
-      const solar = Solar.fromYmd(now.getFullYear(), now.getMonth() + 1, now.getDate());
-      const currentLunarYear = solar.getLunar().getYear();
-
+      const year = now.getFullYear();
       if (!chartB) return undefined;
-      const virtualAge = currentLunarYear - chartB.lunarYear + 1;
-      const daSeq = daListB.findIndex(d => virtualAge >= d.startAge && virtualAge <= d.endAge);
-      const displayYear = chartB.lunarYear + virtualAge;
-
-      return { year: displayYear, daSeq: daSeq >= 0 ? daSeq : -1 };
+      const daSeq = daListB.findIndex(d => year >= d.startYear && year <= d.endYear);
+      return { year, daSeq: daSeq >= 0 ? daSeq : -1 };
   }, [chartB, daListB]);
 
 
@@ -480,6 +468,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         onPalaceClick={(idx) => handlePalaceClick('A', idx)}
                         onTriggerClick={() => {}}
                         currentRealTime={currentRealTimeA}
+                        showCompass={false}
                     />
                 </div>
                 {renderControlBar(daListA, daSeqA, setDaSeqA, setLiuYearA, setLiuYearB, engineA!, chartA, liuYearA, 'A', currentRealTimeA)}
@@ -534,6 +523,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         onPalaceClick={(idx) => handlePalaceClick('B', idx)}
                         onTriggerClick={() => {}}
                         currentRealTime={currentRealTimeB}
+                        showCompass={false}
                     />
                 </div>
                 {renderControlBar(daListB, daSeqB, setDaSeqB, setLiuYearB, setLiuYearA, engineB!, chartB, liuYearB, 'B', currentRealTimeB)}
