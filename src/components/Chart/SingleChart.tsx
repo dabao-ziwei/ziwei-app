@@ -14,11 +14,11 @@ import {
   type YearAdviceRule,
   consumeDivinationV2,
   issueGuestToken,
-  toggleFavorite // [新增] 引入切換最愛的 API
+  toggleFavorite
 } from '../../db';
 import { ZiWeiEngine } from '../../logic/engine';
 import { GAN, ZHI, PALACE_NAMES, SIHUA_TABLE } from '../../logic/constants';
-import { Loader2, UserPlus, X, ChevronLeft, Camera, Users, Compass, Sparkles, MessageCircle, Star } from 'lucide-react'; // [新增] 引入 Star 圖示
+import { Loader2, UserPlus, X, ChevronLeft, Camera, Users, Compass, Sparkles, MessageCircle, Star } from 'lucide-react';
 import { getFeaturePermission } from '../../logic/permissions';
 import { Lunar, LunarYear } from 'lunar-typescript';
 import { YearlyAnalysisBoard } from './YearlyAnalysisBoard';
@@ -342,7 +342,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     alert(`即將與 ${target.name} 進行合盤分析 (開發中)`);
   };
 
-  // --- [新增] 切換最愛狀態邏輯 (樂觀更新) ---
   const handleToggleFavorite = async () => {
       if (!client || !client.id || client.id.startsWith('temp-')) return;
       
@@ -355,12 +354,10 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       try {
           const success = await toggleFavorite(client.id, newFav);
           if (!success) {
-              // 失敗時退回狀態
               setClient(prev => prev ? { ...prev, is_favorite: currentFav } : prev);
               alert('設定最愛失敗，請檢查網路連線');
           }
       } catch (err) {
-          // 失敗時退回狀態
           setClient(prev => prev ? { ...prev, is_favorite: currentFav } : prev);
           console.error("Toggle Favorite Error:", err);
       }
@@ -517,6 +514,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       const palace = baseChartData.palaces[palaceIdx];
       if (palace) {
         const startYear = baseChartData.lunarYear + palace.ages[0];
+        const endYear = baseChartData.lunarYear + palace.ages[1];
         list.push({
           seq: i,
           name: `${['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'][i]}限`,
@@ -525,6 +523,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
           startAge: palace.ages[0],
           endAge: palace.ages[1],
           startYear,
+          endYear,
         });
       }
     }
@@ -685,8 +684,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     const now = new Date();
     const year = now.getFullYear();
     if (!baseChartData || !baseEngine) return undefined;
-    const virtualAge = year - baseChartData.lunarYear + 1;
-    const daSeq = daXianList.findIndex((d: any) => virtualAge >= d.startAge && virtualAge <= d.endAge);
+    const daSeq = daXianList.findIndex((d: any) => year >= d.startYear && year <= d.endYear);
     return { year, daSeq: daSeq >= 0 ? daSeq : -1 };
   }, [baseChartData, baseEngine, daXianList]);
 
@@ -739,7 +737,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
               <Compass size={16} />
             </button>
 
-            {/* --- 新增：命盤介面的加入最愛按鈕 --- */}
             {(!client?.id?.startsWith('temp-')) && (
               <button
                 onClick={handleToggleFavorite}
