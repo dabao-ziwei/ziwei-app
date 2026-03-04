@@ -1,7 +1,7 @@
 // FILE: src/pages/StorePage.tsx
 import React, { useEffect, useState } from 'react';
 import { getPointPacks, getMyProfile, supabase } from '../db';
-import { ArrowLeft, ShoppingBag, Loader2, CalendarClock, Sparkles, Mail } from 'lucide-react';
+import { ShoppingBag, Loader2, CalendarClock, Sparkles, Mail, X, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { PointPack } from '../types/store';
 
@@ -50,41 +50,60 @@ export const StorePage: React.FC = () => {
 
   return (
     <div className="h-[100dvh] w-full bg-slate-50 flex flex-col font-sans overflow-hidden">
-      {/* Header */}
-      <div className="bg-white px-4 py-3 shadow-sm flex items-center justify-between shrink-0 z-50 border-b border-gray-200">
-        <div className="flex items-center gap-3">
-            <button onClick={() => navigate(-1)} className="p-2 hover:bg-slate-100 rounded-full text-slate-600 transition-colors">
-                <ArrowLeft size={20} />
+      {/* Header：全螢幕面板風格 */}
+      <div className="bg-white px-6 py-4 shadow-sm flex items-center justify-between shrink-0 z-50 border-b border-gray-200">
+        <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+            <ShoppingBag className="text-purple-600" /> 訂閱方案中心
+        </h1>
+        
+        <div className="flex items-center gap-3 sm:gap-4">
+            {isLoggedIn && (
+                <div className="bg-slate-100 px-3 py-1.5 rounded-full flex items-center gap-2 text-xs font-bold text-slate-600">
+                    <CalendarClock size={14} className="text-purple-600 hidden sm:block" />
+                    <span className="hidden sm:inline">VIP 到期日:</span> 
+                    <span className="text-purple-600 text-sm sm:ml-1">{expiryText}</span>
+                </div>
+            )}
+            <button 
+                onClick={() => navigate('/')} 
+                className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-700 transition-colors"
+                title="關閉並回首頁"
+            >
+                <X size={24} />
             </button>
-            <h1 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <ShoppingBag className="text-purple-600" /> 訂閱方案中心
-            </h1>
         </div>
-        {isLoggedIn && (
-            <div className="bg-slate-100 px-3 py-1.5 rounded-full flex items-center gap-2 text-xs font-bold text-slate-600">
-                <CalendarClock size={14} className="text-purple-600" />
-                VIP 到期日: <span className="text-purple-600 text-sm ml-1">{expiryText}</span>
-            </div>
-        )}
       </div>
 
       {/* 捲動區域 */}
       <div className="flex-1 overflow-y-auto w-full">
-        <div className="max-w-4xl mx-auto w-full p-4 flex flex-col min-h-full pb-safe">
+        <div className="max-w-4xl mx-auto w-full p-4 sm:p-6 flex flex-col min-h-full pb-safe">
             
             {/* 聯絡資訊 (置頂) */}
-            <div className="w-full bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 text-center shadow-sm flex items-center justify-center gap-2">
+            <div className="w-full bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 text-center shadow-sm flex items-center justify-center gap-2">
                 <Mail size={18} className="text-blue-600" />
-                <span className="text-base font-bold text-slate-700">
+                <span className="text-sm sm:text-base font-bold text-slate-700">
                     如有商品購買問題，請與 <a href="mailto:dabao@dabao.life" className="text-blue-600 underline hover:text-blue-800 transition-colors">dabao@dabao.life</a> 聯繫
                 </span>
             </div>
+
+            {/* 未登入訪客溫馨提示 */}
+            {!isLoggedIn && !loading && (
+                <div className="w-full bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 flex items-start gap-3 shadow-sm">
+                    <Info size={20} className="text-amber-500 shrink-0 mt-0.5" />
+                    <div>
+                        <h4 className="text-sm font-bold text-amber-800 mb-1">溫馨提示</h4>
+                        <p className="text-xs text-amber-700 leading-relaxed">
+                            您目前以訪客身分瀏覽。為保障您的權益，購買方案前系統將引導您完成免費註冊或登入。
+                        </p>
+                    </div>
+                </div>
+            )}
 
             <div className="flex-1">
                 {loading ? (
                 <div className="flex justify-center py-20"><Loader2 className="animate-spin text-slate-400" size={32}/></div>
                 ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {packages.map(pkg => {
                         const totalDays = pkg.base_points + pkg.bonus_points;
                         return (
@@ -125,9 +144,9 @@ export const StorePage: React.FC = () => {
                                 <div className="mt-auto pt-4 border-t border-slate-100 relative z-10">
                                 <button 
                                     onClick={() => handlePurchase(pkg)}
-                                    className="w-full py-3 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg"
+                                    className="w-full py-3.5 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg"
                                 >
-                                    {`NT$ ${pkg.price_ntd} ${isLoggedIn ? '購買' : '登入購買'}`}
+                                    {`NT$ ${pkg.price_ntd} ${isLoggedIn ? '購買' : '登入並購買'}`}
                                 </button>
                                 </div>
                             </div>
@@ -137,9 +156,9 @@ export const StorePage: React.FC = () => {
                 )}
             </div>
 
-            <div className="mt-8 mb-4 px-4 py-4 bg-slate-100 rounded-xl border border-slate-200 text-slate-500 text-xs leading-relaxed shrink-0">
+            <div className="mt-8 mb-4 px-5 py-5 bg-slate-100 rounded-xl border border-slate-200 text-slate-500 text-xs leading-relaxed shrink-0">
                 <h4 className="font-bold text-slate-700 mb-2">購買須知與服務條款</h4>
-                <ul className="list-disc list-inside space-y-1">
+                <ul className="list-disc list-inside space-y-1.5">
                     <li>本商品為線上命理解析之軟體系統服務，依據消保法規定，<span className="font-bold text-red-500">經消費者同意提供之數位內容不適用七日鑑賞期</span>，一經購買入帳後恕不退費。</li>
                     <li>訂閱天數期間內，可無限次使用系統內各項 AI 占卜與排盤功能，天數不得轉讓、轉售或兌換現金。</li>
                     <li>未滿 18 歲之使用者，請由法定代理人陪同閱讀本條款後方得購買。</li>
