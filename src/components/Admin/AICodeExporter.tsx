@@ -1,13 +1,80 @@
 // FILE: src/components/Admin/AICodeExporter.tsx
-import React, { useState } from 'react';
-import { Loader2, Copy, CheckCircle, Bot, FileCode2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Copy, Loader2, Database, Code, CheckCircle, Sparkles, Lock, Mail, ArrowRight, ShieldCheck } from 'lucide-react';
+import { supabase } from '../../supabase';
 
 export const AICodeExporter: React.FC = () => {
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [outputCode, setOutputCode] = useState('');
-  const [copied, setCopied] = useState(false);
+    // 狀態管理：驗證解鎖
+    const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {
+        return sessionStorage.getItem('ai_exporter_unlocked') === 'true';
+    });
+    const [otpCode, setOtpCode] = useState('');
+    const [isSending, setIsSending] = useState(false);
+    const [isVerifying, setIsVerifying] = useState(false);
+    const [cooldown, setCooldown] = useState(0);
+    const [authMessage, setAuthMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
-  const aiSystemPrompt = `
+    // 狀態管理：匯出功能
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [exportText, setExportText] = useState('');
+    const [isCopied, setIsCopied] = useState(false);
+
+    // 處理倒數計時
+    useEffect(() => {
+        if (cooldown > 0) {
+            const timer = setTimeout(() => setCooldown(cooldown - 1), 1000);
+            return () => clearTimeout(timer);
+        }
+    }, [cooldown]);
+
+    // 寄送安全碼
+    const handleSendOtp = async () => {
+        setIsSending(true);
+        setAuthMessage(null);
+        try {
+            const { data, error } = await supabase.functions.invoke('send-admin-otp');
+            if (error) throw new Error('API 呼叫失敗，請檢查 Edge Function 狀態或金鑰設定');
+            if (data?.error) throw new Error(data.error);
+
+            setAuthMessage({ type: 'success', text: '安全碼已發送至 stephenwu.0926@gmail.com，有效時間 5 分鐘。' });
+            setCooldown(60); // 60秒冷卻
+        } catch (err: any) {
+            console.error("OTP 發送失敗:", err);
+            setAuthMessage({ type: 'error', text: err.message || '發送失敗，請稍後再試。' });
+        } finally {
+            setIsSending(false);
+        }
+    };
+
+    // 驗證安全碼
+    const handleVerifyOtp = async () => {
+        if (otpCode.length !== 6) {
+            setAuthMessage({ type: 'error', text: '請輸入 6 碼數字安全碼。' });
+            return;
+        }
+
+        setIsVerifying(true);
+        setAuthMessage(null);
+        try {
+            const { data: isValid, error } = await supabase.rpc('verify_admin_otp', { p_code: otpCode });
+            
+            if (error) throw error;
+
+            if (isValid) {
+                sessionStorage.setItem('ai_exporter_unlocked', 'true');
+                setIsUnlocked(true);
+            } else {
+                setAuthMessage({ type: 'error', text: '驗證碼錯誤或已過期。' });
+            }
+        } catch (err: any) {
+            setAuthMessage({ type: 'error', text: '驗證過程發生錯誤。' });
+        } finally {
+            setIsVerifying(false);
+        }
+    };
+
+    // 預設的 AI 提示詞
+    const SYSTEM_PROMPT = `
 # 專案背景與雲端架構說明 (Project Context & Architecture)
 
 這是一個名為「大寶紫微斗數 (Dabao Ziwei)」的全端 AI 命理、占卜與預約系統。
@@ -26,136 +93,200 @@ export const AICodeExporter: React.FC = () => {
 2. 流程：除非我特別要求，否則請**先與我討論作法與邏輯**，確認沒問題且我下達「動工」指令後，再給出程式碼。
 3. 程式碼交付：當提供修改後的程式碼時，請**務必提供該檔案的「完整」原始碼**。絕對不要只給 Diff (差異對比)，也絕對不要用省略號 (// ...existing code...) 帶過，以確保我可以一鍵全選複製覆蓋，避免貼錯位置。
 
-以下是本專案最新的目錄結構與完整的原始碼，請基於這些內容與我協作：
+以下是本專案最新的資料庫結構與完整的原始碼，請基於這些內容與我協作：
 `;
 
-  // 產生純文字的目錄樹狀結構
-  const generateTree = (paths: string[]) => {
-    const tree: any = {};
-    paths.forEach(path => {
-      const parts = path.replace(/^\//, '').split('/');
-      let current = tree;
-      parts.forEach(part => {
-        if (!current[part]) current[part] = {};
-        current = current[part];
-      });
-    });
+    const generateExportContent = async () => {
+        setIsGenerating(true);
+        try {
+            let finalOutput = SYSTEM_PROMPT.trim() + '\n\n';
 
-    let result = '';
-    const drawTree = (node: any, prefix = '') => {
-      const keys = Object.keys(node);
-      keys.forEach((key, index) => {
-        const isLast = index === keys.length - 1;
-        result += `${prefix}${isLast ? '└── ' : '├── '}${key}\n`;
-        if (Object.keys(node[key]).length > 0) {
-          drawTree(node[key], prefix + (isLast ? '    ' : '│   '));
+            // 1. 取得資料庫結構與範例資料
+            finalOutput += '================================================\n';
+            finalOutput += 'DATABASE SCHEMA & SAMPLE DATA (Supabase)\n';
+            finalOutput += '================================================\n';
+            
+            const { data: dbSchema, error } = await supabase.rpc('get_db_schema_export');
+            
+            if (error) {
+                finalOutput += `[無法取得資料庫結構: ${error.message}]\n\n`;
+            } else if (dbSchema && Array.isArray(dbSchema)) {
+                dbSchema.forEach((table: any) => {
+                    finalOutput += `\n[ TABLE: ${table.table_name} ]\n`;
+                    finalOutput += `- 欄位結構:\n`;
+                    table.columns.forEach((col: any) => {
+                        finalOutput += `  * ${col.column_name} (${col.data_type})\n`;
+                    });
+                    finalOutput += `- 第一筆假資料範例 (Sample):\n`;
+                    finalOutput += `  ${JSON.stringify(table.sample_data, null, 2).replace(/\n/g, '\n  ')}\n`;
+                });
+                finalOutput += '\n';
+            }
+
+            // 2. 取得前端原始碼
+            finalOutput += '================================================\n';
+            finalOutput += 'SOURCE CODE FILES\n';
+            finalOutput += '================================================\n';
+
+            const modules = import.meta.glob([
+                '/src/**/*.{ts,tsx,css}',
+                '/package.json',
+                '/vite.config.ts',
+                '/index.html',
+                '/tailwind.config.js'
+            ], { query: '?raw', import: 'default', eager: true });
+
+            const filePaths = Object.keys(modules).sort();
+
+            filePaths.forEach((path) => {
+                const content = modules[path] as string;
+                if (path.includes('vite-env.d.ts') || path.includes('supabase.ts')) {
+                    return; 
+                }
+                finalOutput += `\n================================================\n`;
+                finalOutput += `FILE: ${path.replace('/', '')}\n`;
+                finalOutput += `================================================\n`;
+                finalOutput += `${content}\n`;
+            });
+
+            setExportText(finalOutput);
+
+        } catch (err) {
+            console.error("Export Failed:", err);
+            alert("生成匯出文字失敗，請檢查 Console");
+        } finally {
+            setIsGenerating(false);
         }
-      });
     };
-    drawTree(tree);
-    return result;
-  };
 
-  const handleGenerate = async () => {
-    setIsGenerating(true);
-    try {
-      // 透過 Vite 特性，動態將專案檔案作為字串載入 (排除 node_modules)
-      const files = import.meta.glob([
-        '/src/**/*.{ts,tsx,css}',
-        '/package.json',
-        '/tsconfig*.json',
-        '/vite.config.ts',
-        '/tailwind.config.js',
-        '/postcss.config.js',
-        '/eslint.config.js',
-        '/index.html',
-        '/vercel.json'
-      ], { query: '?raw', import: 'default' });
+    const handleCopy = () => {
+        if (!exportText) return;
+        navigator.clipboard.writeText(exportText).then(() => {
+            setIsCopied(true);
+            setTimeout(() => setIsCopied(false), 3000);
+        }).catch(err => {
+            alert('複製失敗，請手動全選複製。');
+        });
+    };
 
-      const paths = Object.keys(files).sort();
-      
-      let resultText = aiSystemPrompt;
-      resultText += `\n================================================\n專案目錄結構 (Directory Tree):\n================================================\n`;
-      resultText += generateTree(paths);
+    // 🔒 鎖定畫面 (未解鎖時顯示)
+    if (!isUnlocked) {
+        return (
+            <div className="p-6 max-w-2xl mx-auto h-full flex flex-col items-center justify-center">
+                <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8 text-center w-full max-w-md">
+                    <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <Lock size={32} />
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-800 mb-2">核心系統保護</h2>
+                    <p className="text-sm text-gray-500 mb-8 leading-relaxed">
+                        「AI 協作匯出中心」包含完整的商業邏輯與資料庫結構。為了保護您的資產，請先進行安全碼驗證。
+                    </p>
 
-      // 依序讀取並附加內容
-      for (const path of paths) {
-        const content = await files[path]() as string;
-        const cleanPath = path.replace(/^\//, ''); // 移除最前面的斜線
-        resultText += `\n\n================================================\nFILE: ${cleanPath}\n================================================\n${content}`;
-      }
+                    <div className="space-y-4">
+                        {authMessage && (
+                            <div className={`p-3 rounded-lg text-xs font-bold flex items-center justify-center gap-2 animate-in fade-in ${authMessage.type === 'success' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>
+                                {authMessage.text}
+                            </div>
+                        )}
 
-      setOutputCode(resultText);
-    } catch (err) {
-      console.error("生成原始碼失敗:", err);
-      alert('生成失敗，請查看瀏覽器 Console');
-    } finally {
-      setIsGenerating(false);
-    }
-  };
+                        {cooldown === 0 ? (
+                            <button 
+                                onClick={handleSendOtp}
+                                disabled={isSending}
+                                className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                            >
+                                {isSending ? <Loader2 className="animate-spin" size={18}/> : <Mail size={18}/>}
+                                寄送驗證碼至信箱
+                            </button>
+                        ) : (
+                            <div className="flex gap-2">
+                                <input 
+                                    type="text" 
+                                    maxLength={6}
+                                    placeholder="輸入 6 碼數字"
+                                    className="flex-1 py-3 px-4 border border-gray-300 rounded-xl text-center text-lg font-mono font-bold tracking-widest outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                                    value={otpCode}
+                                    onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                                    autoFocus
+                                />
+                                <button 
+                                    onClick={handleVerifyOtp}
+                                    disabled={isVerifying || otpCode.length !== 6}
+                                    className="px-6 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-all shadow-md disabled:opacity-50 flex items-center gap-2"
+                                >
+                                    {isVerifying ? <Loader2 className="animate-spin" size={18}/> : <ArrowRight size={20}/>}
+                                </button>
+                            </div>
+                        )}
 
-  const handleCopy = () => {
-    if (!outputCode) return;
-    navigator.clipboard.writeText(outputCode).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 3000);
-    }).catch(() => {
-      alert("複製失敗，請手動全選文字框內容");
-    });
-  };
-
-  return (
-    <div className="flex flex-col h-full bg-slate-50 p-4 sm:p-6 lg:p-8">
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col h-full overflow-hidden">
-        
-        {/* Header */}
-        <div className="p-5 sm:p-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50 shrink-0">
-          <div>
-            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-              <Bot className="text-blue-600" /> AI 協作匯出中樞
-            </h2>
-            <p className="text-sm text-gray-500 mt-1">一鍵將全站程式碼與架構打包，直接貼給 AI 進行結對開發。</p>
-          </div>
-          <div className="flex gap-3 w-full sm:w-auto">
-             <button 
-                onClick={handleGenerate} 
-                disabled={isGenerating} 
-                className="flex-1 sm:flex-none px-4 py-2.5 bg-white border border-blue-200 text-blue-600 rounded-xl font-bold hover:bg-blue-50 transition-colors flex items-center justify-center gap-2 shadow-sm"
-             >
-                 {isGenerating ? <Loader2 className="animate-spin" size={18}/> : <FileCode2 size={18}/>}
-                 {isGenerating ? '載入中...' : '1. 載入最新原始碼'}
-             </button>
-             <button 
-                onClick={handleCopy} 
-                disabled={!outputCode} 
-                className={`flex-1 sm:flex-none px-6 py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-sm ${
-                    !outputCode ? 'bg-gray-100 text-gray-400 cursor-not-allowed' :
-                    copied ? 'bg-green-100 text-green-700 border border-green-300' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200'
-                }`}
-             >
-                 {copied ? <CheckCircle size={18}/> : <Copy size={18}/>}
-                 {copied ? '已複製！' : '2. 一鍵複製'}
-             </button>
-          </div>
-        </div>
-
-        {/* Content Area */}
-        <div className="flex-1 p-0 overflow-hidden relative bg-slate-900 group">
-            {outputCode ? (
-                <textarea 
-                    value={outputCode} 
-                    readOnly 
-                    className="w-full h-full bg-transparent text-emerald-400 font-mono text-xs sm:text-sm p-6 outline-none resize-none selection:bg-emerald-700 selection:text-white"
-                    placeholder="載入的原始碼會顯示在這裡..."
-                />
-            ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 gap-4">
-                    <Bot size={48} className="opacity-20" />
-                    <p className="text-sm font-mono">請點擊上方「載入最新原始碼」按鈕</p>
+                        {cooldown > 0 && (
+                            <p className="text-xs text-gray-400 font-mono">
+                                請前往 stephenwu.0926@gmail.com 收信。<br/>
+                                重新發送等待：{cooldown} 秒
+                            </p>
+                        )}
+                    </div>
                 </div>
-            )}
+            </div>
+        );
+    }
+
+    // 🔓 解鎖後的匯出畫面
+    return (
+        <div className="p-6 max-w-6xl mx-auto h-full flex flex-col animate-in fade-in zoom-in duration-300">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4 mb-6 shrink-0">
+                <div>
+                    <div className="flex items-center gap-2 mb-1">
+                        <ShieldCheck size={16} className="text-emerald-500" />
+                        <span className="text-xs font-bold text-emerald-600 tracking-wider">安全驗證已通過</span>
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                        <Code className="text-emerald-600" /> AI 協作匯出中心
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-2">
+                        一鍵打包系統提示詞、資料庫 Schema 與所有前端原始碼，方便快速餵給 AI 進行開發協作。
+                    </p>
+                </div>
+                <button
+                    onClick={generateExportContent}
+                    disabled={isGenerating}
+                    className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-200 transition-all disabled:opacity-50 whitespace-nowrap"
+                >
+                    {isGenerating ? <Loader2 className="animate-spin" size={18} /> : <Sparkles size={18} />}
+                    {isGenerating ? '資料搜集中...' : '產生超級提示詞 (Prompt)'}
+                </button>
+            </div>
+
+            <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden relative">
+                {/* 複製按鈕懸浮列 */}
+                <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 flex justify-between items-center shrink-0">
+                    <div className="flex items-center gap-3 text-sm font-bold text-gray-600">
+                        <Database size={16} className="hidden sm:block" /> 
+                        <span className="hidden sm:inline">包含 DB Schema</span>
+                        <span className="text-gray-300 hidden sm:inline">|</span> 
+                        <Code size={16} /> 包含原始碼
+                    </div>
+                    <button
+                        onClick={handleCopy}
+                        disabled={!exportText}
+                        className={`px-4 py-1.5 rounded-lg font-bold text-sm flex items-center gap-2 transition-all ${
+                            !exportText ? 'bg-gray-100 text-gray-400 cursor-not-allowed' :
+                            isCopied ? 'bg-green-100 text-green-700' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                        }`}
+                    >
+                        {isCopied ? <CheckCircle size={16} /> : <Copy size={16} />}
+                        {isCopied ? '已複製到剪貼簿' : '一鍵複製全部'}
+                    </button>
+                </div>
+
+                {/* 文字顯示區 */}
+                <textarea
+                    className="flex-1 w-full p-4 sm:p-6 text-sm font-mono text-gray-700 bg-slate-900/5 resize-none outline-none focus:ring-inset focus:ring-2 focus:ring-emerald-500/50"
+                    readOnly
+                    value={exportText}
+                    placeholder="請點擊上方「產生超級提示詞」按鈕..."
+                />
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 };
