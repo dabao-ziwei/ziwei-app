@@ -14,7 +14,9 @@ export const AICodeExporter: React.FC = () => {
     const [cooldown, setCooldown] = useState(0);
     const [authMessage, setAuthMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
-    // 狀態管理：匯出功能
+    // 狀態管理：匯出選項與內容
+    const [includeDB, setIncludeDB] = useState(true);
+    const [includeCode, setIncludeCode] = useState(true);
     const [isGenerating, setIsGenerating] = useState(false);
     const [exportText, setExportText] = useState('');
     const [isCopied, setIsCopied] = useState(false);
@@ -73,8 +75,8 @@ export const AICodeExporter: React.FC = () => {
         }
     };
 
-    // 預設的 AI 提示詞
-    const SYSTEM_PROMPT = `
+    // 預設的 AI 提示詞 (固定不變的部分)
+    const SYSTEM_PROMPT_HEAD = `
 # 專案背景與雲端架構說明 (Project Context & Architecture)
 
 這是一個名為「大寶紫微斗數 (Dabao Ziwei)」的全端 AI 命理、占卜與預約系統。
@@ -92,62 +94,82 @@ export const AICodeExporter: React.FC = () => {
 1. 語言：請一律使用 **繁體中文** 與我對話。
 2. 流程：除非我特別要求，否則請**先與我討論作法與邏輯**，確認沒問題且我下達「動工」指令後，再給出程式碼。
 3. 程式碼交付：當提供修改後的程式碼時，請**務必提供該檔案的「完整」原始碼**。絕對不要只給 Diff (差異對比)，也絕對不要用省略號 (// ...existing code...) 帶過，以確保我可以一鍵全選複製覆蓋，避免貼錯位置。
-
-以下是本專案最新的資料庫結構與完整的原始碼，請基於這些內容與我協作：
 `;
 
     const generateExportContent = async () => {
+        if (!includeDB && !includeCode) {
+            alert('請至少選擇一種匯出內容！');
+            return;
+        }
+
         setIsGenerating(true);
         try {
-            let finalOutput = SYSTEM_PROMPT.trim() + '\n\n';
+            let finalOutput = SYSTEM_PROMPT_HEAD.trim() + '\n\n';
 
-            // 1. 取得資料庫結構與範例資料
-            finalOutput += '================================================\n';
-            finalOutput += 'DATABASE SCHEMA & SAMPLE DATA (Supabase)\n';
-            finalOutput += '================================================\n';
+            // 動態產生提示詞結尾
+            let introText = "以下是本專案最新的";
+            const parts = [];
+            if (includeDB) parts.push("資料庫結構");
+            if (includeCode) parts.push("完整的原始碼");
+            introText += parts.join("與") + "，請基於這些內容與我協作：\n\n";
             
-            const { data: dbSchema, error } = await supabase.rpc('get_db_schema_export');
-            
-            if (error) {
-                finalOutput += `[無法取得資料庫結構: ${error.message}]\n\n`;
-            } else if (dbSchema && Array.isArray(dbSchema)) {
-                dbSchema.forEach((table: any) => {
-                    finalOutput += `\n[ TABLE: ${table.table_name} ]\n`;
-                    finalOutput += `- 欄位結構:\n`;
-                    table.columns.forEach((col: any) => {
-                        finalOutput += `  * ${col.column_name} (${col.data_type})\n`;
+            finalOutput += introText;
+
+            // ==========================================
+            // 1. 取得資料庫結構與範例資料 (若有勾選)
+            // ==========================================
+            if (includeDB) {
+                finalOutput += '================================================\n';
+                finalOutput += 'DATABASE SCHEMA & SAMPLE DATA (Supabase)\n';
+                finalOutput += '================================================\n';
+                
+                const { data: dbSchema, error } = await supabase.rpc('get_db_schema_export');
+                
+                if (error) {
+                    finalOutput += `[無法取得資料庫結構: ${error.message}]\n\n`;
+                } else if (dbSchema && Array.isArray(dbSchema)) {
+                    dbSchema.forEach((table: any) => {
+                        finalOutput += `\n[ TABLE: ${table.table_name} ]\n`;
+                        finalOutput += `- 欄位結構:\n`;
+                        table.columns.forEach((col: any) => {
+                            finalOutput += `  * ${col.column_name} (${col.data_type})\n`;
+                        });
+                        finalOutput += `- 第一筆假資料範例 (Sample):\n`;
+                        finalOutput += `  ${JSON.stringify(table.sample_data, null, 2).replace(/\n/g, '\n  ')}\n`;
                     });
-                    finalOutput += `- 第一筆假資料範例 (Sample):\n`;
-                    finalOutput += `  ${JSON.stringify(table.sample_data, null, 2).replace(/\n/g, '\n  ')}\n`;
-                });
-                finalOutput += '\n';
+                    finalOutput += '\n';
+                }
             }
 
-            // 2. 取得前端原始碼
-            finalOutput += '================================================\n';
-            finalOutput += 'SOURCE CODE FILES\n';
-            finalOutput += '================================================\n';
+            // ==========================================
+            // 2. 取得前端原始碼 (若有勾選)
+            // ==========================================
+            if (includeCode) {
+                finalOutput += '================================================\n';
+                finalOutput += 'SOURCE CODE FILES\n';
+                finalOutput += '================================================\n';
 
-            const modules = import.meta.glob([
-                '/src/**/*.{ts,tsx,css}',
-                '/package.json',
-                '/vite.config.ts',
-                '/index.html',
-                '/tailwind.config.js'
-            ], { query: '?raw', import: 'default', eager: true });
+                const modules = import.meta.glob([
+                    '/src/**/*.{ts,tsx,css}',
+                    '/package.json',
+                    '/vite.config.ts',
+                    '/index.html',
+                    '/tailwind.config.js'
+                ], { query: '?raw', import: 'default', eager: true });
 
-            const filePaths = Object.keys(modules).sort();
+                const filePaths = Object.keys(modules).sort();
 
-            filePaths.forEach((path) => {
-                const content = modules[path] as string;
-                if (path.includes('vite-env.d.ts') || path.includes('supabase.ts')) {
-                    return; 
-                }
-                finalOutput += `\n================================================\n`;
-                finalOutput += `FILE: ${path.replace('/', '')}\n`;
-                finalOutput += `================================================\n`;
-                finalOutput += `${content}\n`;
-            });
+                filePaths.forEach((path) => {
+                    const content = modules[path] as string;
+                    if (path.includes('vite-env.d.ts') || path.includes('supabase.ts')) {
+                        return; 
+                    }
+                    finalOutput += `\n================================================\n`;
+                    finalOutput += `FILE: ${path.replace('/', '')}\n`;
+                    finalOutput += `================================================\n`;
+                    finalOutput += `${content}\n`;
+                });
+            }
 
             setExportText(finalOutput);
 
@@ -233,8 +255,8 @@ export const AICodeExporter: React.FC = () => {
 
     // 🔓 解鎖後的匯出畫面
     return (
-        <div className="p-6 max-w-6xl mx-auto h-full flex flex-col animate-in fade-in zoom-in duration-300">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4 mb-6 shrink-0">
+        <div className="p-4 sm:p-6 max-w-6xl mx-auto h-full flex flex-col animate-in fade-in zoom-in duration-300">
+            <div className="flex flex-col gap-4 mb-6 shrink-0">
                 <div>
                     <div className="flex items-center gap-2 mb-1">
                         <ShieldCheck size={16} className="text-emerald-500" />
@@ -243,28 +265,56 @@ export const AICodeExporter: React.FC = () => {
                     <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                         <Code className="text-emerald-600" /> AI 協作匯出中心
                     </h2>
-                    <p className="text-sm text-gray-500 mt-2">
-                        一鍵打包系統提示詞、資料庫 Schema 與所有前端原始碼，方便快速餵給 AI 進行開發協作。
+                    <p className="text-sm text-gray-500 mt-1">
+                        自訂打包系統提示詞、資料庫 Schema 與前端原始碼，方便快速餵給 AI 進行開發協作。
                     </p>
                 </div>
-                <button
-                    onClick={generateExportContent}
-                    disabled={isGenerating}
-                    className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-200 transition-all disabled:opacity-50 whitespace-nowrap"
-                >
-                    {isGenerating ? <Loader2 className="animate-spin" size={18} /> : <Sparkles size={18} />}
-                    {isGenerating ? '資料搜集中...' : '產生超級提示詞 (Prompt)'}
-                </button>
+                
+                {/* 匯出選項控制面板 */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                    <div className="flex flex-wrap gap-3">
+                        <button
+                            onClick={() => setIncludeDB(!includeDB)}
+                            className={`px-4 py-2 rounded-lg border text-sm font-bold flex items-center gap-2 transition-all ${
+                                includeDB ? 'bg-emerald-50 text-emerald-700 border-emerald-200 shadow-sm' : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100'
+                            }`}
+                        >
+                            <Database size={16} /> {includeDB ? '✔️ 匯出資料庫 (DB Schema)' : '❌ 不含資料庫'}
+                        </button>
+                        <button
+                            onClick={() => setIncludeCode(!includeCode)}
+                            className={`px-4 py-2 rounded-lg border text-sm font-bold flex items-center gap-2 transition-all ${
+                                includeCode ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-sm' : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100'
+                            }`}
+                        >
+                            <Code size={16} /> {includeCode ? '✔️ 匯出原始碼 (Source Code)' : '❌ 不含原始碼'}
+                        </button>
+                    </div>
+                    
+                    <button
+                        onClick={generateExportContent}
+                        disabled={isGenerating || (!includeDB && !includeCode)}
+                        className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-md shadow-emerald-200 transition-all disabled:opacity-50 whitespace-nowrap w-full sm:w-auto"
+                    >
+                        {isGenerating ? <Loader2 className="animate-spin" size={18} /> : <Sparkles size={18} />}
+                        {isGenerating ? '資料搜集中...' : '產生超級提示詞 (Prompt)'}
+                    </button>
+                </div>
             </div>
 
             <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden relative">
                 {/* 複製按鈕懸浮列 */}
                 <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 flex justify-between items-center shrink-0">
                     <div className="flex items-center gap-3 text-sm font-bold text-gray-600">
-                        <Database size={16} className="hidden sm:block" /> 
-                        <span className="hidden sm:inline">包含 DB Schema</span>
-                        <span className="text-gray-300 hidden sm:inline">|</span> 
-                        <Code size={16} /> 包含原始碼
+                        {exportText ? (
+                            <>
+                                {includeDB && <><Database size={16} className="hidden sm:block" /> <span className="hidden sm:inline">包含 DB Schema</span></>}
+                                {includeDB && includeCode && <span className="text-gray-300 hidden sm:inline">|</span>}
+                                {includeCode && <><Code size={16} /> 包含原始碼</>}
+                            </>
+                        ) : (
+                            <span className="text-gray-400 font-normal text-xs">尚未產生內容</span>
+                        )}
                     </div>
                     <button
                         onClick={handleCopy}
