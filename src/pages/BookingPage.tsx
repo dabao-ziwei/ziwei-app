@@ -482,7 +482,7 @@ export const BookingPage: React.FC = () => {
                             <p className="text-xs text-blue-800/80 leading-relaxed">
                                 若對預約流程或服務有任何問題，歡迎來信：
                                 <a href="mailto:dabao@dabao.life" className="font-bold underline hover:text-blue-900 ml-1">dabao@dabao.life</a>，
-                                或透過大寶官方 LINE 與我們聯繫。
+                                或透過大寶官方 LINE 與我們聯繫。此網站預約的時段僅保留，最終以官方實際釋出的為準，預約時段後請務必與官方Line的小幫手確認時段，謝謝您！
                             </p>
                         </div>
                     </div>
