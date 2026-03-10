@@ -2,16 +2,46 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, User, MessageCircle, Mail, ArrowRight, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, AlertTriangle, Zap, Copy, CreditCard } from 'lucide-react';
-import { getScheduleExceptions, getReservations, bookReservation, getBookingServices, getBookingSettings } from '../db';
-import type { ServiceType, ScheduleException, Reservation, BookingSettings } from '../types/booking';
+import { getScheduleExceptions, getReservations, bookReservation, getBookingServices, getBookingSettings, getRecurringBlocks } from '../db';
+import type { ServiceType, ScheduleException, Reservation, BookingSettings, RecurringBlock } from '../types/booking';
 
+// 計價優先順序：急件 > 促銷 > 早鳥 > 原價
 const getPriceDetails = (srv: ServiceType | null, settings: BookingSettings | null, mode: 'general' | 'urgent') => {
-    if (!srv) return { isEarlyBird: false, currentPrice: 0 };
-    if (mode === 'urgent') return { isEarlyBird: false, currentPrice: srv.price * 2 };
-    if (!settings || !settings.is_early_bird_active || !srv.early_bird_price) return { isEarlyBird: false, currentPrice: srv.price };
-    const currentDay = new Date().getDate();
-    if (currentDay >= settings.early_bird_start_day && currentDay <= settings.early_bird_end_day) return { isEarlyBird: true, currentPrice: srv.early_bird_price };
-    return { isEarlyBird: false, currentPrice: srv.price };
+    if (!srv) return { isEarlyBird: false, isPromo: false, currentPrice: 0, label: '' };
+    
+    // 1. 急件 (絕對優先，無視任何折扣)
+    if (mode === 'urgent') return { isEarlyBird: false, isPromo: false, currentPrice: srv.price * 2, label: '急件雙倍計費' };
+    
+    if (settings) {
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        const currentDay = new Date().getDate();
+
+        // 2. 全站促銷 (優先於早鳥)
+        if (settings.promo_is_active && settings.promo_start_date && settings.promo_end_date && settings.promo_discount_rate) {
+            const promoStart = new Date(settings.promo_start_date);
+            promoStart.setHours(0, 0, 0, 0);
+            const promoEnd = new Date(settings.promo_end_date);
+            promoEnd.setHours(23, 59, 59, 999);
+
+            if (today >= promoStart && today <= promoEnd) {
+                return { 
+                    isEarlyBird: false, 
+                    isPromo: true, 
+                    currentPrice: Math.floor(srv.price * settings.promo_discount_rate), 
+                    label: settings.promo_title || '限時優惠' 
+                };
+            }
+        }
+
+        // 3. 專屬早鳥價
+        if (settings.is_early_bird_active && srv.early_bird_price && currentDay >= settings.early_bird_start_day && currentDay <= settings.early_bird_end_day) {
+            return { isEarlyBird: true, isPromo: false, currentPrice: srv.early_bird_price, label: '早鳥優惠中' };
+        }
+    }
+
+    // 4. 一般原價
+    return { isEarlyBird: false, isPromo: false, currentPrice: srv.price, label: '' };
 };
 
 export const BookingPage: React.FC = () => {
@@ -28,6 +58,7 @@ export const BookingPage: React.FC = () => {
     
     const [exceptions, setExceptions] = useState<ScheduleException[]>([]);
     const [reservations, setReservations] = useState<Reservation[]>([]);
+    const [recurringBlocks, setRecurringBlocks] = useState<RecurringBlock[]>([]); 
     const [globalSettings, setGlobalSettings] = useState<BookingSettings | null>(null);
     
     const [loadingInit, setLoadingInit] = useState(true);
@@ -43,9 +74,10 @@ export const BookingPage: React.FC = () => {
     const formRef = useRef<HTMLFormElement>(null);
 
     useEffect(() => {
-        Promise.all([getBookingServices(), getBookingSettings()]).then(([data, settings]) => {
+        Promise.all([getBookingServices(), getBookingSettings(), getRecurringBlocks()]).then(([data, settings, blocks]) => {
             setServices(data.filter(s => s.is_active));
             setGlobalSettings(settings);
+            setRecurringBlocks(blocks.filter(b => b.is_active));
             setLoadingInit(false);
         });
     }, []);
@@ -86,7 +118,8 @@ export const BookingPage: React.FC = () => {
         if (!selectedDate || !selectedService) return [];
         const dateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
         const ex = exceptions.find(e => e.exception_date === dateStr);
-        const isWeekend = selectedDate.getDay() === 0 || selectedDate.getDay() === 6;
+        const dayOfWeek = selectedDate.getDay();
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
         let isClosed = isWeekend; let openTimeStr = "10:00"; let closeTimeStr = "20:00"; 
         if (ex) {
@@ -109,21 +142,34 @@ export const BookingPage: React.FC = () => {
         const duration = selectedService.duration_mins;
         const now = new Date();
         const dayRes = reservations.filter(r => new Date(r.start_time).toDateString() === selectedDate.toDateString() && r.status !== 'CANCELLED');
+        
+        const dailyRecurringBlocks = recurringBlocks.filter(b => b.day_of_week === dayOfWeek);
 
         while (currTime.getTime() + duration * 60000 <= endLimit.getTime()) {
             const slotStart = currTime.getTime();
             const slotEnd = slotStart + duration * 60000;
-            const isOverlap = dayRes.some(r => {
+            
+            const isOverlapRes = dayRes.some(r => {
                 const rStart = new Date(r.start_time).getTime();
                 const rEnd = new Date(r.end_time).getTime() + 30 * 60000; 
                 return Math.max(slotStart, rStart) < Math.min(slotEnd, rEnd);
             });
 
-            if (!isOverlap && slotStart > now.getTime()) { slots.push(new Date(currTime)); }
+            const isOverlapRecurring = dailyRecurringBlocks.some(b => {
+                const [bSH, bSM] = b.start_time.split(':').map(Number);
+                const [bEH, bEM] = b.end_time.split(':').map(Number);
+                const bStart = new Date(selectedDate); bStart.setHours(bSH, bSM, 0, 0);
+                const bEnd = new Date(selectedDate); bEnd.setHours(bEH, bEM, 0, 0);
+                return Math.max(slotStart, bStart.getTime()) < Math.min(slotEnd, bEnd.getTime());
+            });
+
+            if (!isOverlapRes && !isOverlapRecurring && slotStart > now.getTime()) { 
+                slots.push(new Date(currTime)); 
+            }
             currTime.setMinutes(currTime.getMinutes() + 30);
         }
         return slots;
-    }, [selectedDate, selectedService, exceptions, reservations, bookingMode]);
+    }, [selectedDate, selectedService, exceptions, reservations, recurringBlocks, bookingMode]);
 
     const today = new Date(); today.setHours(0,0,0,0);
     const minGeneralDate = new Date(today); minGeneralDate.setDate(minGeneralDate.getDate() + 7);
@@ -144,7 +190,6 @@ export const BookingPage: React.FC = () => {
         setSelectedDate(null); setSelectedSlot(null);
     };
 
-    // UX: 點擊服務項目，平滑滾動到日曆
     const handleServiceSelect = (srv: ServiceType) => {
         setSelectedService(srv);
         setStep(2);
@@ -155,7 +200,6 @@ export const BookingPage: React.FC = () => {
         }, 100);
     };
 
-    // UX: 點擊時段，平滑滾動到表單
     const handleSlotSelect = (slot: Date) => {
         setSelectedSlot(slot);
         setStep(3);
@@ -199,12 +243,11 @@ export const BookingPage: React.FC = () => {
     // 成功頁面 UI
     if (isSuccess) {
         const displayTime = selectedSlot?.toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
-        const { isEarlyBird, currentPrice } = getPriceDetails(selectedService, globalSettings, bookingMode);
+        const { currentPrice, label } = getPriceDetails(selectedService, globalSettings, bookingMode);
         const timeoutHours = globalSettings?.payment_timeout_hours || 3;
         
         let priceText = `NT$ ${currentPrice}`;
-        if (bookingMode === 'urgent') priceText += ` (急件雙倍)`;
-        else if (isEarlyBird) priceText += ` (早鳥優惠價)`;
+        if (label) priceText += ` (${label})`;
         
         const modeLabel = bookingMode === 'urgent' ? '【急件】' : '';
         const rawLineText = `大寶老師團隊您好！\n我剛剛在網站完成了預約，以下是我的資料：\n\n👤 姓名：${formData.name}\n📅 時間：${displayTime}\n🔮 項目：${modeLabel}${selectedService?.name}\n💰 應付金額：${priceText}\n\n我想確認付款資訊，謝謝！`;
@@ -305,7 +348,7 @@ export const BookingPage: React.FC = () => {
                         </h2>
                         <div className="flex flex-col gap-3">
                             {services.map(srv => {
-                                const { isEarlyBird, currentPrice } = getPriceDetails(srv, globalSettings, bookingMode);
+                                const { currentPrice, label } = getPriceDetails(srv, globalSettings, bookingMode);
                                 const isSelected = selectedService?.id === srv.id;
                                 return (
                                     <button 
@@ -313,17 +356,33 @@ export const BookingPage: React.FC = () => {
                                         onClick={() => handleServiceSelect(srv)} 
                                         className={`text-left p-4 rounded-xl border-2 transition-all relative overflow-hidden flex flex-col ${isSelected ? (bookingMode === 'urgent' ? 'border-red-500 bg-red-50 shadow-md' : 'border-blue-600 bg-blue-50 shadow-md') : 'border-slate-100 hover:border-blue-200 bg-white hover:bg-slate-50'}`}
                                     >
-                                        {bookingMode === 'urgent' && (<div className="absolute top-0 right-0 bg-red-600 text-white text-[10px] font-bold px-3 py-0.5 rounded-bl-lg tracking-widest shadow-sm">急件雙倍計費</div>)}
-                                        {bookingMode === 'general' && isEarlyBird && (<div className="absolute top-0 right-0 bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-bl-lg shadow-sm">早鳥優惠中</div>)}
+                                        {/* 標籤顯示邏輯 */}
+                                        {label && (
+                                            <div className={`absolute top-0 right-0 text-white text-[10px] font-bold px-3 py-0.5 rounded-bl-lg shadow-sm ${bookingMode === 'urgent' ? 'bg-red-600 tracking-widest' : 'bg-rose-500'}`}>
+                                                {label}
+                                            </div>
+                                        )}
                                         
                                         <div className="font-bold text-slate-800 text-base pr-16">{srv.name}</div>
                                         <div className="text-xs font-mono font-bold mt-1 flex items-center flex-wrap gap-1">
                                             <span className={bookingMode === 'urgent' ? 'text-red-700' : 'text-blue-600'}>{srv.duration_mins} 分鐘 | </span>
-                                            {bookingMode === 'urgent' ? (<><span className="line-through text-slate-400 text-[10px]">NT${srv.price}</span><span className="text-red-600 text-sm">NT${currentPrice}</span></>) : isEarlyBird ? (<><span className="line-through text-slate-400 text-[10px]">NT${srv.price}</span><span className="text-rose-500 text-sm">NT${currentPrice}</span></>) : (<span className="text-blue-600 text-sm">NT${srv.price}</span>)}
+                                            
+                                            {/* 價錢顯示邏輯：若有打折則顯示刪除線原價 */}
+                                            {currentPrice !== srv.price ? (
+                                                <>
+                                                    <span className="line-through text-slate-400 text-[10px]">NT${srv.price}</span>
+                                                    <span className={`${bookingMode === 'urgent' ? 'text-red-600' : 'text-rose-500'} text-sm`}>NT${currentPrice}</span>
+                                                </>
+                                            ) : (
+                                                <span className="text-blue-600 text-sm">NT${srv.price}</span>
+                                            )}
                                         </div>
-                                        {bookingMode === 'general' && isEarlyBird && globalSettings?.early_bird_end_day && (
+                                        
+                                        {/* 額外的早鳥期限說明 */}
+                                        {bookingMode === 'general' && label === '早鳥優惠中' && globalSettings?.early_bird_end_day && (
                                             <div className="text-[10px] font-bold text-rose-600 bg-rose-50 inline-block px-2 py-0.5 rounded mt-2 w-fit border border-rose-100">🔥 本月早鳥至 {globalSettings.early_bird_end_day} 日</div>
                                         )}
+                                        
                                         <div className="text-xs text-slate-500 mt-2 leading-relaxed opacity-90">{srv.description}</div>
                                     </button>
                                 );
@@ -358,21 +417,32 @@ export const BookingPage: React.FC = () => {
                                     <div className="grid grid-cols-7 gap-1">
                                         {calendarGrid.map((week, wIdx) => week.map((date, dIdx) => {
                                             if (!date) return <div key={`empty-${wIdx}-${dIdx}`} className="p-2"></div>;
+                                            
                                             const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
                                             const ex = exceptions.find(e => e.exception_date === dateStr);
-                                            const isSaturday = date.getDay() === 6; const isClosed = ex ? ex.is_closed : false; 
+                                            
+                                            const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+                                            // 如果有例外設定，依例外設定為主；否則預設週末為關閉
+                                            const isClosed = ex ? ex.is_closed : isWeekend;
+                                            
                                             let isDisabled = false;
-                                            if (isSaturday) isDisabled = true;
-                                            else if (bookingMode === 'general' && date < minGeneralDate) isDisabled = true;
+                                            if (bookingMode === 'general' && date < minGeneralDate) isDisabled = true;
                                             else if (bookingMode === 'urgent' && (date < today || date > maxUrgentDate)) isDisabled = true;
                                             else if (isClosed) isDisabled = true;
                                             
                                             const isSelected = selectedDate?.toDateString() === date.toDateString();
                                             const focusColor = bookingMode === 'urgent' ? 'bg-red-600' : 'bg-blue-600';
                                             return (
-                                                <button key={dIdx} disabled={isDisabled} onClick={() => { setSelectedDate(date); setSelectedSlot(null); }} className={`aspect-square flex flex-col items-center justify-center rounded-xl transition-all ${isSelected ? `${focusColor} text-white font-bold shadow-md scale-105` : ''} ${!isSelected && !isDisabled ? 'hover:bg-blue-50 text-slate-700 font-medium bg-white border border-slate-100' : ''} ${isDisabled ? 'bg-slate-50/50 cursor-not-allowed' : ''}`}>
-                                                    <span className={`${isDisabled && !isSaturday ? 'text-slate-300 line-through decoration-slate-300' : ''}`}>{date.getDate()}</span>
-                                                    {isSaturday && <span className="text-[9px] font-bold text-red-400 mt-0.5 scale-90 leading-none">休假</span>}
+                                                <button 
+                                                    key={dIdx} 
+                                                    disabled={isDisabled} 
+                                                    onClick={() => { setSelectedDate(date); setSelectedSlot(null); }} 
+                                                    className={`aspect-square flex flex-col items-center justify-center rounded-xl transition-all 
+                                                        ${isSelected ? `${focusColor} text-white font-bold shadow-md scale-105` : ''} 
+                                                        ${!isSelected && !isDisabled ? 'hover:bg-blue-50 text-slate-700 font-medium bg-white border border-slate-100' : ''} 
+                                                        ${isDisabled ? 'bg-slate-50/50 cursor-not-allowed' : ''}`}
+                                                >
+                                                    <span className={`${isDisabled ? 'text-slate-300' : ''}`}>{date.getDate()}</span>
                                                 </button>
                                             );
                                         }))}
@@ -389,7 +459,7 @@ export const BookingPage: React.FC = () => {
                                             </div>
                                         ) : availableSlots.length === 0 ? (
                                             <div className="h-full flex items-center justify-center text-slate-500 text-sm text-center py-10 flex-col gap-2">
-                                                <Clock size={24} className="opacity-50" />
+                                                <AlertTriangle size={24} className="opacity-50" />
                                                 本日預約已滿<br/>請選擇其他日期
                                             </div>
                                         ) : (

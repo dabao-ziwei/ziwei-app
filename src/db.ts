@@ -5,7 +5,7 @@ export { supabase };
 import type { UserFeatures } from './logic/permissions'; 
 import type { YearAdviceRule } from './logic/types';
 import type { PointPack, PointsLedger, PointTransaction, FeatureConfig } from './types/store';
-import type { ScheduleException, Reservation, ServiceType, BookingSettings } from './types/booking';
+import type { ScheduleException, Reservation, ServiceType, BookingSettings, RecurringBlock } from './types/booking';
 
 export const SUPER_VIEW_EMAIL = 'stephenwu.0926@gmail.com';
 const FALLBACK_COST = 50; 
@@ -169,13 +169,11 @@ export const loadClients = async (loadAllForAdmin = false): Promise<Client[]> =>
   if (!user) return [];
   const isSuperViewer = checkIsSuperAdmin(user.email);
   
-  // [關鍵修正]：無論是不是管理員，強制排除已刪除 (is_deleted = true) 的資料
   let query = supabase.from('clients')
     .select('*')
     .eq('is_deleted', false)
     .order('created_at', { ascending: false });
     
-  // 如果不是管理員，或管理員沒有要求看全部，就只篩選出自己的命盤
   if (!isSuperViewer || !loadAllForAdmin) { 
       query = query.eq('user_id', user.id); 
   }
@@ -396,6 +394,26 @@ export const deleteScheduleException = async (dateStr: string): Promise<boolean>
     return !error;
 };
 
+// [新增] 常態課程 API
+export const getRecurringBlocks = async (): Promise<RecurringBlock[]> => {
+    const { data } = await supabase.from('recurring_blocks')
+        .select('*')
+        .order('day_of_week', { ascending: true })
+        .order('start_time', { ascending: true });
+    return data || [];
+};
+
+export const saveRecurringBlock = async (block: Partial<RecurringBlock>): Promise<boolean> => {
+    const { error } = await supabase.from('recurring_blocks').upsert(block);
+    if (error) console.error("Error saving recurring block:", error);
+    return !error;
+};
+
+export const deleteRecurringBlock = async (id: string): Promise<boolean> => {
+    const { error } = await supabase.from('recurring_blocks').delete().eq('id', id);
+    return !error;
+};
+
 export const getReservations = async (startDate: string, endDate: string): Promise<Reservation[]> => {
     const { data } = await supabase.from('reservations').select('*').gte('start_time', startDate).lte('start_time', endDate).order('start_time', { ascending: true });
     return data || [];
@@ -458,12 +476,11 @@ export const deleteBookingService = async (id: string): Promise<boolean> => {
     return !error;
 };
 
-// [新增] 抓取所有歷史預約紀錄，用來做黑名單與統計分析
 export const getAllReservationsHistory = async (): Promise<Reservation[]> => {
     const { data } = await supabase
         .from('reservations')
         .select('*')
-        .neq('status', 'BLOCKED') // 排除私人行程
+        .neq('status', 'BLOCKED') 
         .order('start_time', { ascending: false });
     return data || [];
 };

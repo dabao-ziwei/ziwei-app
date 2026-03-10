@@ -1,14 +1,14 @@
 // FILE: src/components/Admin/BookingManagement.tsx
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { Calendar, Download, Loader2, Settings, User, Plus, Edit2, Trash2, Save, X, ListOrdered, Percent, Clock, ClipboardList, AlertTriangle, Search, Filter, ShieldAlert } from 'lucide-react';
+import { Calendar, Download, Loader2, Settings, User, Plus, Edit2, Trash2, Save, X, ListOrdered, Percent, Clock, ClipboardList, AlertTriangle, Search, Filter, ShieldAlert, Repeat } from 'lucide-react';
 import { supabase } from '../../supabase';
 import { 
     getScheduleExceptions, getReservations, setScheduleException, deleteScheduleException, 
     getBookingServices, saveBookingService, deleteBookingService, deleteReservation,
     getBookingSettings, updateBookingSettings, addScheduleBlock, getAllFutureReservations,
-    getAllReservationsHistory // [新增]
+    getAllReservationsHistory, getRecurringBlocks, saveRecurringBlock, deleteRecurringBlock
 } from '../../db';
-import type { ScheduleException, Reservation, ServiceType, BookingSettings } from '../../types/booking';
+import type { ScheduleException, Reservation, ServiceType, BookingSettings, RecurringBlock } from '../../types/booking';
 
 interface ClientStat {
     name: string;
@@ -19,13 +19,16 @@ interface ClientStat {
     lastDate: string;
 }
 
+const WEEKDAYS = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+
 export const BookingManagement: React.FC = () => {
     const [adminTab, setAdminTab] = useState<'calendar' | 'reservations' | 'services'>('calendar');
-    const [resSubTab, setResSubTab] = useState<'future' | 'history'>('future'); // 預約子頁籤
+    const [resSubTab, setResSubTab] = useState<'future' | 'history'>('future');
     
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [exceptions, setExceptions] = useState<ScheduleException[]>([]);
     const [reservations, setReservations] = useState<Reservation[]>([]);
+    const [recurringBlocks, setRecurringBlocks] = useState<RecurringBlock[]>([]);
     const [loading, setLoading] = useState(false);
     
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -38,12 +41,13 @@ export const BookingManagement: React.FC = () => {
     const [blockStart, setBlockStart] = useState('');
     const [blockEnd, setBlockEnd] = useState('');
 
+    const [newRecurring, setNewRecurring] = useState({ day_of_week: 1, start_time: '19:00', end_time: '21:00', title: '' });
+
     const [allFutureReservations, setAllFutureReservations] = useState<Reservation[]>([]);
     const [allHistoryReservations, setAllHistoryReservations] = useState<Reservation[]>([]);
 
-    // 黑名單搜尋與篩選狀態
     const [historySearch, setHistorySearch] = useState('');
-    const [flakeFilter, setFlakeFilter] = useState<number>(0); // 0=全部, 1=放鳥>=1次, 2=放鳥>=2次
+    const [flakeFilter, setFlakeFilter] = useState<number>(0); 
 
     const [services, setServices] = useState<ServiceType[]>([]);
     const [editingService, setEditingService] = useState<Partial<ServiceType> | null>(null);
@@ -53,6 +57,7 @@ export const BookingManagement: React.FC = () => {
     useEffect(() => {
         if (adminTab === 'calendar') { 
             loadMonthData(currentMonth.getFullYear(), currentMonth.getMonth()); 
+            loadRecurringData();
         } else if (adminTab === 'services') { 
             loadServicesData(); 
         } else if (adminTab === 'reservations') { 
@@ -61,6 +66,11 @@ export const BookingManagement: React.FC = () => {
             if (resSubTab === 'history') loadHistoryReservations();
         }
     }, [currentMonth, adminTab, resSubTab]);
+
+    const loadRecurringData = async () => {
+        const data = await getRecurringBlocks();
+        setRecurringBlocks(data);
+    };
 
     const loadAllReservations = async () => {
         setLoading(true);
@@ -98,7 +108,10 @@ export const BookingManagement: React.FC = () => {
         setLoading(true);
         const [data, settingsData] = await Promise.all([ getBookingServices(), getBookingSettings() ]);
         setServices(data);
-        setGlobalSettings(settingsData || { id: 1, is_early_bird_active: false, early_bird_start_day: 5, early_bird_end_day: 10, payment_timeout_hours: 3 });
+        setGlobalSettings(settingsData || { 
+            id: 1, is_early_bird_active: false, early_bird_start_day: 5, early_bird_end_day: 10, payment_timeout_hours: 3,
+            promo_is_active: false, promo_start_date: null, promo_end_date: null, promo_discount_rate: null, promo_title: ''
+        });
         setLoading(false);
     };
 
@@ -107,7 +120,7 @@ export const BookingManagement: React.FC = () => {
         setSavingSettings(true);
         await updateBookingSettings(globalSettings);
         setSavingSettings(false);
-        alert('全站規則與早鳥設定儲存成功！');
+        alert('全站規則與優惠設定儲存成功！');
     };
 
     const handleSaveService = async () => {
@@ -189,6 +202,33 @@ export const BookingManagement: React.FC = () => {
         else { alert("新增失敗"); setLoading(false); }
     };
 
+    const handleAddRecurring = async () => {
+        if (!newRecurring.title) return alert('請填寫課程/行程標題');
+        setLoading(true);
+        const success = await saveRecurringBlock({
+            day_of_week: newRecurring.day_of_week,
+            start_time: newRecurring.start_time + ':00',
+            end_time: newRecurring.end_time + ':00',
+            title: newRecurring.title,
+            is_active: true
+        });
+        if (success) {
+            await loadRecurringData();
+            setNewRecurring({ ...newRecurring, title: '' });
+        } else {
+            alert('新增常態保留失敗');
+        }
+        setLoading(false);
+    };
+
+    const handleDeleteRecurring = async (id: string) => {
+        if (!confirm('確定刪除此常態時段？前台將恢復開放預約此時段。')) return;
+        setLoading(true);
+        await deleteRecurringBlock(id);
+        await loadRecurringData();
+        setLoading(false);
+    };
+
     const handleDeleteReservation = async (id: string, isBlock = false) => {
         if (!confirm(isBlock ? '確定要刪除這個私人保留時段嗎？' : '確定要徹底刪除此筆紀錄嗎？(注意：徹底刪除將不會被列入黑名單統計中)')) return;
         const success = await deleteReservation(id);
@@ -213,7 +253,6 @@ export const BookingManagement: React.FC = () => {
         return grid;
     }, [currentMonth]);
 
-    // 黑名單與歷史統計運算
     const clientStats = useMemo(() => {
         const stats: Record<string, ClientStat> = {};
         allHistoryReservations.forEach(r => {
@@ -225,14 +264,12 @@ export const BookingManagement: React.FC = () => {
             if (r.status === 'COMPLETED' || r.status === 'PAID') stats[lineId].completed += 1;
             if (r.status === 'CANCELLED') stats[lineId].cancelled += 1;
             
-            // 更新最新名稱與日期
             if (new Date(r.start_time) > new Date(stats[lineId].lastDate)) {
                 stats[lineId].lastDate = r.start_time;
                 stats[lineId].name = r.client_name;
             }
         });
 
-        // 轉換為陣列並過濾搜尋條件
         return Object.values(stats).filter(stat => {
             const matchSearch = stat.name.includes(historySearch) || stat.lineId.includes(historySearch);
             const matchFlake = stat.cancelled >= flakeFilter;
@@ -250,42 +287,88 @@ export const BookingManagement: React.FC = () => {
             <div className="flex bg-white p-1 rounded-xl shadow-sm border border-gray-200 w-fit">
                 <button onClick={() => setAdminTab('calendar')} className={`px-6 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${adminTab === 'calendar' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-gray-500 hover:bg-gray-50'}`}><Calendar size={18} /> 行程與營業設定</button>
                 <button onClick={() => setAdminTab('reservations')} className={`px-6 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${adminTab === 'reservations' ? 'bg-emerald-50 text-emerald-600 shadow-sm' : 'text-gray-500 hover:bg-gray-50'}`}><ClipboardList size={18} /> 預約與歷史管理</button>
-                <button onClick={() => setAdminTab('services')} className={`px-6 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${adminTab === 'services' ? 'bg-purple-50 text-purple-600 shadow-sm' : 'text-gray-500 hover:bg-gray-50'}`}><ListOrdered size={18} /> 預約項目與早鳥</button>
+                <button onClick={() => setAdminTab('services')} className={`px-6 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${adminTab === 'services' ? 'bg-purple-50 text-purple-600 shadow-sm' : 'text-gray-500 hover:bg-gray-50'}`}><ListOrdered size={18} /> 預約項目與全站規則</button>
             </div>
 
             {adminTab === 'calendar' && (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-6 relative">
-                        <div className="flex justify-between items-center mb-6">
-                            <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} className="px-4 py-2 border rounded-lg font-bold text-slate-600 hover:bg-slate-50">上個月</button>
-                            <h2 className="text-xl font-bold text-slate-800">{currentMonth.getFullYear()}年 {currentMonth.getMonth() + 1}月</h2>
-                            <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} className="px-4 py-2 border rounded-lg font-bold text-slate-600 hover:bg-slate-50">下個月</button>
-                        </div>
-                        {loading && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] flex items-center justify-center z-10 rounded-xl"><Loader2 className="animate-spin text-blue-500" size={32}/></div>}
-                        
-                        <div className="grid grid-cols-7 gap-2 text-center mb-4">{['一','二','三','四','五','六','日'].map(d => <div key={d} className="text-sm font-bold text-slate-400">{d}</div>)}</div>
-                        <div className="grid grid-cols-7 gap-2">
-                            {calendarGrid.map((week, wIdx) => week.map((date, dIdx) => {
-                                if (!date) return <div key={`empty-${wIdx}-${dIdx}`} className="aspect-square p-2"></div>;
-                                const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-                                const ex = exceptions.find(e => e.exception_date === dateStr);
-                                const isClosed = ex ? ex.is_closed : (date.getDay() === 0 || date.getDay() === 6);
-                                const isCustomTime = ex && !ex.is_closed; 
-                                const dayBlocksCount = reservations.filter(r => r.status === 'BLOCKED' && new Date(r.start_time).toDateString() === date.toDateString()).length;
-                                const isSelected = selectedDate?.toDateString() === date.toDateString();
+                    <div className="lg:col-span-2 space-y-6">
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 relative">
+                            <div className="flex justify-between items-center mb-6">
+                                <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} className="px-4 py-2 border rounded-lg font-bold text-slate-600 hover:bg-slate-50">上個月</button>
+                                <h2 className="text-xl font-bold text-slate-800">{currentMonth.getFullYear()}年 {currentMonth.getMonth() + 1}月</h2>
+                                <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} className="px-4 py-2 border rounded-lg font-bold text-slate-600 hover:bg-slate-50">下個月</button>
+                            </div>
+                            {loading && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] flex items-center justify-center z-10 rounded-xl"><Loader2 className="animate-spin text-blue-500" size={32}/></div>}
+                            
+                            <div className="grid grid-cols-7 gap-2 text-center mb-4">{['一','二','三','四','五','六','日'].map(d => <div key={d} className="text-sm font-bold text-slate-400">{d}</div>)}</div>
+                            <div className="grid grid-cols-7 gap-2">
+                                {calendarGrid.map((week, wIdx) => week.map((date, dIdx) => {
+                                    if (!date) return <div key={`empty-${wIdx}-${dIdx}`} className="aspect-square p-2"></div>;
+                                    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                                    const ex = exceptions.find(e => e.exception_date === dateStr);
+                                    const isClosed = ex ? ex.is_closed : (date.getDay() === 0 || date.getDay() === 6);
+                                    const isCustomTime = ex && !ex.is_closed; 
+                                    const dayBlocksCount = reservations.filter(r => r.status === 'BLOCKED' && new Date(r.start_time).toDateString() === date.toDateString()).length;
+                                    const isSelected = selectedDate?.toDateString() === date.toDateString();
+                                    const hasRecurring = recurringBlocks.some(b => b.day_of_week === date.getDay());
 
-                                return (
-                                    <button key={dIdx} onClick={() => handleDayClick(date)} className={`aspect-square flex flex-col items-center justify-center rounded-xl border-2 transition-all p-1 relative ${isSelected ? 'border-blue-600 ring-2 ring-blue-200' : 'border-slate-100 hover:border-blue-300'} ${isClosed ? 'bg-slate-50 opacity-60' : 'bg-white shadow-sm'}`}>
-                                        <span className={`text-lg font-bold ${isClosed ? 'text-slate-400' : 'text-slate-700'}`}>{date.getDate()}</span>
-                                        {isClosed ? (<span className="text-[10px] font-bold text-red-400 bg-red-50 px-1.5 py-0.5 rounded mt-1">休假</span>) : (
-                                            <div className="flex flex-col items-center gap-1 mt-1 w-full px-0.5">
-                                                {isCustomTime ? (<span className="text-[9px] font-bold text-purple-600 bg-purple-50 px-1 py-0.5 rounded w-full truncate">自訂時間</span>) : (<span className="text-[9px] text-emerald-500 py-0.5">開放</span>)}
-                                                {dayBlocksCount > 0 && (<span className="text-[9px] font-bold text-slate-600 bg-slate-200 px-1 py-0.5 rounded w-full truncate flex items-center justify-center gap-0.5">🔒 {dayBlocksCount} 保留</span>)}
-                                            </div>
-                                        )}
-                                    </button>
-                                );
-                            }))}
+                                    return (
+                                        <button key={dIdx} onClick={() => handleDayClick(date)} className={`aspect-square flex flex-col items-center justify-center rounded-xl border-2 transition-all p-1 relative ${isSelected ? 'border-blue-600 ring-2 ring-blue-200' : 'border-slate-100 hover:border-blue-300'} ${isClosed ? 'bg-slate-50 opacity-60' : 'bg-white shadow-sm'}`}>
+                                            <span className={`text-lg font-bold ${isClosed ? 'text-slate-400' : 'text-slate-700'}`}>{date.getDate()}</span>
+                                            {isClosed ? (<span className="text-[10px] font-bold text-red-400 bg-red-50 px-1.5 py-0.5 rounded mt-1">休假</span>) : (
+                                                <div className="flex flex-col items-center gap-1 mt-1 w-full px-0.5">
+                                                    {isCustomTime ? (<span className="text-[9px] font-bold text-purple-600 bg-purple-50 px-1 py-0.5 rounded w-full truncate">自訂時間</span>) : (<span className="text-[9px] text-emerald-500 py-0.5">開放</span>)}
+                                                    {dayBlocksCount > 0 && (<span className="text-[9px] font-bold text-slate-600 bg-slate-200 px-1 py-0.5 rounded w-full truncate flex items-center justify-center gap-0.5">🔒 {dayBlocksCount} 保留</span>)}
+                                                    {hasRecurring && (<span className="absolute top-1 right-1 w-1.5 h-1.5 bg-blue-500 rounded-full" title="本日有常態課程"></span>)}
+                                                </div>
+                                            )}
+                                        </button>
+                                    );
+                                }))}
+                            </div>
+                        </div>
+
+                        {/* 常態保留設定區塊 */}
+                        <div className="bg-white rounded-xl shadow-sm border border-blue-200 p-6">
+                            <h3 className="font-bold text-blue-800 mb-4 flex items-center gap-2"><Repeat size={18}/> 每週常態保留時段 (如固定課程)</h3>
+                            <p className="text-xs text-slate-500 mb-4">設定後，每週對應星期的該時段將自動從前台隱藏，不可被預約。</p>
+                            
+                            <div className="flex items-end gap-3 mb-6 bg-blue-50 p-4 rounded-xl border border-blue-100">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 mb-1">星期</label>
+                                    <select className="p-2 border rounded bg-white text-sm outline-none" value={newRecurring.day_of_week} onChange={e => setNewRecurring({...newRecurring, day_of_week: parseInt(e.target.value)})}>
+                                        {WEEKDAYS.map((day, idx) => <option key={idx} value={idx}>{day}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 mb-1">時間</label>
+                                    <div className="flex items-center gap-1">
+                                        <input type="time" className="p-2 border rounded bg-white text-sm outline-none w-24" value={newRecurring.start_time} onChange={e => setNewRecurring({...newRecurring, start_time: e.target.value})} />
+                                        <span className="text-slate-400">-</span>
+                                        <input type="time" className="p-2 border rounded bg-white text-sm outline-none w-24" value={newRecurring.end_time} onChange={e => setNewRecurring({...newRecurring, end_time: e.target.value})} />
+                                    </div>
+                                </div>
+                                <div className="flex-1">
+                                    <label className="block text-xs font-bold text-slate-600 mb-1">項目名稱</label>
+                                    <input type="text" placeholder="例如：紫微初階班" className="w-full p-2 border rounded bg-white text-sm outline-none" value={newRecurring.title} onChange={e => setNewRecurring({...newRecurring, title: e.target.value})} />
+                                </div>
+                                <button onClick={handleAddRecurring} disabled={loading} className="px-4 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 transition-colors text-sm whitespace-nowrap">新增</button>
+                            </div>
+
+                            <div className="space-y-2">
+                                {recurringBlocks.map(block => (
+                                    <div key={block.id} className="flex justify-between items-center p-3 border rounded-lg bg-white hover:border-blue-300 transition-colors">
+                                        <div className="flex items-center gap-4">
+                                            <span className="font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded text-sm">{WEEKDAYS[block.day_of_week]}</span>
+                                            <span className="font-mono text-slate-600 text-sm">{block.start_time.slice(0,5)} - {block.end_time.slice(0,5)}</span>
+                                            <span className="font-bold text-slate-800">{block.title}</span>
+                                        </div>
+                                        <button onClick={() => handleDeleteRecurring(block.id!)} className="text-slate-400 hover:text-red-500 transition-colors p-1"><Trash2 size={16}/></button>
+                                    </div>
+                                ))}
+                                {recurringBlocks.length === 0 && <div className="text-center text-sm text-slate-400 py-4">目前無常態保留時段</div>}
+                            </div>
                         </div>
                     </div>
 
@@ -339,8 +422,6 @@ export const BookingManagement: React.FC = () => {
 
             {adminTab === 'reservations' && (
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 animate-in fade-in slide-in-from-bottom-4">
-                    
-                    {/* 子選單 */}
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b border-slate-100 pb-4 gap-4">
                         <div className="flex bg-slate-100 p-1 rounded-lg">
                             <button onClick={() => setResSubTab('future')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${resSubTab === 'future' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>📅 未來預約總覽</button>
@@ -354,7 +435,6 @@ export const BookingManagement: React.FC = () => {
                     <div className="relative min-h-[300px]">
                         {loading && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] flex items-center justify-center z-10"><Loader2 className="animate-spin text-emerald-500" size={32}/></div>}
                         
-                        {/* 1. 未來預約介面 */}
                         {resSubTab === 'future' && (
                             <div className="space-y-4">
                                 {allFutureReservations.length === 0 ? (
@@ -407,7 +487,6 @@ export const BookingManagement: React.FC = () => {
                             </div>
                         )}
 
-                        {/* 2. 歷史與黑名單介面 */}
                         {resSubTab === 'history' && (
                             <div className="space-y-4 animate-in fade-in">
                                 <div className="flex flex-col sm:flex-row gap-4 mb-6">
@@ -468,42 +547,73 @@ export const BookingManagement: React.FC = () => {
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 relative overflow-hidden">
                         <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-4">
-                            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Settings size={20} className="text-slate-500"/> 全站預約規則設定</h2>
+                            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Settings size={20} className="text-slate-500"/> 全站預約規則與行銷設定</h2>
                         </div>
-                        <div className="flex flex-wrap gap-6 items-end">
-                            <div className="flex-1 min-w-[200px] bg-slate-50 p-3 rounded-xl border border-slate-200">
-                                <label className="block text-xs font-bold text-slate-500 mb-2 flex items-center gap-1"><Clock size={14}/> 未付款保留時間 (小時)</label>
+                        <div className="flex flex-col lg:flex-row gap-6 items-start">
+                            
+                            {/* 原本的未付款保留時間 */}
+                            <div className="flex-1 w-full bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-1"><Clock size={16}/> 未付款保留時間 (小時)</label>
                                 <div className="flex items-center gap-2">
-                                    <input type="number" min="1" max="72" className="w-20 p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-center font-bold text-slate-700" value={globalSettings?.payment_timeout_hours || 3} onChange={e => setGlobalSettings(prev => prev ? {...prev, payment_timeout_hours: parseInt(e.target.value)} : null)} />
-                                    <span className="text-sm text-slate-500">小時後亮紅燈</span>
+                                    <input type="number" min="1" max="72" className="w-24 p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-center font-bold text-slate-700" value={globalSettings?.payment_timeout_hours || 3} onChange={e => setGlobalSettings(prev => prev ? {...prev, payment_timeout_hours: parseInt(e.target.value)} : null)} />
+                                    <span className="text-sm text-slate-500">小時後亮紅燈，提示小幫手釋出</span>
                                 </div>
                             </div>
                             
-                            <div className="flex-1 min-w-[250px] bg-red-50 p-3 rounded-xl border border-red-100">
-                                <label className="flex items-center gap-2 cursor-pointer mb-2">
-                                    <input type="checkbox" checked={globalSettings?.is_early_bird_active || false} onChange={e => setGlobalSettings(prev => prev ? {...prev, is_early_bird_active: e.target.checked} : null)} className="w-4 h-4 text-red-600 rounded cursor-pointer" />
-                                    <span className="font-bold text-red-700 text-sm">啟用全站早鳥活動</span>
+                            {/* 原本的早鳥設定 */}
+                            <div className="flex-1 w-full bg-rose-50 p-4 rounded-xl border border-rose-100">
+                                <label className="flex items-center gap-2 cursor-pointer mb-3">
+                                    <input type="checkbox" checked={globalSettings?.is_early_bird_active || false} onChange={e => setGlobalSettings(prev => prev ? {...prev, is_early_bird_active: e.target.checked} : null)} className="w-4 h-4 text-rose-600 rounded cursor-pointer" />
+                                    <span className="font-bold text-rose-700 text-sm">啟用每月早鳥活動</span>
                                 </label>
-                                <div className={`flex gap-2 transition-all duration-300 ${globalSettings?.is_early_bird_active ? 'opacity-100' : 'opacity-50 grayscale pointer-events-none'}`}>
-                                    <div><label className="block text-[10px] font-bold text-slate-500 mb-1">開始(號)</label><input type="number" min="1" max="31" className="w-16 p-1.5 border border-slate-200 rounded text-center text-sm" value={globalSettings?.early_bird_start_day || ''} onChange={e => setGlobalSettings(prev => prev ? {...prev, early_bird_start_day: parseInt(e.target.value)} : null)} /></div>
-                                    <div><label className="block text-[10px] font-bold text-slate-500 mb-1">結束(號)</label><input type="number" min="1" max="31" className="w-16 p-1.5 border border-slate-200 rounded text-center text-sm" value={globalSettings?.early_bird_end_day || ''} onChange={e => setGlobalSettings(prev => prev ? {...prev, early_bird_end_day: parseInt(e.target.value)} : null)} /></div>
+                                <div className={`flex gap-3 transition-all duration-300 ${globalSettings?.is_early_bird_active ? 'opacity-100' : 'opacity-50 grayscale pointer-events-none'}`}>
+                                    <div className="flex-1"><label className="block text-xs font-bold text-slate-500 mb-1">開始(號)</label><input type="number" min="1" max="31" className="w-full p-2 border border-slate-200 rounded text-center text-sm" value={globalSettings?.early_bird_start_day || ''} onChange={e => setGlobalSettings(prev => prev ? {...prev, early_bird_start_day: parseInt(e.target.value)} : null)} /></div>
+                                    <div className="flex-1"><label className="block text-xs font-bold text-slate-500 mb-1">結束(號)</label><input type="number" min="1" max="31" className="w-full p-2 border border-slate-200 rounded text-center text-sm" value={globalSettings?.early_bird_end_day || ''} onChange={e => setGlobalSettings(prev => prev ? {...prev, early_bird_end_day: parseInt(e.target.value)} : null)} /></div>
                                 </div>
                             </div>
-                            
-                            <button onClick={handleSaveGlobalSettings} disabled={savingSettings} className="px-8 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center justify-center gap-2 shadow-md w-full md:w-auto h-[76px]">{savingSettings ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} 儲存全站規則</button>
+
+                            {/* [新增] 全站促銷設定 */}
+                            <div className="flex-[1.5] w-full bg-purple-50 p-4 rounded-xl border border-purple-100">
+                                <label className="flex items-center gap-2 cursor-pointer mb-3">
+                                    <input type="checkbox" checked={globalSettings?.promo_is_active || false} onChange={e => setGlobalSettings(prev => prev ? {...prev, promo_is_active: e.target.checked} : null)} className="w-4 h-4 text-purple-600 rounded cursor-pointer" />
+                                    <span className="font-bold text-purple-700 text-sm">啟用全站限時促銷</span>
+                                </label>
+                                <div className={`grid grid-cols-2 gap-3 transition-all duration-300 ${globalSettings?.promo_is_active ? 'opacity-100' : 'opacity-50 grayscale pointer-events-none'}`}>
+                                    <div className="col-span-2">
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">活動名稱 (顯示於前台標籤)</label>
+                                        <input type="text" className="w-full p-2 border border-slate-200 rounded text-sm" value={globalSettings?.promo_title || ''} onChange={e => setGlobalSettings(prev => prev ? {...prev, promo_title: e.target.value} : null)} placeholder="例如：春季限定 54 折" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">開始日期</label>
+                                        <input type="date" className="w-full p-2 border border-slate-200 rounded text-sm" value={globalSettings?.promo_start_date || ''} onChange={e => setGlobalSettings(prev => prev ? {...prev, promo_start_date: e.target.value} : null)} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">結束日期</label>
+                                        <input type="date" className="w-full p-2 border border-slate-200 rounded text-sm" value={globalSettings?.promo_end_date || ''} onChange={e => setGlobalSettings(prev => prev ? {...prev, promo_end_date: e.target.value} : null)} />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">折扣率 (例如 0.54 代表 54折)</label>
+                                        <input type="number" step="0.01" min="0.01" max="1" className="w-full p-2 border border-slate-200 rounded text-sm font-mono" value={globalSettings?.promo_discount_rate || ''} onChange={e => setGlobalSettings(prev => prev ? {...prev, promo_discount_rate: parseFloat(e.target.value)} : null)} placeholder="0.54" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div className="mt-6 flex justify-end">
+                            <button onClick={handleSaveGlobalSettings} disabled={savingSettings} className="px-8 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center justify-center gap-2 shadow-md w-full md:w-auto">{savingSettings ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} 儲存全站規則</button>
                         </div>
                     </div>
 
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
                         <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
-                            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><ListOrdered className="text-purple-600" /> 前台預約選項設定</h2>
+                            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><ListOrdered className="text-purple-600" /> 預約選項設定</h2>
                             <button onClick={() => setEditingService({ name: '', duration_mins: 30, price: 1000, description: '', is_active: true, sort_order: 0, early_bird_price: null })} className="px-4 py-2 bg-purple-600 text-white rounded-lg font-bold flex items-center gap-2 hover:bg-purple-700 transition-all shadow-md"><Plus size={18} /> 新增項目</button>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {services.map(srv => (
                                 <div key={srv.id} className={`p-5 rounded-xl border transition-all ${srv.is_active ? 'border-gray-200 hover:shadow-md' : 'border-gray-200 bg-gray-50 opacity-60'}`}>
                                     <div className="flex justify-between items-start mb-2"><h3 className="font-bold text-lg text-gray-800">{srv.name}</h3><span className={`text-xs font-bold px-2 py-0.5 rounded ${srv.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'}`}>{srv.is_active ? '上架中' : '已下架'}</span></div>
-                                    <div className="text-sm font-mono text-purple-600 font-bold mb-3 flex flex-col gap-1"><span>{srv.duration_mins} 分鐘 | NT$ {srv.price}</span>{srv.early_bird_price && (<span className="text-xs text-red-500 bg-red-50 px-2 py-0.5 rounded w-fit inline-block border border-red-100">早鳥價設定: NT${srv.early_bird_price}</span>)}</div>
+                                    <div className="text-sm font-mono text-purple-600 font-bold mb-3 flex flex-col gap-1"><span>{srv.duration_mins} 分鐘 | NT$ {srv.price}</span>{srv.early_bird_price && (<span className="text-xs text-rose-500 bg-rose-50 px-2 py-0.5 rounded w-fit inline-block border border-rose-100">早鳥價設定: NT${srv.early_bird_price}</span>)}</div>
                                     <p className="text-sm text-gray-500 mb-4 min-h-[3rem]">{srv.description}</p>
                                     <div className="flex gap-2 pt-4 border-t border-gray-100"><button onClick={() => setEditingService(srv)} className="flex-1 py-1.5 bg-gray-100 hover:bg-blue-100 text-gray-600 hover:text-blue-600 rounded text-sm font-bold transition-colors flex justify-center items-center gap-1"><Edit2 size={14}/> 編輯</button><button onClick={() => handleDeleteService(srv.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"><Trash2 size={16}/></button></div>
                                 </div>
@@ -517,7 +627,7 @@ export const BookingManagement: React.FC = () => {
                                     <div className="space-y-4">
                                         <div><label className="block text-sm font-bold text-gray-700 mb-1">項目名稱</label><input type="text" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" value={editingService.name || ''} onChange={e => setEditingService({...editingService, name: e.target.value})} /></div>
                                         <div className="flex gap-4"><div className="flex-1"><label className="block text-sm font-bold text-gray-700 mb-1">時間長度 (分鐘)</label><input type="number" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" value={editingService.duration_mins || 0} onChange={e => setEditingService({...editingService, duration_mins: parseInt(e.target.value)})} /></div><div className="flex-1"><label className="block text-sm font-bold text-gray-700 mb-1">原價 (NTD)</label><input type="number" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" value={editingService.price || 0} onChange={e => setEditingService({...editingService, price: parseInt(e.target.value)})} /></div></div>
-                                        <div className="bg-red-50 border border-red-100 rounded-lg p-3"><label className="block text-sm font-bold text-red-700 mb-1">🔥 專屬早鳥價 (NTD) <span className="text-xs font-normal text-red-500 ml-1">(不參加早鳥請留空)</span></label><input type="number" className="w-full p-2 border border-red-200 rounded-lg focus:ring-2 focus:ring-red-400 outline-none bg-white" value={editingService.early_bird_price || ''} onChange={e => setEditingService({...editingService, early_bird_price: e.target.value ? parseInt(e.target.value) : null})} placeholder="若符合全站早鳥期間，將套用此價格" /></div>
+                                        <div className="bg-rose-50 border border-rose-100 rounded-lg p-3"><label className="block text-sm font-bold text-rose-700 mb-1">🔥 專屬早鳥價 (NTD) <span className="text-xs font-normal text-rose-500 ml-1">(不參加早鳥請留空)</span></label><input type="number" className="w-full p-2 border border-rose-200 rounded-lg focus:ring-2 focus:ring-rose-400 outline-none bg-white" value={editingService.early_bird_price || ''} onChange={e => setEditingService({...editingService, early_bird_price: e.target.value ? parseInt(e.target.value) : null})} placeholder="若符合全站早鳥期間，將套用此價格" /></div>
                                         <div><label className="block text-sm font-bold text-gray-700 mb-1">說明介紹</label><textarea className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none h-20" value={editingService.description || ''} onChange={e => setEditingService({...editingService, description: e.target.value})} /></div>
                                         <div className="flex gap-4"><div className="flex-1"><label className="block text-sm font-bold text-gray-700 mb-1">前台排序 (數字小在前)</label><input type="number" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" value={editingService.sort_order || 0} onChange={e => setEditingService({...editingService, sort_order: parseInt(e.target.value)})} /></div><div className="flex-1 flex items-end pb-2"><label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={editingService.is_active || false} onChange={e => setEditingService({...editingService, is_active: e.target.checked})} className="w-5 h-5 text-purple-600 rounded" /><span className="font-bold text-gray-700">開放預約 (上架)</span></label></div></div>
                                     </div>
