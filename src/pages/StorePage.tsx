@@ -1,9 +1,10 @@
 // FILE: src/pages/StorePage.tsx
 import React, { useEffect, useState } from 'react';
-import { getPointPacks, getMyProfile, supabase } from '../db';
+import { getPointPacks, getMyProfile, supabase, createPointTransaction } from '../db';
 import { ShoppingBag, Loader2, CalendarClock, Sparkles, Mail, X, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { PointPack } from '../types/store';
+import { submitECPayForm } from '../logic/ecpay';
 
 export const StorePage: React.FC = () => {
   const navigate = useNavigate();
@@ -11,6 +12,7 @@ export const StorePage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [userExpiry, setUserExpiry] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -38,18 +40,55 @@ export const StorePage: React.FC = () => {
 
   const handlePurchase = async (pkg: PointPack) => {
     if (!isLoggedIn) {
-      // 記住目標，導向登入，登入後會自動跳轉回來
       sessionStorage.setItem('redirectTarget', '/store');
       navigate('/login');
       return;
     }
     
-    // 金流過渡期：已登入者點擊直接顯示測試訊息
-    alert('目前商品功能測試中，敬請期待');
+    setIsProcessing(true);
+    try {
+        // 1. 建立 PENDING 訂單
+        const transactionId = await createPointTransaction(pkg.id);
+        if (!transactionId) throw new Error("無法建立訂單");
+
+        // 2. 呼叫我們剛剛寫的 Vercel API
+        const response = await fetch('/api/create-ecpay-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                amount: pkg.price_ntd, 
+                itemName: `大寶紫微斗數 - ${pkg.name}`,
+                tradeDesc: pkg.description || '訂閱方案購買',
+                customField1: transactionId 
+            })
+        });
+        
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.error || "金流服務連線失敗");
+        }
+
+        // 3. 呼叫前端小工具跳轉
+        submitECPayForm(data.actionUrl, data.params);
+
+    } catch (error: any) {
+        alert(error.message || '系統發生錯誤，請稍後再試');
+        setIsProcessing(false);
+    }
   };
 
   return (
-    <div className="h-[100dvh] w-full bg-slate-50 flex flex-col font-sans overflow-hidden">
+    <div className="h-[100dvh] w-full bg-slate-50 flex flex-col font-sans overflow-hidden relative">
+      
+      {/* 處理中遮罩 */}
+      {isProcessing && (
+          <div className="absolute inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex flex-col items-center justify-center text-white">
+              <Loader2 className="animate-spin mb-4" size={48} />
+              <p className="font-bold tracking-widest">正在前往安全付款頁面...</p>
+          </div>
+      )}
+
       {/* Header：全螢幕面板風格 */}
       <div className="bg-white px-6 py-4 shadow-sm flex items-center justify-between shrink-0 z-50 border-b border-gray-200">
         <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
@@ -144,7 +183,8 @@ export const StorePage: React.FC = () => {
                                 <div className="mt-auto pt-4 border-t border-slate-100 relative z-10">
                                 <button 
                                     onClick={() => handlePurchase(pkg)}
-                                    className="w-full py-3.5 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg"
+                                    disabled={isProcessing}
+                                    className="w-full py-3.5 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"
                                 >
                                     {`NT$ ${pkg.price_ntd} ${isLoggedIn ? '購買' : '登入並購買'}`}
                                 </button>
