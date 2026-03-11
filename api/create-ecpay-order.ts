@@ -78,7 +78,9 @@ export default async function handler(req: any, res: any) {
             ChoosePayment: 'Credit',
             EncryptType: '1',
             CustomField1: customField1 || '',
-            ClientBackURL: `${protocol}://${host}/payment-result` // 跳轉回付款結果頁
+            // 【關鍵修改】不再使用 ClientBackURL，改用 OrderResultURL 來達成自動跳轉
+            // 綠界處理完後，會將結果 POST 到我們這支新的過渡 API
+            OrderResultURL: `${protocol}://${host}/api/ecpay-result`
         };
 
         // 壓上加密檢查碼
