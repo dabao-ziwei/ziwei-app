@@ -24,11 +24,13 @@ export default async function handler(req: any, res: any) {
 
         const HASH_KEY = process.env.ECPAY_HASH_KEY || '5294y06JbISpM5x9';
         const HASH_IV = process.env.ECPAY_HASH_IV || 'v77hoKGq4kWxNNIS';
-        const RESEND_API_KEY = process.env.RESEND_API_KEY || ''; // 讀取 Resend 金鑰
+        const RESEND_API_KEY = process.env.RESEND_API_KEY || ''; 
+        const LINE_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN || '';
+        const ADMIN_LINE_ID = process.env.ADMIN_LINE_USER_ID || '';
 
         const calculatedMac = generateCheckMacValue(params, HASH_KEY, HASH_IV);
         if (calculatedMac !== receivedMac) {
-            console.error('[Webhook 錯誤] 驗證失敗', { receivedMac, calculatedMac });
+            console.error('[Webhook 錯誤] 驗證失敗');
             return res.status(400).send('0|ErrorMessage'); 
         }
 
@@ -50,12 +52,13 @@ export default async function handler(req: any, res: any) {
                 console.log(`[Webhook] 收到預約成功付款通知，ID: ${transactionId}`);
                 await supabase.from('reservations').update({ status: 'PAID' }).eq('id', transactionId);
 
-                // --- 寄送自動確認信 ---
-                if (RESEND_API_KEY) {
-                    const { data: resData } = await supabase.from('reservations').select('*').eq('id', transactionId).single();
+                const { data: resData } = await supabase.from('reservations').select('*').eq('id', transactionId).single();
+                
+                if (resData) {
+                    const displayTime = new Date(resData.start_time).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
                     
-                    if (resData && resData.client_email) {
-                        const displayTime = new Date(resData.start_time).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+                    // --- 1. 發送 Email 給客戶 (正式網域 + 錯誤捕捉) ---
+                    if (RESEND_API_KEY && resData.client_email) {
                         const htmlContent = `
                             <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
                                 <div style="background-color: #2563eb; color: white; padding: 20px; text-align: center;">
@@ -74,36 +77,73 @@ export default async function handler(req: any, res: any) {
 
                                     <div style="background-color: #fff1f2; border: 1px solid #fecdd3; padding: 16px; border-radius: 8px; margin-bottom: 24px;">
                                         <h3 style="color: #e11d48; margin-top: 0;">⚠️ 預約尚未最終確認！</h3>
-                                        <p style="margin-bottom: 0;">由於存在多個預約管道，系統時段僅供初步保留。<br/>請務必透過下方按鈕或 QR Code 加入大寶官方 LINE，並<strong>將此信件截圖傳送給小幫手</strong>，以完成最終時段確認。</p>
+                                        <p style="margin-bottom: 0;">系統時段僅供初步保留。請務必點擊下方按鈕加入大寶官方 LINE，並<strong>回覆您的姓名或截圖此信件</strong>，以完成最終時段確認。</p>
                                     </div>
 
                                     <div style="text-align: center; margin-bottom: 24px;">
                                         <a href="https://line.me/R/ti/p/@653jrxjt" style="display: inline-block; background-color: #00B900; color: white; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: bold;">點此加入大寶官方 LINE</a>
                                     </div>
-
-                                    <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
-                                    <p style="font-size: 12px; color: #94a3b8; text-align: center;">此為系統自動發送的信件，請勿直接回覆。</p>
                                 </div>
                             </div>
                         `;
 
-                        await fetch('https://api.resend.com/emails', {
-                            method: 'POST',
-                            headers: {
-                                'Authorization': `Bearer ${RESEND_API_KEY}`,
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                from: '大寶紫微斗數系統 <system@dabao.life>', // 使用你已驗證的網域
-                                to: resData.client_email,
-                                subject: '【大寶紫微斗數】預約付款成功與後續確認步驟',
-                                html: htmlContent
-                            })
-                        }).catch(err => console.error('[Resend Error]', err));
+                        try {
+                            const resendResponse = await fetch('https://api.resend.com/emails', {
+                                method: 'POST',
+                                headers: {
+                                    'Authorization': `Bearer ${RESEND_API_KEY}`,
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                    // 這裡已經為你設定好正式網域
+                                    from: '大寶紫微斗數系統 <dabao@dabao.life>', 
+                                    to: resData.client_email,
+                                    subject: '【大寶紫微斗數】預約付款成功與後續確認步驟',
+                                    html: htmlContent
+                                })
+                            });
+
+                            if (!resendResponse.ok) {
+                                const errorText = await resendResponse.text();
+                                console.error('[Resend 發信失敗]', errorText);
+                            } else {
+                                console.log(`[Resend 發信成功] 已寄送至 ${resData.client_email}`);
+                            }
+                        } catch (err) {
+                            console.error('[Resend 網路錯誤]', err);
+                        }
+                    }
+
+                    // --- 2. 發送 LINE 給小幫手 (加入錯誤捕捉) ---
+                    if (LINE_TOKEN && ADMIN_LINE_ID) {
+                        const lineText = `🎉 收到新預約 (已付款) 🎉\n\n👤 客戶：${resData.client_name}\n📱 LINE：${resData.client_line_id}\n📅 時間：${displayTime}\n🔮 項目：${resData.service_type}\n💰 金額：NT$ ${amount}\n\n⚠️ 請留意客戶是否已主動聯繫官方帳號對接時段。`;
+                        
+                        try {
+                            const lineResponse = await fetch('https://api.line.me/v2/bot/message/push', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${LINE_TOKEN}`
+                                },
+                                body: JSON.stringify({
+                                    to: ADMIN_LINE_ID,
+                                    messages: [{ type: 'text', text: lineText }]
+                                })
+                            });
+                            
+                            if (!lineResponse.ok) {
+                                const errorText = await lineResponse.text();
+                                console.error('[LINE 發信失敗]', errorText);
+                            } else {
+                                console.log('[LINE 發信成功] 小幫手已收到通知');
+                            }
+                        } catch (err) {
+                            console.error('[LINE 網路錯誤]', err);
+                        }
                     }
                 }
             } else {
-                console.log(`[Webhook] 預約付款失敗/取消，ID: ${transactionId}`);
+                console.log(`[Webhook] 預約付款失敗/取消`);
                 await supabase.from('reservations').update({ status: 'CANCELLED' }).eq('id', transactionId);
             }
             return res.send('1|OK');
@@ -113,10 +153,8 @@ export default async function handler(req: any, res: any) {
         // 類型 2：商城方案 (STORE)
         // ==========================================
         if (rtnCode === '1') {
-            console.log(`[Webhook] 收到方案成功付款通知，ID: ${transactionId}`);
-            const { data: txData, error: txError } = await supabase.from('point_transactions').select('*').eq('id', transactionId).single();
-            if (txError || !txData) throw new Error('找不到該筆訂單');
-            if (txData.status === 'SUCCESS') return res.send('1|OK');
+            const { data: txData } = await supabase.from('point_transactions').select('*').eq('id', transactionId).single();
+            if (!txData || txData.status === 'SUCCESS') return res.send('1|OK');
 
             await supabase.from('point_transactions').update({ status: 'SUCCESS', paid_at: new Date().toISOString(), provider_trade_no: tradeNo }).eq('id', transactionId);
             
@@ -145,7 +183,6 @@ export default async function handler(req: any, res: any) {
                 }
             }
         } else {
-            console.log(`[Webhook] 方案付款失敗/取消`);
             if (transactionId) await supabase.from('point_transactions').update({ status: 'FAILED' }).eq('id', transactionId);
         }
         return res.send('1|OK');
