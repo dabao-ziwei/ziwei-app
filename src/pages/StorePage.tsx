@@ -59,7 +59,7 @@ export const StorePage: React.FC = () => {
     // 判斷是否為超級管理員。若不是，顯示維護中提示，不觸發金流。
     const isSuperAdmin = userEmail.toLowerCase() === SUPER_VIEW_EMAIL.toLowerCase();
     if (!isSuperAdmin) {
-        alert('💳 線上支付系統升級中，預計近期開放！謝謝您的支持。');
+        alert('💳 線上支付系統升級中，預計下週開放！\n目前若需購買方案，請先透過下方官方 LINE 聯繫小幫手，謝謝您的支持。');
         return;
     }
     
@@ -68,7 +68,13 @@ export const StorePage: React.FC = () => {
         const transactionId = await createPointTransaction(pkg.id);
         if (!transactionId) throw new Error("無法建立訂單");
 
-        const response = await fetch('/api/create-ecpay-order', {
+        // 【優化 1】智慧 API 路徑切換
+        // 如果在本地開發環境 (StackBlitz)，直接跨域呼叫正式機的 API
+        const apiUrl = import.meta.env.DEV 
+            ? 'https://ziweiapp.dabao.life/api/create-ecpay-order' 
+            : '/api/create-ecpay-order';
+
+        const response = await fetch(apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -79,9 +85,19 @@ export const StorePage: React.FC = () => {
             })
         });
         
+        // 【優化 2】強化 JSON 解析的防呆機制
+        if (!response.ok) {
+            throw new Error(`伺服器回應錯誤 (狀態碼: ${response.status})`);
+        }
+
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            throw new Error('無法連接金流伺服器，請確認正式機 API 是否已部署。');
+        }
+
         const data = await response.json();
 
-        if (!response.ok || !data.success) {
+        if (!data.success) {
             throw new Error(data.error || "金流服務連線失敗");
         }
 
