@@ -1,8 +1,8 @@
 // FILE: src/pages/BookingPage.tsx
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, User, MessageCircle, Mail, ArrowRight, Loader2, ChevronLeft, ChevronRight, X, AlertTriangle, Zap, CreditCard, Search, History } from 'lucide-react';
-import { getScheduleExceptions, getReservations, bookReservation, getBookingServices, getBookingSettings, getRecurringBlocks, supabase, getReservationsByEmail } from '../db';
+import { Calendar, User, MessageCircle, Mail, ArrowRight, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, AlertTriangle, Zap, CreditCard, Search, History } from 'lucide-react';
+import { getScheduleExceptions, getReservations, bookReservation, getBookingServices, getBookingSettings, getRecurringBlocks, supabase, SUPER_VIEW_EMAIL, getReservationsByEmail } from '../db';
 import { submitECPayForm } from '../logic/ecpay';
 import type { ServiceType, ScheduleException, Reservation, BookingSettings, RecurringBlock } from '../types/booking';
 
@@ -300,6 +300,14 @@ export const BookingPage: React.FC = () => {
     const vipLineText = "大寶老師團隊您好！\n我面臨重大決策，無法等待至夜間時段。我想申請【日間急件破例安插】，請問老師今日還有可能擠出空檔嗎？（我了解此為急件計費）";
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '');
     const finalVipUrl = isMobile ? `https://line.me/R/oaMessage/@653jrxjt/?${encodeURIComponent(vipLineText)}` : `https://line.me/R/ti/p/@653jrxjt`;
+
+    // 補回這個遺失的急件跳轉函數
+    const handleVipCopyAndGo = (e: React.MouseEvent<HTMLAnchorElement>) => {
+        if (!isMobile) {
+            e.preventDefault();
+            navigator.clipboard.writeText(vipLineText).then(() => { window.open(finalVipUrl, '_blank'); });
+        }
+    };
 
     return (
         <div className="h-screen w-full bg-slate-50 overflow-y-auto flex flex-col relative pb-10">
