@@ -58,6 +58,9 @@ export const BookingPage: React.FC = () => {
     const [isProcessingECPay, setIsProcessingECPay] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
     const [copied, setCopied] = useState(false);
+    
+    // 【新增】用 State 穩固保存使用者的 Email
+    const [userEmail, setUserEmail] = useState<string>('');
 
     const calendarRef = useRef<HTMLDivElement>(null);
     const formRef = useRef<HTMLFormElement>(null);
@@ -68,6 +71,11 @@ export const BookingPage: React.FC = () => {
             setGlobalSettings(settings);
             setRecurringBlocks(blocks.filter(b => b.is_active));
             setLoadingInit(false);
+        });
+
+        // 【新增】頁面載入時主動獲取登入身分
+        supabase.auth.getUser().then(({ data: { user } }) => {
+            if (user?.email) setUserEmail(user.email);
         });
 
         // 修復上一頁返回卡住轉圈的問題
@@ -220,11 +228,10 @@ export const BookingPage: React.FC = () => {
                 return;
             }
 
-            // 【雙軌判斷】若是你的信箱，跳轉綠界；其他人，顯示原本的人工畫面
-            const { data: { session } } = await supabase.auth.getSession();
-            // 加入 .trim() 去除可能的空白鍵干擾
-            const userEmail = (session?.user?.email || formData.email || '').trim();
-            const isSuperAdmin = userEmail.toLowerCase() === SUPER_VIEW_EMAIL.toLowerCase();
+            // 【雙軌判斷】雙重保險：拿 State 的 Email 或 即時 getUser() 的 Email 進行判斷
+            const { data: { user } } = await supabase.auth.getUser();
+            const finalEmail = (userEmail || user?.email || formData.email || '').trim();
+            const isSuperAdmin = finalEmail.toLowerCase() === SUPER_VIEW_EMAIL.toLowerCase();
 
             if (!isSuperAdmin) {
                 setTimeout(() => {
@@ -235,12 +242,9 @@ export const BookingPage: React.FC = () => {
             }
 
             // --- 大寶專屬：正式金流測試流程 ---
-            // 加上提示彈窗讓你明確知道有被判定成管理員
-            alert(`管理員測試通道觸發成功！\n偵測到信箱：${userEmail}\n即將前往綠界...`);
-            
+            alert(`管理員測試通道觸發成功！\n即將為您導向綠界...`);
             setIsProcessingECPay(true);
             
-            // 把剛剛建立的預約單 ID 抓回來
             const { data: resData } = await supabase.from('reservations')
                  .select('id')
                  .eq('client_line_id', formData.lineId)
