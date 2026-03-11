@@ -2,14 +2,13 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, User, MessageCircle, Mail, ArrowRight, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, AlertTriangle, Zap, Copy, CreditCard } from 'lucide-react';
-import { getScheduleExceptions, getReservations, bookReservation, getBookingServices, getBookingSettings, getRecurringBlocks } from '../db';
+import { getScheduleExceptions, getReservations, bookReservation, getBookingServices, getBookingSettings, getRecurringBlocks, supabase, SUPER_VIEW_EMAIL } from '../db';
+import { submitECPayForm } from '../logic/ecpay';
 import type { ServiceType, ScheduleException, Reservation, BookingSettings, RecurringBlock } from '../types/booking';
 
 // 計價優先順序：急件 > 促銷 > 早鳥 > 原價
 const getPriceDetails = (srv: ServiceType | null, settings: BookingSettings | null, mode: 'general' | 'urgent') => {
     if (!srv) return { isEarlyBird: false, isPromo: false, currentPrice: 0, label: '' };
-    
-    // 1. 急件 (絕對優先，無視任何折扣)
     if (mode === 'urgent') return { isEarlyBird: false, isPromo: false, currentPrice: srv.price * 2, label: '急件雙倍計費' };
     
     if (settings) {
@@ -17,7 +16,6 @@ const getPriceDetails = (srv: ServiceType | null, settings: BookingSettings | nu
         today.setHours(0,0,0,0);
         const currentDay = new Date().getDate();
 
-        // 2. 全站促銷 (優先於早鳥)
         if (settings.promo_is_active && settings.promo_start_date && settings.promo_end_date && settings.promo_discount_rate) {
             const promoStart = new Date(settings.promo_start_date);
             promoStart.setHours(0, 0, 0, 0);
@@ -25,28 +23,19 @@ const getPriceDetails = (srv: ServiceType | null, settings: BookingSettings | nu
             promoEnd.setHours(23, 59, 59, 999);
 
             if (today >= promoStart && today <= promoEnd) {
-                return { 
-                    isEarlyBird: false, 
-                    isPromo: true, 
-                    currentPrice: Math.floor(srv.price * settings.promo_discount_rate), 
-                    label: settings.promo_title || '限時優惠' 
-                };
+                return { isEarlyBird: false, isPromo: true, currentPrice: Math.floor(srv.price * settings.promo_discount_rate), label: settings.promo_title || '限時優惠' };
             }
         }
 
-        // 3. 專屬早鳥價
         if (settings.is_early_bird_active && srv.early_bird_price && currentDay >= settings.early_bird_start_day && currentDay <= settings.early_bird_end_day) {
             return { isEarlyBird: true, isPromo: false, currentPrice: srv.early_bird_price, label: '早鳥優惠中' };
         }
     }
-
-    // 4. 一般原價
     return { isEarlyBird: false, isPromo: false, currentPrice: srv.price, label: '' };
 };
 
 export const BookingPage: React.FC = () => {
     const navigate = useNavigate();
-    
     const [step, setStep] = useState<1 | 2 | 3>(1);
     const [bookingMode, setBookingMode] = useState<'general' | 'urgent'>('general');
 
@@ -66,10 +55,10 @@ export const BookingPage: React.FC = () => {
     
     const [formData, setFormData] = useState({ name: '', lineId: '', email: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isProcessingECPay, setIsProcessingECPay] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
     const [copied, setCopied] = useState(false);
 
-    // UX Ref for smooth scrolling
     const calendarRef = useRef<HTMLDivElement>(null);
     const formRef = useRef<HTMLFormElement>(null);
 
@@ -80,6 +69,13 @@ export const BookingPage: React.FC = () => {
             setRecurringBlocks(blocks.filter(b => b.is_active));
             setLoadingInit(false);
         });
+
+        // 修復上一頁返回卡住轉圈的問題
+        const handlePageShow = (event: PageTransitionEvent) => {
+            if (event.persisted) setIsProcessingECPay(false);
+        };
+        window.addEventListener('pageshow', handlePageShow);
+        return () => window.removeEventListener('pageshow', handlePageShow);
     }, []);
 
     useEffect(() => {
@@ -191,21 +187,13 @@ export const BookingPage: React.FC = () => {
     };
 
     const handleServiceSelect = (srv: ServiceType) => {
-        setSelectedService(srv);
-        setStep(2);
-        setSelectedDate(null);
-        setSelectedSlot(null);
-        setTimeout(() => {
-            calendarRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 100);
+        setSelectedService(srv); setStep(2); setSelectedDate(null); setSelectedSlot(null);
+        setTimeout(() => calendarRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
     };
 
     const handleSlotSelect = (slot: Date) => {
-        setSelectedSlot(slot);
-        setStep(3);
-        setTimeout(() => {
-            formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 100);
+        setSelectedSlot(slot); setStep(3);
+        setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -224,23 +212,79 @@ export const BookingPage: React.FC = () => {
                 client_email: formData.email
             });
             
-            setTimeout(() => {
-                if (success) setIsSuccess(true);
-                else { 
-                    alert('預約失敗，該時段已被預約，請重新選擇。'); 
-                    setSelectedSlot(null); 
-                    loadMonthData(currentMonth.getFullYear(), currentMonth.getMonth()); 
-                }
+            if (!success) {
+                alert('預約失敗，該時段已被預約，請重新選擇。');
+                setSelectedSlot(null);
+                loadMonthData(currentMonth.getFullYear(), currentMonth.getMonth());
                 setIsSubmitting(false);
-            }, 1500);
+                return;
+            }
+
+            // 【雙軌判斷】若是你的信箱，跳轉綠界；其他人，顯示原本的人工畫面
+            const { data: { session } } = await supabase.auth.getSession();
+            const userEmail = session?.user?.email || formData.email || '';
+            const isSuperAdmin = userEmail.toLowerCase() === SUPER_VIEW_EMAIL.toLowerCase();
+
+            if (!isSuperAdmin) {
+                setTimeout(() => {
+                    setIsSuccess(true);
+                    setIsSubmitting(false);
+                }, 1000);
+                return;
+            }
+
+            // --- 大寶專屬：正式金流測試流程 ---
+            setIsProcessingECPay(true);
             
-        } catch (err) { 
-            alert('系統錯誤，請稍後再試。'); 
+            // 把剛剛建立的預約單 ID 抓回來
+            const { data: resData } = await supabase.from('reservations')
+                 .select('id')
+                 .eq('client_line_id', formData.lineId)
+                 .eq('start_time', selectedSlot.toISOString())
+                 .order('created_at', { ascending: false })
+                 .limit(1)
+                 .single();
+
+            if (resData) {
+                 const { currentPrice } = getPriceDetails(selectedService, globalSettings, bookingMode);
+                 const apiUrl = import.meta.env.DEV
+                    ? 'https://ziweiapp.dabao.life/api/create-ecpay-order'
+                    : '/api/create-ecpay-order';
+
+                 const response = await fetch(apiUrl, {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({
+                         amount: currentPrice,
+                         itemName: `大寶紫微 - ${selectedService.name}`,
+                         tradeDesc: '預約諮詢',
+                         customField1: resData.id,
+                         orderType: 'BOOKING' // 告訴綠界這是一筆預約單
+                     })
+                 });
+
+                 if (!response.ok) throw new Error('金流伺服器回應錯誤');
+                 const contentType = response.headers.get('content-type');
+                 if (!contentType || !contentType.includes('application/json')) {
+                     throw new Error('無法連接金流伺服器，請確認正式機 API 是否已部署。');
+                 }
+                 const data = await response.json();
+                 if (!data.success) throw new Error(data.error);
+
+                 submitECPayForm(data.actionUrl, data.params);
+            } else {
+                alert('無法取得預約編號，請聯繫客服');
+                setIsSubmitting(false);
+                setIsProcessingECPay(false);
+            }
+            
+        } catch (err: any) { 
+            alert(err.message || '系統錯誤，請稍後再試。'); 
             setIsSubmitting(false);
+            setIsProcessingECPay(false);
         }
     };
 
-    // 成功頁面 UI
     if (isSuccess) {
         const displayTime = selectedSlot?.toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
         const { currentPrice, label } = getPriceDetails(selectedService, globalSettings, bookingMode);
@@ -308,9 +352,7 @@ export const BookingPage: React.FC = () => {
 
     const vipLineText = "大寶老師團隊您好！\n我面臨重大決策，無法等待至夜間時段。我想申請【日間急件破例安插】，請問老師今日還有可能擠出空檔嗎？（我了解此為急件計費）";
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '');
-    const vipMobileUrl = `https://line.me/R/oaMessage/@653jrxjt/?${encodeURIComponent(vipLineText)}`;
-    const vipPcUrl = `https://line.me/R/ti/p/@653jrxjt`;
-    const finalVipUrl = isMobile ? vipMobileUrl : vipPcUrl;
+    const finalVipUrl = isMobile ? `https://line.me/R/oaMessage/@653jrxjt/?${encodeURIComponent(vipLineText)}` : `https://line.me/R/ti/p/@653jrxjt`;
 
     const handleVipCopyAndGo = (e: React.MouseEvent<HTMLAnchorElement>) => {
         if (!isMobile) {
@@ -321,7 +363,14 @@ export const BookingPage: React.FC = () => {
 
     return (
         <div className="h-screen w-full bg-slate-50 overflow-y-auto flex flex-col relative pb-10">
-            {/* Header */}
+            {/* 前往綠界的滿版蓋版轉圈圈 */}
+            {isProcessingECPay && (
+                <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex flex-col items-center justify-center text-white">
+                    <Loader2 className="animate-spin mb-4" size={48} />
+                    <p className="font-bold tracking-widest">正在前往安全付款頁面...</p>
+                </div>
+            )}
+
             <header className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-40 shadow-sm shrink-0">
                 <div className="max-w-5xl mx-auto flex items-center justify-between">
                     <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2"><Calendar className="text-blue-600" /> 線上預約諮詢</h1>
@@ -334,13 +383,11 @@ export const BookingPage: React.FC = () => {
                 {/* --- 左欄：固定區塊 (模式與服務選擇) --- */}
                 <div className="w-full md:w-[35%] flex flex-col gap-4 md:sticky md:top-[85px] max-h-[calc(100vh-100px)] overflow-y-auto no-scrollbar shrink-0">
                     
-                    {/* Mode Switcher */}
                     <div className="flex bg-slate-200 p-1.5 rounded-2xl shrink-0 w-full shadow-inner">
                         <button onClick={() => setBookingMode('general')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all duration-300 ${bookingMode === 'general' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>一般預約</button>
                         <button onClick={() => setBookingMode('urgent')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all duration-300 flex items-center justify-center gap-1.5 ${bookingMode === 'urgent' ? 'bg-gradient-to-r from-red-600 to-rose-500 text-white shadow-md' : 'text-slate-500 hover:text-red-500'}`}><Zap size={16} className={bookingMode === 'urgent' ? 'animate-pulse' : ''} /> 急件預約</button>
                     </div>
 
-                    {/* Step 1: 服務列表 */}
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 shrink-0 flex flex-col gap-3">
                         <h2 className="text-base font-bold text-slate-800 mb-1 flex items-center gap-2">
                             <span className="bg-slate-100 text-slate-500 w-6 h-6 rounded-full flex items-center justify-center text-xs">1</span> 
@@ -356,7 +403,6 @@ export const BookingPage: React.FC = () => {
                                         onClick={() => handleServiceSelect(srv)} 
                                         className={`text-left p-4 rounded-xl border-2 transition-all relative overflow-hidden flex flex-col ${isSelected ? (bookingMode === 'urgent' ? 'border-red-500 bg-red-50 shadow-md' : 'border-blue-600 bg-blue-50 shadow-md') : 'border-slate-100 hover:border-blue-200 bg-white hover:bg-slate-50'}`}
                                     >
-                                        {/* 標籤顯示邏輯 */}
                                         {label && (
                                             <div className={`absolute top-0 right-0 text-white text-[10px] font-bold px-3 py-0.5 rounded-bl-lg shadow-sm ${bookingMode === 'urgent' ? 'bg-red-600 tracking-widest' : 'bg-rose-500'}`}>
                                                 {label}
@@ -366,8 +412,6 @@ export const BookingPage: React.FC = () => {
                                         <div className="font-bold text-slate-800 text-base pr-16">{srv.name}</div>
                                         <div className="text-xs font-mono font-bold mt-1 flex items-center flex-wrap gap-1">
                                             <span className={bookingMode === 'urgent' ? 'text-red-700' : 'text-blue-600'}>{srv.duration_mins} 分鐘 | </span>
-                                            
-                                            {/* 價錢顯示邏輯：若有打折則顯示刪除線原價 */}
                                             {currentPrice !== srv.price ? (
                                                 <>
                                                     <span className="line-through text-slate-400 text-[10px]">NT${srv.price}</span>
@@ -378,7 +422,6 @@ export const BookingPage: React.FC = () => {
                                             )}
                                         </div>
                                         
-                                        {/* 額外的早鳥期限說明 */}
                                         {bookingMode === 'general' && label === '早鳥優惠中' && globalSettings?.early_bird_end_day && (
                                             <div className="text-[10px] font-bold text-rose-600 bg-rose-50 inline-block px-2 py-0.5 rounded mt-2 w-fit border border-rose-100">🔥 本月早鳥至 {globalSettings.early_bird_end_day} 日</div>
                                         )}
@@ -394,7 +437,6 @@ export const BookingPage: React.FC = () => {
                 {/* --- 右欄：動態區塊 (日曆與表單) --- */}
                 <div className="w-full md:w-[65%] flex flex-col gap-6">
                     
-                    {/* Step 2: 日曆 */}
                     <div 
                         ref={calendarRef}
                         className={`transition-all duration-500 transform ${step >= 2 ? 'opacity-100 translate-y-0 block' : 'opacity-0 -translate-y-4 hidden'}`}
@@ -405,7 +447,6 @@ export const BookingPage: React.FC = () => {
                                 選擇日期與時間
                             </h2>
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-6">
-                                {/* 日曆 */}
                                 <div className="relative">
                                     {loadingCalendar && <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] flex items-center justify-center z-10 rounded-xl"><Loader2 className="animate-spin text-blue-500"/></div>}
                                     <div className="flex justify-between items-center mb-4 bg-slate-50 p-2 rounded-xl border border-slate-100">
@@ -422,7 +463,6 @@ export const BookingPage: React.FC = () => {
                                             const ex = exceptions.find(e => e.exception_date === dateStr);
                                             
                                             const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-                                            // 如果有例外設定，依例外設定為主；否則預設週末為關閉
                                             const isClosed = ex ? ex.is_closed : isWeekend;
                                             
                                             let isDisabled = false;
@@ -449,7 +489,6 @@ export const BookingPage: React.FC = () => {
                                     </div>
                                 </div>
                                 
-                                {/* 時段 */}
                                 <div className="flex flex-col h-full bg-slate-50/50 rounded-xl p-4 border border-slate-100">
                                     <div className="flex-1">
                                         {!selectedDate ? (
@@ -531,20 +570,18 @@ export const BookingPage: React.FC = () => {
                                     const { currentPrice } = getPriceDetails(selectedService, globalSettings, bookingMode);
                                     return (
                                         <button type="submit" disabled={isSubmitting || !selectedSlot} className={`w-full py-4 text-white font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:scale-100 ${bookingMode === 'urgent' ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-slate-900 hover:bg-slate-800 shadow-slate-200'}`}>
-                                            {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <><CreditCard size={20} /> 信用卡授權 (NT$ {currentPrice}) <ArrowRight size={20} /></>}
+                                            {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <><CreditCard size={20} /> 送出預約 (NT$ {currentPrice}) <ArrowRight size={20} /></>}
                                         </button>
                                     );
                                 })()}
                                 
                                 <p className="text-[11px] text-gray-400 mt-4 text-center leading-relaxed max-w-lg mx-auto">
-                                    * 點擊按鈕後，系統將建立訂單並跳轉至「綠界科技 ECPay」第三方安全支付平台進行信用卡授權。<br/>完成付款後，您的預約才算正式成立。<br/>
-                                    繼續預約即代表您同意本站的 <a href="/legal" target="_blank" rel="noopener noreferrer" className="underline hover:text-slate-600 transition-colors">服務條款與隱私權政策</a>
+                                    * 繼續預約即代表您同意本站的 <a href="/legal" target="_blank" rel="noopener noreferrer" className="underline hover:text-slate-600 transition-colors">服務條款與隱私權政策</a>
                                 </p>
                             </div>
                         </form>
                     </div>
 
-                    {/* 客服聯絡資訊 */}
                     <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-5 flex items-start gap-3 shadow-sm mt-4">
                         <Mail className="text-blue-600 shrink-0 mt-0.5" size={20} />
                         <div>
@@ -552,7 +589,7 @@ export const BookingPage: React.FC = () => {
                             <p className="text-xs text-blue-800/80 leading-relaxed">
                                 若對預約流程或服務有任何問題，歡迎來信：
                                 <a href="mailto:dabao@dabao.life" className="font-bold underline hover:text-blue-900 ml-1">dabao@dabao.life</a>，
-                                或透過大寶官方 LINE 與我們聯繫。此網站預約的時段僅保留，最終以官方實際釋出的為準，預約時段後請務必與官方Line的小幫手確認時段，謝謝您！
+                                或透過大寶官方 LINE 與我們聯繫。
                             </p>
                         </div>
                     </div>
