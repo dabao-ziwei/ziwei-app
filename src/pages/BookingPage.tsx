@@ -222,7 +222,8 @@ export const BookingPage: React.FC = () => {
 
             // 【雙軌判斷】若是你的信箱，跳轉綠界；其他人，顯示原本的人工畫面
             const { data: { session } } = await supabase.auth.getSession();
-            const userEmail = session?.user?.email || formData.email || '';
+            // 加入 .trim() 去除可能的空白鍵干擾
+            const userEmail = (session?.user?.email || formData.email || '').trim();
             const isSuperAdmin = userEmail.toLowerCase() === SUPER_VIEW_EMAIL.toLowerCase();
 
             if (!isSuperAdmin) {
@@ -234,6 +235,9 @@ export const BookingPage: React.FC = () => {
             }
 
             // --- 大寶專屬：正式金流測試流程 ---
+            // 加上提示彈窗讓你明確知道有被判定成管理員
+            alert(`管理員測試通道觸發成功！\n偵測到信箱：${userEmail}\n即將前往綠界...`);
+            
             setIsProcessingECPay(true);
             
             // 把剛剛建立的預約單 ID 抓回來
@@ -363,7 +367,6 @@ export const BookingPage: React.FC = () => {
 
     return (
         <div className="h-screen w-full bg-slate-50 overflow-y-auto flex flex-col relative pb-10">
-            {/* 前往綠界的滿版蓋版轉圈圈 */}
             {isProcessingECPay && (
                 <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex flex-col items-center justify-center text-white">
                     <Loader2 className="animate-spin mb-4" size={48} />
@@ -557,7 +560,7 @@ export const BookingPage: React.FC = () => {
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-bold text-slate-600 mb-1.5">聯絡信箱 (選填)</label>
+                                    <label className="block text-sm font-bold text-slate-600 mb-1.5">聯絡信箱 (選填，若需測試金流請填管理員信箱)</label>
                                     <div className="relative">
                                         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                                         <input type="email" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-colors" placeholder="example@email.com" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
