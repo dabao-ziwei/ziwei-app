@@ -19,6 +19,7 @@ import { LuckyPage } from './pages/LuckyPage';
 import { StorePage } from './pages/StorePage';
 import { SystemAdmin } from './pages/SystemAdmin';
 import { BookingPage } from './pages/BookingPage';
+import { PaymentResult } from './pages/PaymentResult'; // 引入付款結果頁
 
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import { Analytics } from "@vercel/analytics/react";
@@ -135,7 +136,8 @@ function App() {
         <Route path="/lucky" element={<LuckyPage />} />
         <Route path="/booking" element={<BookingPage />} /> 
         <Route path="/legal" element={<LegalPage />} />
-        <Route path="/store" element={<StorePage />} /> {/* 移出保護區，讓商品公開展示 */}
+        <Route path="/store" element={<StorePage />} /> 
+        <Route path="/payment-result" element={<PaymentResult />} /> {/* 加入付款結果頁 */}
         
         {/* ========================================== */}
         {/* 保護頁面區 (必須登入) */}

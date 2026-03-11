@@ -78,7 +78,7 @@ export default async function handler(req: any, res: any) {
             ChoosePayment: 'Credit',
             EncryptType: '1',
             CustomField1: customField1 || '',
-            ClientBackURL: `${protocol}://${host}/store`
+            ClientBackURL: `${protocol}://${host}/payment-result` // 跳轉回付款結果頁
         };
 
         // 壓上加密檢查碼

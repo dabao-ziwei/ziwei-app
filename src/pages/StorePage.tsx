@@ -1,6 +1,6 @@
 // FILE: src/pages/StorePage.tsx
 import React, { useEffect, useState } from 'react';
-import { getPointPacks, getMyProfile, supabase, createPointTransaction } from '../db';
+import { getPointPacks, getMyProfile, supabase, createPointTransaction, SUPER_VIEW_EMAIL } from '../db';
 import { ShoppingBag, Loader2, CalendarClock, Sparkles, Mail, X, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { PointPack } from '../types/store';
@@ -13,12 +13,12 @@ export const StorePage: React.FC = () => {
   const [userExpiry, setUserExpiry] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [userEmail, setUserEmail] = useState<string>('');
 
   useEffect(() => {
     const init = async () => {
       setLoading(true);
       
-      // 檢查登入狀態
       const { data: { session } } = await supabase.auth.getSession();
       setIsLoggedIn(!!session);
 
@@ -28,11 +28,22 @@ export const StorePage: React.FC = () => {
       if (session) {
         const profile = await getMyProfile();
         setUserExpiry(profile?.accessExpiry || null);
+        setUserEmail(session.user.email || '');
       }
       
       setLoading(false);
     };
     init();
+
+    // 解除瀏覽器「上一頁」轉圈圈卡住的問題 (BFCache 機制)
+    const handlePageShow = (event: PageTransitionEvent) => {
+        if (event.persisted) {
+            setIsProcessing(false);
+        }
+    };
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+
   }, []);
 
   const isVip = userExpiry && new Date(userExpiry) > new Date();
@@ -44,14 +55,19 @@ export const StorePage: React.FC = () => {
       navigate('/login');
       return;
     }
+
+    // 判斷是否為超級管理員。若不是，顯示維護中提示，不觸發金流。
+    const isSuperAdmin = userEmail.toLowerCase() === SUPER_VIEW_EMAIL.toLowerCase();
+    if (!isSuperAdmin) {
+        alert('💳 線上支付系統升級中，預計近期開放！謝謝您的支持。');
+        return;
+    }
     
     setIsProcessing(true);
     try {
-        // 1. 建立 PENDING 訂單
         const transactionId = await createPointTransaction(pkg.id);
         if (!transactionId) throw new Error("無法建立訂單");
 
-        // 2. 呼叫我們剛剛寫的 Vercel API
         const response = await fetch('/api/create-ecpay-order', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -69,7 +85,6 @@ export const StorePage: React.FC = () => {
             throw new Error(data.error || "金流服務連線失敗");
         }
 
-        // 3. 呼叫前端小工具跳轉
         submitECPayForm(data.actionUrl, data.params);
 
     } catch (error: any) {
@@ -81,7 +96,6 @@ export const StorePage: React.FC = () => {
   return (
     <div className="h-[100dvh] w-full bg-slate-50 flex flex-col font-sans overflow-hidden relative">
       
-      {/* 處理中遮罩 */}
       {isProcessing && (
           <div className="absolute inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex flex-col items-center justify-center text-white">
               <Loader2 className="animate-spin mb-4" size={48} />
@@ -89,7 +103,6 @@ export const StorePage: React.FC = () => {
           </div>
       )}
 
-      {/* Header：全螢幕面板風格 */}
       <div className="bg-white px-6 py-4 shadow-sm flex items-center justify-between shrink-0 z-50 border-b border-gray-200">
         <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
             <ShoppingBag className="text-purple-600" /> 訂閱方案中心
@@ -113,11 +126,9 @@ export const StorePage: React.FC = () => {
         </div>
       </div>
 
-      {/* 捲動區域 */}
       <div className="flex-1 overflow-y-auto w-full">
         <div className="max-w-4xl mx-auto w-full p-4 sm:p-6 flex flex-col min-h-full pb-safe">
             
-            {/* 聯絡資訊 (置頂) */}
             <div className="w-full bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 text-center shadow-sm flex items-center justify-center gap-2">
                 <Mail size={18} className="text-blue-600" />
                 <span className="text-sm sm:text-base font-bold text-slate-700">
@@ -125,7 +136,6 @@ export const StorePage: React.FC = () => {
                 </span>
             </div>
 
-            {/* 未登入訪客溫馨提示 */}
             {!isLoggedIn && !loading && (
                 <div className="w-full bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 flex items-start gap-3 shadow-sm">
                     <Info size={20} className="text-amber-500 shrink-0 mt-0.5" />
@@ -155,7 +165,6 @@ export const StorePage: React.FC = () => {
                                 
                                 <div className="absolute top-[-20%] right-[-20%] w-32 h-32 bg-purple-50 rounded-full blur-2xl group-hover:bg-purple-100 transition-colors"></div>
 
-                                {/* 標籤與標題 */}
                                 <div className="flex items-center flex-wrap gap-2 mb-2 relative z-10">
                                     <h3 className="text-xl font-bold text-slate-800">{pkg.name}</h3>
                                     {pkg.label && (
@@ -169,7 +178,6 @@ export const StorePage: React.FC = () => {
                                     {totalDays} <span className="text-base text-slate-400 font-sans font-bold">天 無限暢測</span>
                                 </div>
 
-                                {/* 首購加贈顯示 */}
                                 {pkg.first_time_bonus_points && pkg.first_time_bonus_points > 0 ? (
                                     <div className="text-sm font-bold text-emerald-600 mb-4 mt-1 relative z-10 flex items-center gap-1.5 bg-emerald-50 px-2 py-1 rounded-lg w-fit border border-emerald-100">
                                         <Sparkles size={16}/> 首購限定：再加贈 {pkg.first_time_bonus_points} 天
@@ -186,7 +194,7 @@ export const StorePage: React.FC = () => {
                                     disabled={isProcessing}
                                     className="w-full py-3.5 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"
                                 >
-                                    {`NT$ ${pkg.price_ntd} ${isLoggedIn ? '購買' : '登入並購買'}`}
+                                    {`NT$ ${pkg.price_ntd} ${isLoggedIn ? '結帳' : '登入並購買'}`}
                                 </button>
                                 </div>
                             </div>
