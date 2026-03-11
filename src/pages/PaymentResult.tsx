@@ -1,7 +1,7 @@
 // FILE: src/pages/PaymentResult.tsx
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { CheckCircle, Home, ShoppingBag, Calendar, AlertTriangle, Copy, MessageCircle, Loader2 } from 'lucide-react';
+import { CheckCircle, Home, ShoppingBag, Calendar, AlertTriangle, Copy, MessageCircle, Loader2, Mail } from 'lucide-react';
 import { getReservationById } from '../db';
 import type { Reservation } from '../types/booking';
 
@@ -54,14 +54,24 @@ export const PaymentResult: React.FC = () => {
                     <div className="w-16 h-16 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
                         <CheckCircle size={32} />
                     </div>
-                    <h2 className="text-2xl font-bold text-slate-800 mb-2">預約與付款成功！</h2>
-                    <p className="text-slate-500 mb-6 leading-relaxed">
+                    <h2 className="text-2xl font-bold text-slate-800 mb-2">信用卡授權成功！</h2>
+                    <p className="text-slate-500 mb-4 leading-relaxed">
                         項目：{reservation.service_type}<br/>
                         時間：<span className="font-bold text-slate-700">{displayTime}</span><br/>
                     </p>
+
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 text-left shadow-sm flex items-start gap-3">
+                        <Mail className="text-blue-600 mt-0.5 shrink-0" size={18} />
+                        <div>
+                            <div className="font-bold text-blue-800 text-sm mb-1">通知信已寄出</div>
+                            <p className="text-xs text-blue-700/80 leading-relaxed">
+                                我們已將預約明細與官方 LINE 資訊發送至您的信箱，請留意收信。
+                            </p>
+                        </div>
+                    </div>
                     
                     <div className="bg-rose-50 border border-rose-200 rounded-xl p-5 mb-6 text-left shadow-sm">
-                        <div className="flex items-center gap-2 text-rose-700 font-bold mb-2 text-sm"><AlertTriangle size={18}/> ⚠️ 重要：預約尚未最終確認！</div>
+                        <div className="flex items-center gap-2 text-rose-700 font-bold mb-2 text-sm"><AlertTriangle size={18}/> ⚠️ 重要：您的預約尚未最終確認！</div>
                         <p className="text-xs text-rose-800 leading-relaxed font-medium">
                             由於存在多個預約管道，系統時段僅供參考。<br/>
                             請務必點擊下方按鈕 <span className="font-bold underline">聯繫官方 LINE 小幫手確認時段</span>，才算真正完成預約程序。

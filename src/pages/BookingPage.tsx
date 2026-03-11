@@ -1,8 +1,8 @@
 // FILE: src/pages/BookingPage.tsx
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, User, MessageCircle, Mail, ArrowRight, Loader2, CheckCircle, ChevronLeft, ChevronRight, X, AlertTriangle, Zap, CreditCard, Search, History } from 'lucide-react';
-import { getScheduleExceptions, getReservations, bookReservation, getBookingServices, getBookingSettings, getRecurringBlocks, supabase, SUPER_VIEW_EMAIL, getReservationsByEmail } from '../db';
+import { Calendar, User, MessageCircle, Mail, ArrowRight, Loader2, ChevronLeft, ChevronRight, X, AlertTriangle, Zap, CreditCard, Search, History } from 'lucide-react';
+import { getScheduleExceptions, getReservations, bookReservation, getBookingServices, getBookingSettings, getRecurringBlocks, supabase, getReservationsByEmail } from '../db';
 import { submitECPayForm } from '../logic/ecpay';
 import type { ServiceType, ScheduleException, Reservation, BookingSettings, RecurringBlock } from '../types/booking';
 
@@ -226,7 +226,7 @@ export const BookingPage: React.FC = () => {
         if (!selectedService || !selectedSlot) return;
         setIsSubmitting(true);
 
-        // 貼心記憶使用者的 Email，下次來不用重打
+        // 貼心記憶使用者的 Email
         localStorage.setItem('dabao_booking_email', formData.email.trim());
 
         const endTime = new Date(selectedSlot.getTime() + selectedService.duration_mins * 60000);
@@ -239,7 +239,7 @@ export const BookingPage: React.FC = () => {
                 start_time: selectedSlot.toISOString(),
                 end_time: endTime.toISOString(),
                 client_name: formData.name,
-                client_line_id: formData.lineName || '未提供', // 容錯
+                client_line_id: formData.lineName || '未提供', 
                 client_email: formData.email.trim()
             });
             
@@ -251,7 +251,7 @@ export const BookingPage: React.FC = () => {
                 return;
             }
 
-            // 取得剛建好的單號 (供綠界或模擬使用)
+            // 取得剛建好的單號
             const { data: resData } = await supabase.from('reservations')
                  .select('id')
                  .eq('client_email', formData.email.trim())
@@ -266,17 +266,7 @@ export const BookingPage: React.FC = () => {
                 return;
             }
 
-            // 判斷是否為管理員
-            const { data: { user } } = await supabase.auth.getUser();
-            const isSuperAdmin = (user?.email || formData.email).trim().toLowerCase() === SUPER_VIEW_EMAIL.toLowerCase();
-
-            if (!isSuperAdmin) {
-                // 一般人：直接跳轉到專屬的 PaymentResult 頁面，模擬綠界回傳的效果
-                navigate(`/payment-result?type=BOOKING&id=${resData.id}&amt=${currentPrice}`);
-                return;
-            }
-
-            // --- 大寶專屬：正式金流測試流程 ---
+            // --- 所有人一律送綠界刷卡 ---
             setIsProcessingECPay(true);
             const apiUrl = import.meta.env.DEV ? 'https://ziweiapp.dabao.life/api/create-ecpay-order' : '/api/create-ecpay-order';
 
@@ -573,10 +563,10 @@ export const BookingPage: React.FC = () => {
                                             </div>
                                         </div>
                                         <div className="sm:col-span-2">
-                                            <label className="block text-sm font-bold text-slate-600 mb-1.5">聯絡信箱 (唯一查單憑證) <span className="text-red-500">*</span></label>
+                                            <label className="block text-sm font-bold text-slate-600 mb-1.5">聯絡信箱 (唯一查單與收信憑證) <span className="text-red-500">*</span></label>
                                             <div className="relative">
                                                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                                <input required type="email" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-colors" placeholder="請填寫常用 Email，供日後查詢預約使用" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+                                                <input required type="email" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-colors" placeholder="請填寫常用 Email，系統將寄送憑證至此" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
                                             </div>
                                         </div>
                                         <div className="sm:col-span-2">
@@ -593,13 +583,14 @@ export const BookingPage: React.FC = () => {
                                             const { currentPrice } = getPriceDetails(selectedService, globalSettings, bookingMode);
                                             return (
                                                 <button type="submit" disabled={isSubmitting || !selectedSlot} className={`w-full py-4 text-white font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:scale-100 ${bookingMode === 'urgent' ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-slate-900 hover:bg-slate-800 shadow-slate-200'}`}>
-                                                    {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <><CreditCard size={20} /> 送出預約 (NT$ {currentPrice}) <ArrowRight size={20} /></>}
+                                                    {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <><CreditCard size={20} /> 前往線上結帳 (NT$ {currentPrice}) <ArrowRight size={20} /></>}
                                                 </button>
                                             );
                                         })()}
                                         
                                         <p className="text-[11px] text-gray-400 mt-4 text-center leading-relaxed max-w-lg mx-auto">
-                                            * 繼續預約即代表您同意本站的 <a href="/legal" target="_blank" rel="noopener noreferrer" className="underline hover:text-slate-600 transition-colors">服務條款與隱私權政策</a>
+                                            * 點擊按鈕後將前往綠界安全支付平台進行信用卡授權。<br/>
+                                            繼續預約即代表您同意本站的 <a href="/legal" target="_blank" rel="noopener noreferrer" className="underline hover:text-slate-600 transition-colors">服務條款與隱私權政策</a>
                                         </p>
                                     </div>
                                 </form>
