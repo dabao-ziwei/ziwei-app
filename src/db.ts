@@ -394,7 +394,6 @@ export const deleteScheduleException = async (dateStr: string): Promise<boolean>
     return !error;
 };
 
-// [新增] 常態課程 API
 export const getRecurringBlocks = async (): Promise<RecurringBlock[]> => {
     const { data } = await supabase.from('recurring_blocks')
         .select('*')
@@ -482,5 +481,24 @@ export const getAllReservationsHistory = async (): Promise<Reservation[]> => {
         .select('*')
         .neq('status', 'BLOCKED') 
         .order('start_time', { ascending: false });
+    return data || [];
+};
+
+// [新增] 根據 ID 查詢單筆預約
+export const getReservationById = async (id: string): Promise<Reservation | null> => {
+    const { data } = await supabase.from('reservations').select('*').eq('id', id).maybeSingle();
+    return data;
+};
+
+// [新增] 根據 Email 查詢未來的預約單 (提供給免登入查單使用)
+export const getReservationsByEmail = async (email: string): Promise<Reservation[]> => {
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const { data } = await supabase.from('reservations')
+        .select('*')
+        .eq('client_email', email)
+        .gte('start_time', today.toISOString())
+        .neq('status', 'BLOCKED')
+        .order('start_time', { ascending: true });
     return data || [];
 };
