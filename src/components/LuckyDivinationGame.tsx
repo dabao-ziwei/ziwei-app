@@ -1,10 +1,10 @@
+// FILE: src/components/LuckyDivinationGame.tsx
 import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Heart, Briefcase, Wallet, Activity, Users, Sparkles, Share2, AlertCircle, Loader2, Zap, MessageCircle, ArrowRight, Download, Smartphone } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toPng } from 'html-to-image';
-// ✅ [修正] 引入 checkIsSuperAdmin 以配合新版 db.ts
-import { getDivinationResult, checkIsSuperAdmin } from '../db';
+import { getDivinationResult, checkIsSuperAdmin, consumeDivinationV2 } from '../db';
 import { supabase } from '../supabase';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Environment, ContactShadows, Float, PerspectiveCamera, useGLTF, Center, useProgress, Html } from '@react-three/drei';
@@ -56,8 +56,6 @@ const CATEGORIES: { id: Category; icon: any; color: string; desc: string }[] = [
     { id: '健康', icon: Activity, color: 'text-green-400', desc: '身心、疾病、養生' },
     { id: '交友', icon: Users, color: 'text-purple-400', desc: '人際、貴人、小人' },
 ];
-
-const LINE_OA_URL = "https://line.me/R/ti/p/@653jrxjt?oat_content=url&ts=03241123";
 
 const LUCK_PHRASES: Record<string, string> = {
     '吉': '順運',
@@ -410,7 +408,6 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
 
         const checkAdmin = async () => {
             const { data: { user } } = await supabase.auth.getUser();
-            // ✅ [修正] 使用 checkIsSuperAdmin 替代硬編碼
             if (checkIsSuperAdmin(user?.email)) setIsAdmin(true);
         };
         checkAdmin();
@@ -433,7 +430,15 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
         setBubbles(newBubbles);
     };
 
-    const handleBubbleClick = (val: number) => { const newSels = [...selections, val]; setSelections(newSels); if (newSels.length === 4) setStep('RESULT'); else setRound(prev => prev + 1); };
+    const handleBubbleClick = (val: number) => { 
+        const newSels = [...selections, val]; 
+        setSelections(newSels); 
+        if (newSels.length === 4) {
+            setStep('RESULT'); 
+        } else {
+            setRound(prev => prev + 1); 
+        }
+    };
 
     const handleCategorySelect = (catId: Category) => { setSelectedCat(catId); if (skipAnimation) { setStep('BUBBLE'); } else { setStep('BREATHING'); } };
 
@@ -472,6 +477,9 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
             const fetchData = async () => {
                 setIsLoadingResult(true);
                 try { 
+                    // [修正] 在這裡才正式執行扣除次數的動作
+                    await consumeDivinationV2();
+
                     const data = await getDivinationResult(selectedCat, result.mingZhi, result.sihuaGan); 
                     if (data) { 
                         setFinalContent(data.content); 
@@ -596,7 +604,6 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                 onSystemShare={handleSystemShare} 
             />
             
-            {/* [iOS 終極修正] */}
             <div style={{ 
                 position: 'fixed', 
                 left: 0, 
@@ -693,7 +700,7 @@ export const LuckyDivinationGame: React.FC<LuckyGameProps> = ({ onClose, isPubli
                 
                 {step === 'RESULT' && result && (
                     <div className="w-full h-full flex flex-col items-center animate-in fade-in duration-1000 relative pt-[calc(env(safe-area-inset-top)+0.5rem)]">
-                        {/* 顯示給使用者的卡片 (使用靜態圖，確保視覺一致性) */}
+                        {/* 顯示給使用者的卡片 */}
                         <div 
                             ref={resultRef} 
                             className="bg-[#09090b] w-full max-w-sm mx-auto rounded-xl border border-white/20 flex flex-col items-center relative overflow-hidden shadow-2xl shrink-0 bg-noise"
