@@ -22,11 +22,17 @@ export default async function handler(req: any, res: any) {
         const receivedMac = params.CheckMacValue;
         delete params.CheckMacValue; 
 
-        const HASH_KEY = process.env.ECPAY_HASH_KEY || '5294y06JbISpM5x9';
-        const HASH_IV = process.env.ECPAY_HASH_IV || 'v77hoKGq4kWxNNIS';
-        const RESEND_API_KEY = process.env.RESEND_API_KEY || ''; 
-        const LINE_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN || '';
-        const ADMIN_LINE_ID = process.env.ADMIN_LINE_USER_ID || '';
+        // 嚴格讀取正式金鑰，拔除所有測試預設值
+        const HASH_KEY = process.env.ECPAY_HASH_KEY;
+        const HASH_IV = process.env.ECPAY_HASH_IV;
+        const RESEND_API_KEY = process.env.RESEND_API_KEY; 
+        const LINE_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+        const ADMIN_LINE_ID = process.env.ADMIN_LINE_USER_ID;
+
+        if (!HASH_KEY || !HASH_IV) {
+            console.error('[Webhook 錯誤] 伺服器未設定正式 HashKey/IV');
+            return res.status(500).send('0|ErrorMessage');
+        }
 
         const calculatedMac = generateCheckMacValue(params, HASH_KEY, HASH_IV);
         if (calculatedMac !== receivedMac) {
@@ -57,7 +63,7 @@ export default async function handler(req: any, res: any) {
                 if (resData) {
                     const displayTime = new Date(resData.start_time).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
                     
-                    // --- 1. 發送 Email 給客戶 (正式網域 + 錯誤捕捉) ---
+                    // --- 1. 發送 Email 給客戶 ---
                     if (RESEND_API_KEY && resData.client_email) {
                         const htmlContent = `
                             <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
@@ -95,8 +101,7 @@ export default async function handler(req: any, res: any) {
                                     'Content-Type': 'application/json'
                                 },
                                 body: JSON.stringify({
-                                    // 這裡已經為你設定好正式網域
-                                    from: '大寶紫微斗數系統 <dabao@dabao.life>', 
+                                    from: '大寶紫微斗數系統 <system@dabao.life>', 
                                     to: resData.client_email,
                                     subject: '【大寶紫微斗數】預約付款成功與後續確認步驟',
                                     html: htmlContent
@@ -104,8 +109,7 @@ export default async function handler(req: any, res: any) {
                             });
 
                             if (!resendResponse.ok) {
-                                const errorText = await resendResponse.text();
-                                console.error('[Resend 發信失敗]', errorText);
+                                console.error('[Resend 發信失敗]', await resendResponse.text());
                             } else {
                                 console.log(`[Resend 發信成功] 已寄送至 ${resData.client_email}`);
                             }
@@ -114,7 +118,7 @@ export default async function handler(req: any, res: any) {
                         }
                     }
 
-                    // --- 2. 發送 LINE 給小幫手 (加入錯誤捕捉) ---
+                    // --- 2. 發送 LINE 給小幫手 ---
                     if (LINE_TOKEN && ADMIN_LINE_ID) {
                         const lineText = `🎉 收到新預約 (已付款) 🎉\n\n👤 客戶：${resData.client_name}\n📱 LINE：${resData.client_line_id}\n📅 時間：${displayTime}\n🔮 項目：${resData.service_type}\n💰 金額：NT$ ${amount}\n\n⚠️ 請留意客戶是否已主動聯繫官方帳號對接時段。`;
                         
@@ -132,8 +136,7 @@ export default async function handler(req: any, res: any) {
                             });
                             
                             if (!lineResponse.ok) {
-                                const errorText = await lineResponse.text();
-                                console.error('[LINE 發信失敗]', errorText);
+                                console.error('[LINE 發信失敗]', await lineResponse.text());
                             } else {
                                 console.log('[LINE 發信成功] 小幫手已收到通知');
                             }
