@@ -1,6 +1,6 @@
 // FILE: src/components/Admin/FeatureConfigPanel.tsx
 import React, { useEffect, useState } from 'react';
-import { Save, RefreshCw, AlertCircle, DollarSign, Power, MessageSquare } from 'lucide-react';
+import { Save, RefreshCw, AlertCircle, Power, MessageSquare, Crown } from 'lucide-react';
 import { getFeatureConfigs, updateFeatureConfig } from '../../db'; 
 import type { FeatureConfig } from '../../types/store';
 
@@ -39,7 +39,7 @@ export const FeatureConfigPanel: React.FC = () => {
                 feature_key: feature.feature_key,
                 is_active: feature.is_active,
                 is_paid: feature.is_paid,
-                price: feature.price,
+                price: feature.price, // 雖然不再顯示，但保持資料庫相容性
                 announcement: feature.announcement
             });
             if (!success) {
@@ -89,31 +89,19 @@ export const FeatureConfigPanel: React.FC = () => {
                                 <p className="text-xs text-gray-400 font-mono pl-14">{feature.feature_key}</p>
                             </div>
 
-                            <div className="flex-1 flex items-center gap-4 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                            <div className="flex-1 flex items-center justify-center gap-4 bg-amber-50/50 p-3 rounded-lg border border-amber-100">
                                 <label className="flex items-center gap-2 cursor-pointer select-none">
                                     <input 
                                         type="checkbox" 
-                                        className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500 border-gray-300"
+                                        className="w-5 h-5 text-amber-600 rounded focus:ring-amber-500 border-gray-300"
                                         checked={feature.is_paid}
                                         onChange={(e) => handleChange(feature.feature_key, 'is_paid', e.target.checked)}
                                         disabled={!feature.is_active}
                                     />
-                                    {/* [修改] 顯示文字調整 */}
-                                    <span className={`text-sm font-bold ${feature.is_paid ? 'text-purple-700' : 'text-gray-400'}`}>是否收費</span>
+                                    <span className={`text-sm font-bold flex items-center gap-1 ${feature.is_paid ? 'text-amber-700' : 'text-gray-400'}`}>
+                                        <Crown size={16} /> 啟用 VIP 付費牆
+                                    </span>
                                 </label>
-
-                                {feature.is_paid && (
-                                    <div className="flex items-center gap-2 relative">
-                                        <DollarSign size={16} className="text-gray-400 absolute left-2"/>
-                                        <input 
-                                            type="number" 
-                                            className="w-24 pl-7 pr-2 py-1 border border-gray-300 rounded text-sm font-mono font-bold text-gray-800 focus:ring-2 focus:ring-purple-200 outline-none"
-                                            value={feature.price}
-                                            onChange={(e) => handleChange(feature.feature_key, 'price', parseInt(e.target.value))}
-                                        />
-                                        <span className="text-xs text-gray-500">點</span>
-                                    </div>
-                                )}
                             </div>
 
                             <div className="flex-[2] w-full">
@@ -121,7 +109,7 @@ export const FeatureConfigPanel: React.FC = () => {
                                     <MessageSquare size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                                     <input 
                                         type="text" 
-                                        placeholder="輸入促銷或說明文字 (選填)" 
+                                        placeholder="輸入前台公告，將直接顯示於該功能首頁 (選填)" 
                                         className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                                         value={feature.announcement || ''}
                                         onChange={(e) => handleChange(feature.feature_key, 'announcement', e.target.value)}
