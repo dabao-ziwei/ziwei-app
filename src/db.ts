@@ -15,6 +15,15 @@ export const checkIsSuperAdmin = (email: string | undefined | null) => {
     return email?.trim().toLowerCase() === SUPER_VIEW_EMAIL;
 };
 
+// [新增] 反向關係計算機 (極簡穩健版)
+export const getInverseRelationType = (type: string, clientGender: '男'|'女'): string => {
+    const t = type.trim();
+    if (['父親', '母親', '爸爸', '媽媽', '父', '母'].includes(t)) return '子女';
+    if (['子女', '兒子', '女兒'].includes(t)) return clientGender === '男' ? '父親' : '母親';
+    if (['哥哥', '姐姐', '弟弟', '妹妹', '兄', '姐', '弟', '妹'].includes(t)) return '手足';
+    return t; // 包含配偶、朋友、親戚、以及所有自訂關係，一律鏡像對等
+};
+
 // --- Interfaces ---
 export interface UserProfile {
   id: string;
@@ -242,16 +251,31 @@ export const getRelationships = async (clientId: string): Promise<Relationship[]
     if (error || !data) return [];
     return data.map((r: any) => ({ id: r.id, from_client_id: r.from_client_id, to_client_id: r.to_client_id, relation_type: r.relation_type, related_client: mapClientToEntity(r.to_c) }));
 };
-export const addRelationship = async (fromId: string, toId: string, type: string): Promise<boolean> => {
+
+// [修改] 支援雙向寫入
+export const addRelationship = async (fromId: string, toId: string, type: string, inverseType: string): Promise<boolean> => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
-    const { error } = await supabase.from('relationships').insert({ user_id: user.id, from_client_id: fromId, to_client_id: toId, relation_type: type });
+    const { error } = await supabase.from('relationships').insert([
+        { user_id: user.id, from_client_id: fromId, to_client_id: toId, relation_type: type },
+        { user_id: user.id, from_client_id: toId, to_client_id: fromId, relation_type: inverseType }
+    ]);
     return !error;
 };
+
 export const deleteRelationship = async (relId: string): Promise<boolean> => {
     const { error } = await supabase.from('relationships').delete().eq('id', relId);
     return !error;
 };
+
+// [新增] 支援雙向刪除
+export const deleteRelationshipPair = async (clientA_Id: string, clientB_Id: string): Promise<boolean> => {
+    const { error } = await supabase.from('relationships')
+        .delete()
+        .or(`and(from_client_id.eq.${clientA_Id},to_client_id.eq.${clientB_Id}),and(from_client_id.eq.${clientB_Id},to_client_id.eq.${clientA_Id})`);
+    return !error;
+};
+
 export const getUserCustomRelationTypes = async (): Promise<string[]> => { return []; };
 
 // --- Store & Subscription Logic ---
@@ -484,13 +508,11 @@ export const getAllReservationsHistory = async (): Promise<Reservation[]> => {
     return data || [];
 };
 
-// [新增] 根據 ID 查詢單筆預約
 export const getReservationById = async (id: string): Promise<Reservation | null> => {
     const { data } = await supabase.from('reservations').select('*').eq('id', id).maybeSingle();
     return data;
 };
 
-// [新增] 根據 Email 查詢未來的預約單 (提供給免登入查單使用)
 export const getReservationsByEmail = async (email: string): Promise<Reservation[]> => {
     const today = new Date();
     today.setHours(0,0,0,0);

@@ -34,7 +34,6 @@ const SHI_CHEN_OPTIONS = [
   { label: '亥 (21-23)', value: '22' }
 ];
 
-// 根據輸入的小時，自動推算對應的時辰 value
 const getShichenValue = (hh: string) => {
     if (!hh) return '';
     const h = parseInt(hh, 10);
@@ -76,7 +75,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
   const [minute, setMinute] = useState('');
   
   const [category, setCategory] = useState('客戶');
-  const [isFavorite, setIsFavorite] = useState(false); // [新增] 最愛狀態
+  const [isFavorite, setIsFavorite] = useState(false); 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [linkTarget, setLinkTarget] = useState<Client | null>(null);
@@ -104,7 +103,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
         setHour(editData.birthHour.toString().padStart(2, '0'));
         setMinute(editData.birthMinute.toString().padStart(2, '0'));
         setCategory(editData.type || '客戶');
-        setIsFavorite(editData.is_favorite ?? false); // 載入最愛狀態
+        setIsFavorite(editData.is_favorite ?? false); 
       } else {
         setGender('女');
         setName('');
@@ -188,14 +187,15 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
         birthMinute,
         type: category as any,
         majorStars: majorStarNames,
-        is_favorite: isFavorite // [新增] 將最愛狀態送出
+        is_favorite: isFavorite 
       };
 
       const payload: any = { ...clientData };
       if (linkTarget) {
           payload.linkRequest = {
               targetId: linkTarget.id,
-              type: linkType
+              type: linkType,
+              targetGender: linkTarget.gender // [新增] 將目標性別帶過去供反向推算使用
           };
       }
       
@@ -277,7 +277,6 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
           <div className="space-y-2">
             <label className="text-xs font-bold text-gray-500 block">分類</label>
             <div className="flex flex-wrap gap-2 items-center">
-              {/* --- 新增：將最愛按鈕放在分類的最前面 --- */}
               <button
                 onClick={() => setIsFavorite(!isFavorite)}
                 className={`px-3 py-1.5 rounded-full text-sm font-bold transition-all flex items-center gap-1 border ${
