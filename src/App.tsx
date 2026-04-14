@@ -8,7 +8,8 @@ import { Auth } from './components/Auth';
 import { UpdatePassword } from './components/UpdatePassword';
 import { ClientList } from './pages/ClientList'; 
 import { Dashboard } from './pages/Dashboard';
-import { saveClient, type Client } from './db';
+// [新增引入] addRelationship 與 getInverseRelationType
+import { saveClient, addRelationship, getInverseRelationType, type Client } from './db';
 import { supabase } from './supabase';
 import { Loader2 } from 'lucide-react';
 import { RequireMeChart } from './components/RequireMeChart'; 
@@ -19,7 +20,7 @@ import { LuckyPage } from './pages/LuckyPage';
 import { StorePage } from './pages/StorePage';
 import { SystemAdmin } from './pages/SystemAdmin';
 import { BookingPage } from './pages/BookingPage';
-import { PaymentResult } from './pages/PaymentResult'; // 引入付款結果頁
+import { PaymentResult } from './pages/PaymentResult'; 
 
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import { Analytics } from "@vercel/analytics/react";
@@ -38,7 +39,6 @@ function App() {
       setSession(session);
       setLoading(false);
       
-      // 初次載入若已登入，檢查是否有跳轉目標
       if (session) {
         const redirectTarget = sessionStorage.getItem('redirectTarget');
         if (redirectTarget) {
@@ -56,7 +56,6 @@ function App() {
         return;
       }
       
-      // 登入或註冊成功後，自動導回原本想去的頁面
       if (event === 'SIGNED_IN' && newSession) {
         const redirectTarget = sessionStorage.getItem('redirectTarget');
         if (redirectTarget) {
@@ -80,6 +79,13 @@ function App() {
   const handleSaveClient = async (clientData: any) => {
     try {
       const savedId = await saveClient(clientData);
+      
+      // [新增] 儲存成功且有夾帶關聯對象時，寫入雙向關聯
+      if (savedId && clientData.linkRequest) {
+          const { targetId, type, targetGender } = clientData.linkRequest;
+          const inverseType = getInverseRelationType(type, targetGender);
+          await addRelationship(targetId, savedId, type, inverseType);
+      }
       
       setIsModalOpen(false);
       setEditingClient(null);
@@ -137,7 +143,7 @@ function App() {
         <Route path="/booking" element={<BookingPage />} /> 
         <Route path="/legal" element={<LegalPage />} />
         <Route path="/store" element={<StorePage />} /> 
-        <Route path="/payment-result" element={<PaymentResult />} /> {/* 加入付款結果頁 */}
+        <Route path="/payment-result" element={<PaymentResult />} />
         
         {/* ========================================== */}
         {/* 保護頁面區 (必須登入) */}

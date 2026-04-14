@@ -1,8 +1,9 @@
+// FILE: src/components/RelationshipModal.tsx
 import React, { useState, useEffect } from 'react';
 import { X, Search, Link as LinkIcon, Trash2, Plus, Users, HeartHandshake, Check } from 'lucide-react';
-import { getRelationships, addRelationship, deleteRelationship, loadClients, getUserCustomRelationTypes, type Client, type Relationship } from '../db';
+import { getRelationships, addRelationship, deleteRelationshipPair, loadClients, getUserCustomRelationTypes, type Client, type Relationship, getInverseRelationType } from '../db';
 import { TagSelect } from './TagSelect';
-import { ZHI } from '../logic/constants'; // 用於顯示地支時辰
+import { ZHI } from '../logic/constants';
 
 interface Props {
   isOpen: boolean;
@@ -71,11 +72,14 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
   const handleAdd = async () => {
     if (!selectedTarget || !relationType.trim()) return;
     setLoading(true);
-    const success = await addRelationship(currentClient.id, selectedTarget.id, relationType.trim());
+    const type = relationType.trim();
+    const inverseType = getInverseRelationType(type, currentClient.gender);
+    
+    const success = await addRelationship(currentClient.id, selectedTarget.id, type, inverseType);
     if (success) {
       await fetchRelationships();
-      if (!relationOptions.includes(relationType.trim())) {
-          setRelationOptions(prev => [...prev, relationType.trim()]);
+      if (!relationOptions.includes(type)) {
+          setRelationOptions(prev => [...prev, type]);
       }
       setIsAdding(false);
       setSearchTerm('');
@@ -86,10 +90,10 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
     setLoading(false);
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (rel: Relationship) => {
     if (!confirm('確定要移除此關係嗎？(這會同時移除對方與您的連結)')) return;
     setLoading(true);
-    const success = await deleteRelationship(id);
+    const success = await deleteRelationshipPair(rel.from_client_id, rel.to_client_id);
     if (success) {
       await fetchRelationships();
     }
@@ -99,7 +103,7 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
   const filteredClients = allClients.filter(c => 
     c.name.includes(searchTerm) || 
     (c.birthYear.toString() === searchTerm)
-  ).slice(0, 10); // 增加顯示筆數，避免同名找不到
+  ).slice(0, 10); 
 
   if (!isOpen) return null;
 
@@ -135,7 +139,6 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
                                     <span className="text-xs font-bold px-2 py-1 rounded bg-blue-100 text-blue-700">
                                         {getDisplayRelation(rel.relation_type)}
                                     </span>
-                                    {/* 如果是被歸納為家人的，顯示原始稱謂備註，方便辨識 */}
                                     {getDisplayRelation(rel.relation_type) === '家人' && rel.relation_type !== '家人' && (
                                         <span className="text-[9px] text-gray-400 mt-0.5">({rel.relation_type})</span>
                                     )}
@@ -155,7 +158,7 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
                             </div>
                             
                             <button 
-                                onClick={() => handleDelete(rel.id)}
+                                onClick={() => handleDelete(rel)}
                                 className="p-2 text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
                                 title="移除關係"
                             >
@@ -194,7 +197,6 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
                                     >
                                         <div className="flex flex-col">
                                             <span className="font-medium text-gray-700">{c.name}</span>
-                                            {/* 搜尋結果顯示完整生日，區分同名同姓 */}
                                             <span className="text-[10px] text-gray-400">{formatFullDate(c)}</span>
                                         </div>
                                         <span className="text-xs text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">{c.gender}</span>
@@ -237,7 +239,6 @@ export const RelationshipModal: React.FC<Props> = ({ isOpen, onClose, currentCli
                     )}
                 </div>
             )}
-
         </div>
 
         {!isAdding && (
