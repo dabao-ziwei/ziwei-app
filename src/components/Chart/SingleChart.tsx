@@ -568,7 +568,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     else if (liuMonth !== null && liuNianYear !== null) key = `yue-${liuNianYear}-${liuMonth}`;
     else if (liuNianYear !== null) key = `liu-${liuNianYear}`;
     else if (daXianSeq >= 0) key = `da-${daXianSeq}`;
-    else return;
+    else key = 'ben'; // [修正] 加入對本命盤的狀態支援
 
     setReverseMap((prev) => ({ ...prev, [key]: !prev[key] }));
   };
@@ -577,14 +577,16 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const isLiuRev = liuNianYear ? !!reverseMap[`liu-${liuNianYear}`] : false;
   const isYueRev = liuNianYear && liuMonth ? !!reverseMap[`yue-${liuNianYear}-${liuMonth}`] : false;
   const isRiRev = liuNianYear && liuMonth && liuDay ? !!reverseMap[`ri-${liuNianYear}-${liuMonth}-${liuDay}`] : false;
+  const isBenRev = !!reverseMap['ben']; // [修正] 讀取本命盤反轉狀態
 
-  const reverseFlags = { da: isDaRev, liu: isLiuRev, yue: isYueRev, ri: isRiRev };
+  const reverseFlags = { da: isDaRev, liu: isLiuRev, yue: isYueRev, ri: isRiRev, ben: isBenRev };
 
   let isCurrentReverseOn = false;
   if (liuDay !== null) isCurrentReverseOn = isRiRev;
   else if (liuMonth !== null) isCurrentReverseOn = isYueRev;
   else if (liuNianYear !== null) isCurrentReverseOn = isLiuRev;
   else if (daXianSeq >= 0) isCurrentReverseOn = isDaRev;
+  else isCurrentReverseOn = isBenRev; // [修正] 如果都沒有選，就看本命盤反轉狀態
 
   const handleDaXianClick = (seq: number) => {
     setDaXianSeq(daXianSeq === seq ? -1 : seq);
@@ -716,7 +718,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   }
 
   return (
-    // [修改] 替換 h-screen 為 h-[100dvh]，解決行動端瀏覽器上下工具列滑動造成的跳動
     <div className="flex flex-col h-[100dvh] w-full bg-slate-100 overflow-hidden relative">
       <div className="flex justify-between items-center px-4 py-2 bg-white border-b border-gray-200 shadow-sm shrink-0 z-50 h-[56px]">
         <button
@@ -828,7 +829,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         )}
       </div>
 
-      {/* [修改] 為紫占模式加入底部安全區距離 */}
       <div className={`flex-1 min-h-0 w-full relative ${mode === 'divination' ? 'pb-[env(safe-area-inset-bottom)]' : ''}`}>
         {isExternalInputOpen && (
           <div className="absolute inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
@@ -947,7 +947,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         />
       </div>
 
-      {/* --- 底部：大限列 --- */}
       {mode !== 'divination' && daXianList.length > 0 && (
         <div className="shrink-0 bg-white border-t border-gray-200 w-full z-40 overflow-hidden">
           <div className="flex overflow-x-auto no-scrollbar w-full">
@@ -974,11 +973,8 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         </div>
       )}
 
-      {/* --- 底部：流年列 --- */}
       {mode !== 'divination' && daXianList.length > 0 && (
-        // [修改] 加上 pb-[env(safe-area-inset-bottom)] 來自動適應 iOS 底部安全區域
         <div className="shrink-0 bg-slate-50 border-t border-gray-200 w-full z-40 overflow-hidden pb-[env(safe-area-inset-bottom)]">
-          {/* [修改] 內部 flex 加入 pb-1 讓按鈕不要死貼著安全線，多一點呼吸空間 */}
           <div className="flex overflow-x-auto no-scrollbar w-full pt-0.5 pb-1">
             {liuNianList.map((item) => {
               const isActive = liuNianYear === item.year;

@@ -1,3 +1,4 @@
+// FILE: src/components/PalaceCard.tsx
 import React from 'react';
 import { type Palace, type Star, type SiHuaType } from '../logic/types';
 import { GAN, ZHI, STAR_ABBR_MAP, PALACE_REVERSE_MAP } from '../logic/constants';
@@ -25,13 +26,13 @@ interface PalaceCardProps {
   isReverse?: boolean; 
   
   reverseFlags?: {
+      ben?: boolean;
       da: boolean;
       liu: boolean;
       yue: boolean;
       ri: boolean;
   };
   
-  // [新增] 指南針顯示狀態
   showCompass?: boolean;
 
   divinationName?: string;
@@ -40,7 +41,6 @@ interface PalaceCardProps {
   divinationSiHua?: Record<string, '祿' | '權' | '科' | '忌'>;
 }
 
-// [新增] 方位映射表 (0=子, 1=丑, ...)
 const COMPASS_MAP = [
   '正北',   // 子 (0)
   '北北東', // 丑 (1)
@@ -59,9 +59,17 @@ const COMPASS_MAP = [
 // 輔助函式：取得顛倒宮位名稱
 const getReversedName = (name: string): string | null => {
     if (!name) return null;
+    
+    // [修正] 1. 如果是本命盤的完整名稱 (存在於對照表中)，直接回傳完整的顛倒名稱，不要硬切
+    if (PALACE_REVERSE_MAP[name]) {
+        return PALACE_REVERSE_MAP[name];
+    }
+    
+    // 2. 否則是短名稱 (如 大命、流夫 等)，才用字尾推算
     const lastChar = name.slice(-1);
     const fullKey = Object.keys(PALACE_REVERSE_MAP).find(k => k.includes(lastChar));
     if (!fullKey) return null;
+    
     const reversedFull = PALACE_REVERSE_MAP[fullKey];
     const reversedSuffix = reversedFull.substring(0, 1);
     const prefix = name.substring(0, name.length - 1);
@@ -86,7 +94,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   isTwinMode,
   isReverse,
   reverseFlags, 
-  showCompass, // [新增]
+  showCompass,
   divinationName, 
   externalSiHua,
   divinationSiHua
@@ -186,6 +194,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   const renderLabel = (name: string, colorClass: string, targetLayer: 'ben' | 'da' | 'liu' | 'yue' | 'ri') => {
       let isReversed = false;
       if (reverseFlags) {
+          if (targetLayer === 'ben') isReversed = reverseFlags.ben || false;
           if (targetLayer === 'da') isReversed = reverseFlags.da;
           if (targetLayer === 'liu') isReversed = reverseFlags.liu;
           if (targetLayer === 'yue') isReversed = reverseFlags.yue;
@@ -217,7 +226,6 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
       {renderExternalChips()}
       {renderInteractiveFlyingStars()}
 
-      {/* [新增] 指南針文字標籤 */}
       {showCompass && (
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none select-none">
               <span className="text-xs font-bold text-amber-700 bg-amber-50/80 px-2 py-1 rounded-full border border-amber-200 shadow-sm backdrop-blur-[1px] whitespace-nowrap">
@@ -293,13 +301,9 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
         <div className="flex flex-col-reverse items-end leading-tight pointer-events-none">
           
           {renderLabel(baseName, 'text-red-600', 'ben')}
-          
           {daName && renderLabel(daName, 'text-gray-500', 'da')}
-          
           {liuName && renderLabel(liuName, 'text-blue-600', 'liu')}
-          
           {yueName && renderLabel(yueName, 'text-amber-600', 'yue')}
-
           {riName && renderLabel(riName, 'text-green-700', 'ri')}
 
           {xiaoName && (

@@ -25,7 +25,6 @@ const getSiHuaMap = (ganIndex: number) => {
     } as Record<string, '祿' | '權' | '科' | '忌'>;
 };
 
-// 輔助：產生 10 年流年列表 (合盤精簡版：只顯示西元年)
 const getLiuNianList = (engine: ZiWeiEngine, chartData: any, daXianSeq: number) => {
     if (!engine || !chartData || daXianSeq < 0) return [];
     
@@ -46,7 +45,6 @@ const getLiuNianList = (engine: ZiWeiEngine, chartData: any, daXianSeq: number) 
     return list;
 };
 
-// 輔助：計算當前大限 Index (依據西元年曆比對 UI 顯示的年份區間)
 const getCurrentDaLimitIndex = (chartData: any, engine: ZiWeiEngine) => {
     if (!chartData || !engine) return 0;
     const now = new Date();
@@ -67,7 +65,6 @@ const getCurrentDaLimitIndex = (chartData: any, engine: ZiWeiEngine) => {
     return 0;
 };
 
-// 區分早晚子的切換邏輯
 const calcNextHour = (currentHour: number, delta: number) => {
     const hours = [0, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23];
     let currentIndex = hours.indexOf(currentHour);
@@ -232,7 +229,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
     let key = '';
     if (liuYearA !== null) key = `liu-${liuYearA}`;
     else if (daSeqA >= 0) key = `da-${daSeqA}`;
-    else return;
+    else key = 'ben'; // [修正] 加入本命盤的反轉金鑰支援
     setReverseMapA(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
@@ -240,19 +237,21 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
     let key = '';
     if (liuYearB !== null) key = `liu-${liuYearB}`;
     else if (daSeqB >= 0) key = `da-${daSeqB}`;
-    else return;
+    else key = 'ben'; // [修正] 加入本命盤的反轉金鑰支援
     setReverseMapB(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
   const isDaRevA = daSeqA >= 0 ? !!reverseMapA[`da-${daSeqA}`] : false;
   const isLiuRevA = liuYearA ? !!reverseMapA[`liu-${liuYearA}`] : false;
-  const isCurrentRevA = liuYearA !== null ? isLiuRevA : (daSeqA >= 0 ? isDaRevA : false);
-  const reverseFlagsA = { da: isDaRevA, liu: isLiuRevA, yue: false, ri: false };
+  const isBenRevA = !!reverseMapA['ben']; // [修正] 讀取狀態
+  const isCurrentRevA = liuYearA !== null ? isLiuRevA : (daSeqA >= 0 ? isDaRevA : isBenRevA); 
+  const reverseFlagsA = { da: isDaRevA, liu: isLiuRevA, yue: false, ri: false, ben: isBenRevA };
 
   const isDaRevB = daSeqB >= 0 ? !!reverseMapB[`da-${daSeqB}`] : false;
   const isLiuRevB = liuYearB ? !!reverseMapB[`liu-${liuYearB}`] : false;
-  const isCurrentRevB = liuYearB !== null ? isLiuRevB : (daSeqB >= 0 ? isDaRevB : false);
-  const reverseFlagsB = { da: isDaRevB, liu: isLiuRevB, yue: false, ri: false };
+  const isBenRevB = !!reverseMapB['ben']; // [修正] 讀取狀態
+  const isCurrentRevB = liuYearB !== null ? isLiuRevB : (daSeqB >= 0 ? isDaRevB : isBenRevB);
+  const reverseFlagsB = { da: isDaRevB, liu: isLiuRevB, yue: false, ri: false, ben: isBenRevB };
 
   const syncTime = (source: 'A' | 'B', year: number | null) => {
       if (!isLocked) return; 
@@ -331,14 +330,13 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   }, [chartB, daListB]);
 
   if (!clientA || !clientB || !chartA || !chartB) {
-      return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin"/></div>;
+      return <div className="flex h-[100dvh] items-center justify-center"><Loader2 className="animate-spin"/></div>;
   }
 
   const dummyConnections = { self: -1, tri1: -1, tri2: -1, opp: -1 };
   const getDummyCoords = () => ({ x: 0, y: 0 });
   const dummyNav = () => {};
 
-  // [修改] 針對行動端安全區的動態間距與底色處理
   const renderControlBar = (
       daList: any[], 
       daSeq: number, 
@@ -351,7 +349,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       source: 'A' | 'B',
       realTime: { year: number; daSeq: number } | undefined
   ) => {
-      // 動態判定安全區背景色
       const safeAreaBg = daSeq >= 0 ? 'bg-blue-50' : 'bg-white';
       return (
         <div className={`shrink-0 flex flex-col w-full z-40 pb-[env(safe-area-inset-bottom)] ${safeAreaBg}`}>
@@ -398,7 +395,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   };
 
   return (
-    // [修改] h-[100dvh] 解決瀏覽器伸縮問題
     <div className="flex flex-col h-[100dvh] w-full bg-slate-100 overflow-hidden">
         {/* Header */}
         <div className="flex justify-between items-center px-4 py-2 bg-white border-b border-gray-200 shadow-sm shrink-0 z-50 h-[56px]">
