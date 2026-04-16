@@ -1,6 +1,8 @@
+// FILE: src/components/DivinationSetupModal.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Loader2, Dices, ArrowRight, ArrowLeft } from 'lucide-react';
 import { supabase } from '../supabase';
+import { checkIsSuperAdmin } from '../db';
 
 interface DivinationSetupModalProps {
   isOpen: boolean;
@@ -8,13 +10,12 @@ interface DivinationSetupModalProps {
   onConfirm: (data: any) => Promise<void>;
 }
 
-const SUPER_ADMIN_EMAIL = 'stephenwu.0926@gmail.com';
-
 export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOpen, onClose, onConfirm }) => {
-  const [step, setStep] = useState<1 | 2>(1); // 步驟控制
+  const [step, setStep] = useState<1 | 2>(1);
   const [gender, setGender] = useState<'男' | '女'>('女');
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<'random' | 'manual'>('random');
+  const [userEmail, setUserEmail] = useState('');
 
   // 時間輸入狀態
   const [year, setYear] = useState('');
@@ -40,37 +41,68 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
       useRef<HTMLInputElement>(null)
   ];
 
-  // 初始化與權限判斷
+  // 每次打開 Modal 時初始化，並「預先」抓取信箱
   useEffect(() => {
       if (isOpen) {
-          // 每次打開 Modal 重置步驟與數字
           setStep(1);
           setDigits(['', '', '', '']);
+          setMode('random');
           
-          // 如果是手動模式，執行權限檢查來決定是否帶入預設值
-          if (mode === 'manual') {
-              supabase.auth.getUser().then(({ data: { user } }) => {
-                  // 嚴格比對 Email
-                  if (user?.email === SUPER_ADMIN_EMAIL) {
-                      setYear('1979'); 
-                      setMonth('09'); 
-                      setDay('26'); 
-                      setHour('18'); 
-                      setMinute('26'); 
-                      setGender('男');
-                  } else {
-                      // 非管理員，確保欄位清空
-                      setYear(''); 
-                      setMonth(''); 
-                      setDay(''); 
-                      setHour(''); 
-                      setMinute(''); 
-                      setGender('女');
-                  }
-              });
-          }
+          setYear('');
+          setMonth('');
+          setDay('');
+          setHour('');
+          setMinute('');
+          setGender('女');
+
+          // 一開啟 Modal 就取得信箱並存起來，避免後續非同步延遲
+          supabase.auth.getUser().then(({ data: { user } }) => {
+              if (user?.email) {
+                  setUserEmail(user.email.trim().toLowerCase());
+              }
+          });
       }
-  }, [isOpen, mode]); // 當 Modal 開啟或模式切換時觸發
+  }, [isOpen]);
+
+  // [絕對防禦] 將判斷與給值寫死在按鈕行為上，確保同步執行
+  const handleManualMode = async () => {
+      setMode('manual');
+      
+      let currentEmail = userEmail;
+      // 保底機制：如果剛打開瞬間點太快還沒抓到，這裡強迫等它抓完
+      if (!currentEmail) {
+          const { data: { user } } = await supabase.auth.getUser();
+          currentEmail = user?.email?.trim().toLowerCase() || '';
+          setUserEmail(currentEmail);
+      }
+
+      // 使用統一的權限驗證函數
+      if (checkIsSuperAdmin(currentEmail)) {
+          setYear('1979'); 
+          setMonth('09'); 
+          setDay('26'); 
+          setHour('18'); 
+          setMinute('26'); 
+          setGender('男');
+      } else {
+          setYear(''); 
+          setMonth(''); 
+          setDay(''); 
+          setHour(''); 
+          setMinute(''); 
+          setGender('女');
+      }
+  };
+
+  const handleRandomMode = () => {
+      setMode('random');
+      setYear(''); 
+      setMonth(''); 
+      setDay(''); 
+      setHour(''); 
+      setMinute(''); 
+      setGender('女');
+  };
 
   // 時間輸入處理
   const handleDateInput = (e: React.ChangeEvent<HTMLInputElement>, setter: (v: string) => void, maxLen: number, nextRef?: React.RefObject<HTMLInputElement>) => {
@@ -90,12 +122,10 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
   // 數字輸入處理 (A, B, C, D)
   const handleDigitInput = (index: number, val: string) => {
       const newDigits = [...digits];
-      // 只取最後一個輸入的數字 (確保單格單字)
       const v = val.replace(/\D/g, '').slice(-1); 
       newDigits[index] = v;
       setDigits(newDigits);
 
-      // 自動跳下一格
       if (v && index < 3 && digitRefs[index + 1].current) {
           setTimeout(() => digitRefs[index + 1].current?.focus(), 0);
       }
@@ -116,12 +146,10 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
           }
       }
       setStep(2);
-      // 自動 Focus 第一個數字框
       setTimeout(() => digitRefs[0].current?.focus(), 100);
   };
 
   const handleFinalConfirm = async () => {
-      // 驗證數字規則
       const ab = parseInt((digits[0] || '0') + (digits[1] || '0'));
       const cd = parseInt((digits[2] || '0') + (digits[3] || '0'));
 
@@ -144,7 +172,7 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
               gender: gender,
               type: '紫占',
               name: '紫微占卜',
-              divNum: digits, // 將數字傳出去
+              divNum: digits,
           };
 
           if (mode === 'random') {
@@ -170,11 +198,12 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
 
   if (!isOpen) return null;
 
-  const inputClass = "px-1 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 outline-none transition-all text-lg";
-  const digitInputClass = "w-14 h-16 text-center text-3xl font-bold border-2 border-purple-200 rounded-xl focus:border-purple-600 focus:ring-4 focus:ring-purple-100 outline-none transition-all text-purple-800 caret-transparent";
+  // 強制加上 text-slate-800 與 bg-white，切斷暗黑模式的白色字體繼承
+  const inputClass = "px-1 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 outline-none transition-all text-lg text-slate-800 bg-white";
+  const digitInputClass = "w-14 h-16 text-center text-3xl font-bold border-2 border-purple-200 rounded-xl focus:border-purple-600 focus:ring-4 focus:ring-purple-100 outline-none transition-all text-purple-800 bg-white caret-transparent";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200 text-slate-800">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden relative flex flex-col">
         
         <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-4 flex justify-between items-center text-white shrink-0">
@@ -190,10 +219,9 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
         <div className="p-6 space-y-6 flex-1">
             {step === 1 ? (
                 <>
-                    {/* 步驟 1: 時間設定 */}
                     <div className="flex bg-gray-100 p-1 rounded-lg">
-                        <button onClick={() => setMode('random')} className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${mode === 'random' ? 'bg-white shadow text-purple-700' : 'text-gray-500 hover:text-gray-700'}`}>亂數取盤</button>
-                        <button onClick={() => setMode('manual')} className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${mode === 'manual' ? 'bg-white shadow text-purple-700' : 'text-gray-500 hover:text-gray-700'}`}>手動輸入</button>
+                        <button onClick={handleRandomMode} className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${mode === 'random' ? 'bg-white shadow text-purple-700' : 'text-gray-500 hover:text-gray-700'}`}>亂數取盤</button>
+                        <button onClick={handleManualMode} className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${mode === 'manual' ? 'bg-white shadow text-purple-700' : 'text-gray-500 hover:text-gray-700'}`}>手動輸入</button>
                     </div>
 
                     <div className="space-y-2">
@@ -225,7 +253,6 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
                 </>
             ) : (
                 <div className="flex flex-col items-center gap-6 py-4 animate-in slide-in-from-right-4 fade-in">
-                    {/* 步驟 2: 數字輸入 */}
                     <div className="text-center space-y-1">
                         <div className="text-lg font-bold text-gray-800">請輸入 4 位數字</div>
                         <div className="text-xs text-gray-500">前兩碼定命宮，後兩碼定四化</div>
@@ -244,7 +271,7 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
                                     className={digitInputClass}
                                     placeholder="0"
                                 />
-                                {i === 1 && <div className="w-px bg-gray-200 h-16 mx-1"></div>} {/* 分隔 AB / CD */}
+                                {i === 1 && <div className="w-px bg-gray-200 h-16 mx-1"></div>}
                             </React.Fragment>
                         ))}
                     </div>
