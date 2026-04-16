@@ -67,12 +67,11 @@ const getCurrentDaLimitIndex = (chartData: any, engine: ZiWeiEngine) => {
     return 0;
 };
 
-// 【修正】區分早晚子的切換邏輯
+// 區分早晚子的切換邏輯
 const calcNextHour = (currentHour: number, delta: number) => {
     const hours = [0, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23];
     let currentIndex = hours.indexOf(currentHour);
     if (currentIndex === -1) {
-        // 如果輸入的是偶數小時（如2點），找最近的
         currentIndex = hours.findIndex(h => h >= currentHour);
     }
     
@@ -331,7 +330,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       return { year, daSeq: daSeq >= 0 ? daSeq : -1 };
   }, [chartB, daListB]);
 
-
   if (!clientA || !clientB || !chartA || !chartB) {
       return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin"/></div>;
   }
@@ -340,6 +338,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   const getDummyCoords = () => ({ x: 0, y: 0 });
   const dummyNav = () => {};
 
+  // [修改] 針對行動端安全區的動態間距與底色處理
   const renderControlBar = (
       daList: any[], 
       daSeq: number, 
@@ -351,49 +350,56 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       liuYear: number | null,
       source: 'A' | 'B',
       realTime: { year: number; daSeq: number } | undefined
-  ) => (
-      <>
-        <div className="h-12 bg-white border-t border-gray-200 flex overflow-x-auto scrollbar-hide shrink-0">
-            <div className="flex w-full">
-                {daList.map(limit => (
-                    <button key={limit.seq} 
-                        onClick={() => { 
-                            setDaSeq(limit.seq); 
-                            setLiuYear(null); 
-                            if(isLocked) targetLiuYearSetter(null); 
-                        }}
-                        className={`px-1 py-1 text-[10px] border-r border-gray-100 whitespace-nowrap flex-1 min-w-[50px] flex flex-col items-center justify-center relative ${daSeq === limit.seq ? 'bg-gray-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
-                    >
-                        {realTime && realTime.daSeq === limit.seq && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
-                        <span>{limit.name}</span>
-                        <span className="text-[9px] opacity-80 scale-90">{limit.label}</span>
-                    </button>
-                ))}
+  ) => {
+      // 動態判定安全區背景色
+      const safeAreaBg = daSeq >= 0 ? 'bg-blue-50' : 'bg-white';
+      return (
+        <div className={`shrink-0 flex flex-col w-full z-40 pb-[env(safe-area-inset-bottom)] ${safeAreaBg}`}>
+            <div className="bg-white border-t border-gray-200 flex overflow-x-auto scrollbar-hide w-full">
+                <div className="flex w-full pt-0.5 pb-1">
+                    {daList.map(limit => (
+                        <button key={limit.seq} 
+                            onClick={() => { 
+                                setDaSeq(limit.seq); 
+                                setLiuYear(null); 
+                                if(isLocked) targetLiuYearSetter(null); 
+                            }}
+                            className={`px-1 py-1 text-[10px] border-r border-gray-100 whitespace-nowrap flex-1 min-w-[50px] flex flex-col items-center justify-center relative ${daSeq === limit.seq ? 'bg-gray-600 text-white font-bold' : 'text-gray-600 hover:bg-gray-50'}`}
+                        >
+                            {realTime && realTime.daSeq === limit.seq && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
+                            <span>{limit.name}</span>
+                            <span className="text-[9px] opacity-80 scale-90">{limit.label}</span>
+                        </button>
+                    ))}
+                </div>
             </div>
+            
+            {daSeq >= 0 && (
+                <div className="bg-blue-50 border-t border-blue-100 flex overflow-x-auto scrollbar-hide w-full">
+                    <div className="flex w-full pt-0.5 pb-1">
+                        {getLiuNianList(engine, chart, daSeq).map(item => (
+                            <button key={item.year}
+                                onClick={() => { 
+                                    const newYear = liuYear === item.year ? null : item.year;
+                                    setLiuYear(newYear);
+                                    syncTime(source, newYear);
+                                }}
+                                className={`px-1 py-1 text-[11px] font-medium border-r border-blue-200 whitespace-nowrap flex-1 min-w-[40px] relative ${liuYear === item.year ? 'bg-blue-600 text-white font-bold' : 'text-blue-600 hover:bg-blue-100'}`}
+                            >
+                                {realTime && realTime.year === item.year && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
+                                {item.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
-        
-        {daSeq >= 0 && (
-            <div className="h-9 bg-blue-50 border-t border-blue-100 flex overflow-x-auto scrollbar-hide shrink-0">
-                {getLiuNianList(engine, chart, daSeq).map(item => (
-                    <button key={item.year}
-                        onClick={() => { 
-                            const newYear = liuYear === item.year ? null : item.year;
-                            setLiuYear(newYear);
-                            syncTime(source, newYear);
-                        }}
-                        className={`px-1 text-[11px] font-medium border-r border-blue-200 whitespace-nowrap flex-1 min-w-[40px] relative ${liuYear === item.year ? 'bg-blue-600 text-white' : 'text-blue-600 hover:bg-blue-100'}`}
-                    >
-                        {realTime && realTime.year === item.year && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
-                        {item.label}
-                    </button>
-                ))}
-            </div>
-        )}
-      </>
-  );
+      );
+  };
 
   return (
-    <div className="flex flex-col h-screen w-full bg-slate-100 overflow-hidden">
+    // [修改] h-[100dvh] 解決瀏覽器伸縮問題
+    <div className="flex flex-col h-[100dvh] w-full bg-slate-100 overflow-hidden">
         {/* Header */}
         <div className="flex justify-between items-center px-4 py-2 bg-white border-b border-gray-200 shadow-sm shrink-0 z-50 h-[56px]">
             <div className="flex items-center gap-3">

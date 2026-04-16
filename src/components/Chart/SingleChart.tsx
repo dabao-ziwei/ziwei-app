@@ -716,7 +716,8 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   }
 
   return (
-    <div className="flex flex-col h-screen w-full bg-slate-100 overflow-hidden relative">
+    // [修改] 替換 h-screen 為 h-[100dvh]，解決行動端瀏覽器上下工具列滑動造成的跳動
+    <div className="flex flex-col h-[100dvh] w-full bg-slate-100 overflow-hidden relative">
       <div className="flex justify-between items-center px-4 py-2 bg-white border-b border-gray-200 shadow-sm shrink-0 z-50 h-[56px]">
         <button
           onClick={handleBack}
@@ -827,7 +828,8 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         )}
       </div>
 
-      <div className="flex-1 min-h-0 w-full relative">
+      {/* [修改] 為紫占模式加入底部安全區距離 */}
+      <div className={`flex-1 min-h-0 w-full relative ${mode === 'divination' ? 'pb-[env(safe-area-inset-bottom)]' : ''}`}>
         {isExternalInputOpen && (
           <div className="absolute inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 relative animate-in fade-in zoom-in">
@@ -974,8 +976,10 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
       {/* --- 底部：流年列 --- */}
       {mode !== 'divination' && daXianList.length > 0 && (
-        <div className="shrink-0 bg-slate-50 border-t border-gray-200 w-full z-40 overflow-hidden">
-          <div className="flex overflow-x-auto no-scrollbar w-full">
+        // [修改] 加上 pb-[env(safe-area-inset-bottom)] 來自動適應 iOS 底部安全區域
+        <div className="shrink-0 bg-slate-50 border-t border-gray-200 w-full z-40 overflow-hidden pb-[env(safe-area-inset-bottom)]">
+          {/* [修改] 內部 flex 加入 pb-1 讓按鈕不要死貼著安全線，多一點呼吸空間 */}
+          <div className="flex overflow-x-auto no-scrollbar w-full pt-0.5 pb-1">
             {liuNianList.map((item) => {
               const isActive = liuNianYear === item.year;
               const isRealTime = currentRealTime && currentRealTime.year === item.year;

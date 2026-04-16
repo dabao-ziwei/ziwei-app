@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
     Sparkles, Menu, LogOut, Loader2, PlusCircle, 
-    FileText, Globe, Sliders, Gift, ShoppingCart, ArrowRight, Calendar
+    FileText, Globe, Sliders, Gift, ShoppingCart, ArrowRight, Calendar, Dices
 } from 'lucide-react';
 import { supabase } from '../supabase';
 import { 
@@ -15,6 +15,7 @@ import { ZiWeiEngine } from '../logic/engine';
 import { calculateDailyFortune, type DailyFortune } from '../logic/fortune';
 import { FortuneWidget } from '../components/FortuneWidget';
 import { getFeaturePermission } from '../logic/permissions';
+import { DivinationSetupModal } from '../components/DivinationSetupModal'; // [新增] 引入紫占設定 Modal
 
 const OFFICIAL_SITE_URL = 'https://www.dabao.life';
 
@@ -256,6 +257,9 @@ export const Dashboard: React.FC = () => {
   const [forceOnboarding, setForceOnboarding] = useState(false);
   const [showGiftModal, setShowGiftModal] = useState(false);
 
+  // [新增] 紫微占卜 Modal 狀態
+  const [isDivinationModalOpen, setIsDivinationModalOpen] = useState(false);
+
   const canLuckyDivination = useMemo(() => getFeaturePermission(userProfile, 'lucky_divination'), [userProfile]);
 
   const initDashboard = async () => {
@@ -315,6 +319,22 @@ export const Dashboard: React.FC = () => {
       }
   };
 
+  // [新增] 處理紫微占卜建立
+  const handleCreateDivination = async (data: any) => {
+      const tempClient = { 
+          ...data, 
+          id: `temp-${Date.now()}`,
+          user_id: userProfile?.id,
+          divNum: data.divNum 
+      };
+      navigate('/divination', { 
+          state: { 
+              client: tempClient,
+              divNum: data.divNum 
+          } 
+      });
+  };
+
   if (loading) return <div className="flex h-screen items-center justify-center bg-slate-950"><Loader2 className="animate-spin text-slate-500" /></div>;
 
   return (
@@ -365,6 +385,14 @@ export const Dashboard: React.FC = () => {
 
                     <a href={OFFICIAL_SITE_URL} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-slate-800/50 hover:bg-amber-600/30 text-slate-300 hover:text-amber-300 rounded-lg text-sm font-bold flex items-center gap-2 transition-all border border-slate-700/50 hover:border-amber-500/30"><Globe size={16} /> 大寶官網</a>
                     <button onClick={() => navigate('/list')} className="px-4 py-2 bg-slate-800/50 hover:bg-blue-600/30 text-slate-300 hover:text-blue-300 rounded-lg text-sm font-bold flex items-center gap-2 transition-all border border-slate-700/50 hover:border-blue-500/30"><FileText size={16} /> 命盤列表</button>
+                    
+                    {/* [新增] 紫微占卜按鈕 (電腦版) */}
+                    {userProfile?.can_use_divination && (
+                        <button onClick={() => setIsDivinationModalOpen(true)} className="px-4 py-2 bg-slate-800/50 hover:bg-indigo-600/30 text-slate-300 hover:text-indigo-300 rounded-lg text-sm font-bold flex items-center gap-2 transition-all border border-slate-700/50 hover:border-indigo-500/30">
+                            <Dices size={16} /> 紫微占卜
+                        </button>
+                    )}
+
                     <button onClick={() => navigate('/lucky')} disabled={canLuckyDivination === 'disabled'} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all border border-slate-700/50 ${canLuckyDivination === 'enabled' ? 'bg-slate-800/50 hover:bg-purple-600/30 text-slate-300 hover:text-purple-300 hover:border-purple-500/30' : 'bg-slate-900/50 text-slate-600 cursor-not-allowed'}`}><Sparkles size={16} /> 吉凶占卜</button>
                 </div>
             </div>
@@ -379,7 +407,6 @@ export const Dashboard: React.FC = () => {
                 )}
             </div>
             
-            {/* [新增] 首頁底部宣告 */}
             <footer className="w-full text-center py-6 text-xs text-slate-500/60 mt-auto">
                 <a href="/legal" target="_blank" rel="noopener noreferrer" className="hover:text-slate-400 transition-colors underline underline-offset-2">服務條款與隱私權政策</a>
             </footer>
@@ -387,23 +414,41 @@ export const Dashboard: React.FC = () => {
         
         {/* Mobile Bottom Bar */}
         <div className="shrink-0 px-2 py-4 pb-8 bg-[#0f172a]/90 backdrop-blur-xl border-t border-white/5 flex justify-evenly items-center z-50 md:hidden">
-            <button onClick={() => navigate('/booking')} className="flex flex-col items-center gap-1 group w-16">
+            <button onClick={() => navigate('/booking')} className="flex flex-col items-center gap-1 group w-14 sm:w-16">
                 <div className="w-10 h-10 rounded-2xl bg-slate-800/50 group-hover:bg-emerald-600/20 flex items-center justify-center transition-colors"><Calendar size={20} className="text-slate-400 group-hover:text-emerald-400" /></div>
-                <span className="text-[10px] text-slate-500 group-hover:text-emerald-400 font-bold">線上預約</span>
+                <span className="text-[10px] text-slate-500 group-hover:text-emerald-400 font-bold whitespace-nowrap">線上預約</span>
             </button>
-            <button onClick={() => navigate('/list')} className="flex flex-col items-center gap-1 group w-16">
+            <button onClick={() => navigate('/list')} className="flex flex-col items-center gap-1 group w-14 sm:w-16">
                 <div className="w-10 h-10 rounded-2xl bg-slate-800/50 group-hover:bg-blue-600/20 flex items-center justify-center transition-colors"><FileText size={20} className="text-slate-400 group-hover:text-blue-400" /></div>
-                <span className="text-[10px] text-slate-500 group-hover:text-blue-400 font-bold">命盤列表</span>
+                <span className="text-[10px] text-slate-500 group-hover:text-blue-400 font-bold whitespace-nowrap">命盤列表</span>
             </button>
-            <a href={OFFICIAL_SITE_URL} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-1 group w-16">
+            <a href={OFFICIAL_SITE_URL} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-1 group w-14 sm:w-16">
                 <div className="w-12 h-12 rounded-full flex items-center justify-center transition-all mb-[-10px] transform translate-y-[-8px] shadow-lg bg-slate-800/80 border border-slate-700/50 group-hover:bg-amber-900/30 group-hover:border-amber-500/50"><Globe size={22} className="text-slate-300 group-hover:text-amber-400" /></div>
-                <span className="text-[10px] font-bold text-slate-500 group-hover:text-amber-400">大寶官網</span>
+                <span className="text-[10px] font-bold text-slate-500 group-hover:text-amber-400 whitespace-nowrap">大寶官網</span>
             </a>
-            <button onClick={() => navigate('/lucky')} disabled={canLuckyDivination === 'disabled'} className="flex flex-col items-center gap-1 group w-16">
+            
+            {/* [新增] 紫微占卜按鈕 (手機版) */}
+            {userProfile?.can_use_divination && (
+                <button onClick={() => setIsDivinationModalOpen(true)} className="flex flex-col items-center gap-1 group w-14 sm:w-16">
+                    <div className="w-10 h-10 rounded-2xl bg-slate-800/50 group-hover:bg-indigo-600/20 flex items-center justify-center transition-colors">
+                        <Dices size={20} className="text-slate-400 group-hover:text-indigo-400" />
+                    </div>
+                    <span className="text-[10px] text-slate-500 group-hover:text-indigo-400 font-bold whitespace-nowrap">紫微占卜</span>
+                </button>
+            )}
+
+            <button onClick={() => navigate('/lucky')} disabled={canLuckyDivination === 'disabled'} className="flex flex-col items-center gap-1 group w-14 sm:w-16">
                 <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-colors ${canLuckyDivination === 'enabled' ? 'bg-slate-800/50 group-hover:bg-purple-600/20' : 'bg-slate-800/30 cursor-not-allowed'}`}><Sparkles size={20} className={`${canLuckyDivination === 'enabled' ? 'text-purple-400' : 'text-slate-600'}`} /></div>
-                <span className={`text-[10px] font-bold ${canLuckyDivination === 'enabled' ? 'text-slate-500 group-hover:text-purple-400' : 'text-slate-700'}`}>吉凶占卜</span>
+                <span className={`text-[10px] font-bold whitespace-nowrap ${canLuckyDivination === 'enabled' ? 'text-slate-500 group-hover:text-purple-400' : 'text-slate-700'}`}>吉凶占卜</span>
             </button>
         </div>
+
+        {/* [新增] 渲染 Modal */}
+        <DivinationSetupModal 
+            isOpen={isDivinationModalOpen} 
+            onClose={() => setIsDivinationModalOpen(false)} 
+            onConfirm={handleCreateDivination} 
+        />
 
         {showGiftModal && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
