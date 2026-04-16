@@ -29,6 +29,7 @@ interface PalaceGridProps {
     liu: boolean;
     yue: boolean;
     ri: boolean;
+    ben: boolean; // [修正] 新增本命盤的獨立反轉狀態
   };
   onToggleInverted?: () => void;
 
@@ -71,7 +72,6 @@ interface PalaceGridProps {
   onPalaceClick: (idx: number) => void;
   onTriggerClick: (idx: number) => void;
 
-  // ✅ 新增：抽屜開啟（年度分析）
   onOpenYearlyAnalysis?: (year: number) => void;
 
   permissionFlags?: {
@@ -80,7 +80,7 @@ interface PalaceGridProps {
     xiao: PermissionState;
     liu_month: PermissionState;
     liu_day: PermissionState;
-    dual_chart?: PermissionState; // ✅ 改為 optional
+    dual_chart?: PermissionState;
   };
 
   liuMonth?: number | null;
@@ -100,7 +100,6 @@ interface PalaceGridProps {
   liuDayIdx?: number;
 }
 
-// ✅ 安全 Mod：統一處理 % 12 的負數情況
 const mod12 = (n: number) => ((n % 12) + 12) % 12;
 
 export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
@@ -268,7 +267,6 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
                     liuMonthGan={liuMonthGan}
                     liuDayGan={liuDayGan}
                     currentRealTime={currentRealTime}
-                    // ✅ 抽屜開啟 callback 往下傳
                     onOpenYearlyAnalysis={onOpenYearlyAnalysis}
                   />
                 </div>
@@ -334,7 +332,6 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
                   showCompass={showCompass}
                   reverseFlags={reverseFlags}
                   divinationName={relNames.divinationName}
-                  // ✅ 修正：PalaceCard 這裡要用 divinationSiHua
                   divinationSiHua={mode === 'divination' ? divSiHuaMap : undefined}
                   externalSiHua={externalSiHuaMap}
                 />
