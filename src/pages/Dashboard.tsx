@@ -15,7 +15,7 @@ import { ZiWeiEngine } from '../logic/engine';
 import { calculateDailyFortune, type DailyFortune } from '../logic/fortune';
 import { FortuneWidget } from '../components/FortuneWidget';
 import { getFeaturePermission } from '../logic/permissions';
-import { DivinationSetupModal } from '../components/DivinationSetupModal'; // [新增] 引入紫占設定 Modal
+import { DivinationSetupModal } from '../components/DivinationSetupModal';
 
 const OFFICIAL_SITE_URL = 'https://www.dabao.life';
 
@@ -257,10 +257,10 @@ export const Dashboard: React.FC = () => {
   const [forceOnboarding, setForceOnboarding] = useState(false);
   const [showGiftModal, setShowGiftModal] = useState(false);
 
-  // [新增] 紫微占卜 Modal 狀態
   const [isDivinationModalOpen, setIsDivinationModalOpen] = useState(false);
 
   const canLuckyDivination = useMemo(() => getFeaturePermission(userProfile, 'lucky_divination'), [userProfile]);
+  const canDivination = useMemo(() => getFeaturePermission(userProfile, 'divination'), [userProfile]);
 
   const initDashboard = async () => {
     setLoading(true);
@@ -319,7 +319,6 @@ export const Dashboard: React.FC = () => {
       }
   };
 
-  // [新增] 處理紫微占卜建立
   const handleCreateDivination = async (data: any) => {
       const tempClient = { 
           ...data, 
@@ -386,8 +385,7 @@ export const Dashboard: React.FC = () => {
                     <a href={OFFICIAL_SITE_URL} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-slate-800/50 hover:bg-amber-600/30 text-slate-300 hover:text-amber-300 rounded-lg text-sm font-bold flex items-center gap-2 transition-all border border-slate-700/50 hover:border-amber-500/30"><Globe size={16} /> 大寶官網</a>
                     <button onClick={() => navigate('/list')} className="px-4 py-2 bg-slate-800/50 hover:bg-blue-600/30 text-slate-300 hover:text-blue-300 rounded-lg text-sm font-bold flex items-center gap-2 transition-all border border-slate-700/50 hover:border-blue-500/30"><FileText size={16} /> 命盤列表</button>
                     
-                    {/* [新增] 紫微占卜按鈕 (電腦版) */}
-                    {userProfile?.can_use_divination && (
+                    {canDivination === 'enabled' && (
                         <button onClick={() => setIsDivinationModalOpen(true)} className="px-4 py-2 bg-slate-800/50 hover:bg-indigo-600/30 text-slate-300 hover:text-indigo-300 rounded-lg text-sm font-bold flex items-center gap-2 transition-all border border-slate-700/50 hover:border-indigo-500/30">
                             <Dices size={16} /> 紫微占卜
                         </button>
@@ -427,8 +425,7 @@ export const Dashboard: React.FC = () => {
                 <span className="text-[10px] font-bold text-slate-500 group-hover:text-amber-400 whitespace-nowrap">大寶官網</span>
             </a>
             
-            {/* [新增] 紫微占卜按鈕 (手機版) */}
-            {userProfile?.can_use_divination && (
+            {canDivination === 'enabled' && (
                 <button onClick={() => setIsDivinationModalOpen(true)} className="flex flex-col items-center gap-1 group w-14 sm:w-16">
                     <div className="w-10 h-10 rounded-2xl bg-slate-800/50 group-hover:bg-indigo-600/20 flex items-center justify-center transition-colors">
                         <Dices size={20} className="text-slate-400 group-hover:text-indigo-400" />
@@ -443,7 +440,6 @@ export const Dashboard: React.FC = () => {
             </button>
         </div>
 
-        {/* [新增] 渲染 Modal */}
         <DivinationSetupModal 
             isOpen={isDivinationModalOpen} 
             onClose={() => setIsDivinationModalOpen(false)} 
