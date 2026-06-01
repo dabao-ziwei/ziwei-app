@@ -255,7 +255,6 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
                 <div className="flex flex-col items-center gap-6 py-4 animate-in slide-in-from-right-4 fade-in">
                     <div className="text-center space-y-1">
                         <div className="text-lg font-bold text-gray-800">請輸入 4 位數字</div>
-                        <div className="text-xs text-gray-500">前兩碼定命宮，後兩碼定四化</div>
                     </div>
                     
                     <div className="flex gap-3">
@@ -274,10 +273,6 @@ export const DivinationSetupModal: React.FC<DivinationSetupModalProps> = ({ isOp
                                 {i === 1 && <div className="w-px bg-gray-200 h-16 mx-1"></div>}
                             </React.Fragment>
                         ))}
-                    </div>
-                    
-                    <div className="text-xs text-gray-400 bg-gray-50 px-3 py-2 rounded">
-                        AB 不可為 00 · CD 不可為 00
                     </div>
                 </div>
             )}
