@@ -264,7 +264,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const isOverQuota = userProfile && usedCount >= userProfile.maxCharts && userProfile.role !== 'admin';
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 w-full max-w-6xl mx-auto shadow-xl overflow-hidden font-sans border-x border-slate-200 relative">
+    <div className="flex flex-col h-screen bg-slate-50 w-full overflow-hidden font-sans relative">
       
       {/* Header */}
       <header className="flex justify-between px-6 py-4 bg-white border-b border-slate-100 shrink-0 items-center relative z-20">

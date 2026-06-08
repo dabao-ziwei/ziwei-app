@@ -143,11 +143,10 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
       if (extType) {
           const abbr = STAR_ABBR_MAP[star.name] || star.name[0];
           let colorClass = ''; 
-          if (extType === '祿') { colorClass = 'bg-fuchsia-600 text-white'; }
-          else if (extType === '權') { colorClass = 'bg-orange-600 text-white'; }
-          else if (extType === '科') { colorClass = 'bg-indigo-500 text-white'; }
-          else if (extType === '忌') { colorClass = 'bg-slate-800 text-white border border-fuchsia-400'; }
-
+          if (extType === '祿') { colorClass = 'bg-green-600 text-white'; }
+          else if (extType === '權') { colorClass = 'bg-red-600 text-white'; }
+          else if (extType === '科') { colorClass = 'bg-blue-600 text-white'; }
+          else if (extType === '忌') { colorClass = 'bg-gray-900 text-white border border-red-500'; }
           chips.push(
             <div key={`ext-${idx}`} className={`px-1 py-[1px] rounded text-[11px] font-bold leading-none shadow-md ${colorClass} select-none border border-white/20`}>
                 {abbr}{extType}
