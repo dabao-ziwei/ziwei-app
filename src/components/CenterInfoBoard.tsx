@@ -164,12 +164,14 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     return LunarYear.fromYear(liuNianYear).getLeapMonth();
   }, [liuNianYear]);
 
-  // 利用套件原生函式取得當月最大天數
+  // 利用例外處理判斷當月最大天數
   const maxDaysInLiuMonth = useMemo(() => {
     if (!liuNianYear || liuMonth === null || liuMonth === undefined) return 30;
     const m = isLiuMonthLeap ? -Math.abs(liuMonth) : Math.abs(liuMonth);
     try {
-      return Lunar.fromYmd(liuNianYear, m, 1).getDaysInMonth();
+      // 若該月只有 29 天，實例化 30 號會拋出越界錯誤
+      Lunar.fromYmd(liuNianYear, m, 30);
+      return 30;
     } catch (e) {
       return 29;
     }
@@ -743,6 +745,7 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                 </div>
               )}
 
+              {/* ✅ 硬關閉：年度分析抽屜入口（先整段不顯示） */}
               {DEV_YEARLY_ANALYSIS_ENABLED && null}
             </div>
           </div>
