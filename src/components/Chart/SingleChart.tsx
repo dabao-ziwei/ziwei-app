@@ -194,45 +194,68 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       return { liuMonthIdx: -1, liuDayIdx: -1, liuMonthGan: -1, liuDayGan: -1 };
     }
 
-    const yearZhi = (liuNianYear - 4) % 12;
-    const douJunPalace = baseChartData.palaces[2];
-    const douJunName = douJunPalace.name;
-    const nameIdx = PALACE_NAMES.indexOf(douJunName);
-    const offset = (12 - nameIdx) % 12;
-    const flowMonthAnchor = (yearZhi + offset) % 12;
+    try {
+      const yearZhi = (liuNianYear - 4) % 12;
+      const douJunPalace = baseChartData.palaces[2];
+      const douJunName = douJunPalace.name;
+      const nameIdx = PALACE_NAMES.indexOf(douJunName);
+      const offset = (12 - nameIdx) % 12;
+      const flowMonthAnchor = (yearZhi + offset) % 12;
 
-    const lunarYear = LunarYear.fromYear(liuNianYear);
-    const leapMonth = lunarYear.getLeapMonth();
+      const lunarYear = LunarYear.fromYear(liuNianYear);
+      const leapMonth = lunarYear.getLeapMonth();
 
-    let monthSteps = liuMonth - 1;
-    if (leapMonth > 0) {
-      if (liuMonth > leapMonth) {
-        monthSteps += 1;
-      } else if (liuMonth === leapMonth && isLiuMonthLeap) {
-        monthSteps += 1;
+      let monthSteps = liuMonth - 1;
+      if (leapMonth > 0) {
+        if (liuMonth > leapMonth) {
+          monthSteps += 1;
+        } else if (liuMonth === leapMonth && isLiuMonthLeap) {
+          monthSteps += 1;
+        }
       }
+      const flowMonthIdx = (flowMonthAnchor + monthSteps) % 12;
+
+      let effectiveMonth = isLiuMonthLeap ? -Math.abs(liuMonth) : Math.abs(liuMonth);
+      let mGan = -1;
+      try {
+        const naturalMonthObj = Lunar.fromYmd(liuNianYear, effectiveMonth, 1);
+        mGan = naturalMonthObj.getMonthGanIndex();
+      } catch (e) {
+        // 若閏月等不存在，退回原本月份
+        effectiveMonth = Math.abs(liuMonth);
+        const fallbackObj = Lunar.fromYmd(liuNianYear, effectiveMonth, 1);
+        mGan = fallbackObj.getMonthGanIndex();
+      }
+
+      if (liuDay === null) {
+        return { liuMonthIdx: flowMonthIdx, liuDayIdx: -1, liuMonthGan: mGan, liuDayGan: -1 };
+      }
+
+      // 防護層：尋找合法的日期上限，避免越界
+      let safeDay = Math.min(liuDay, 30);
+      let dGan = -1;
+      while (safeDay >= 1) {
+        try {
+          const naturalDayObj = Lunar.fromYmd(liuNianYear, effectiveMonth, safeDay);
+          dGan = naturalDayObj.getDayGanIndex();
+          break; // 成功找到合法日期
+        } catch (e) {
+          safeDay--; // 若越界則往下遞減 (例如 30 -> 29)
+        }
+      }
+
+      const flowDayIdx = (flowMonthIdx + (safeDay - 1)) % 12;
+
+      return {
+        liuMonthIdx: flowMonthIdx,
+        liuDayIdx: flowDayIdx,
+        liuMonthGan: mGan,
+        liuDayGan: dGan,
+      };
+    } catch (e) {
+      // 萬一有任何例外，回傳安全的預設值，絕不讓畫面空白
+      return { liuMonthIdx: -1, liuDayIdx: -1, liuMonthGan: -1, liuDayGan: -1 };
     }
-    const flowMonthIdx = (flowMonthAnchor + monthSteps) % 12;
-
-    const effectiveMonth = isLiuMonthLeap ? -Math.abs(liuMonth) : Math.abs(liuMonth);
-    const naturalMonthObj = Lunar.fromYmd(liuNianYear, effectiveMonth, 1);
-    const mGan = naturalMonthObj.getMonthGanIndex();
-
-    if (liuDay === null) {
-      return { liuMonthIdx: flowMonthIdx, liuDayIdx: -1, liuMonthGan: mGan, liuDayGan: -1 };
-    }
-
-    const flowDayIdx = (flowMonthIdx + (liuDay - 1)) % 12;
-
-    const naturalDayObj = Lunar.fromYmd(liuNianYear, effectiveMonth, liuDay);
-    const dGan = naturalDayObj.getDayGanIndex();
-
-    return {
-      liuMonthIdx: flowMonthIdx,
-      liuDayIdx: flowDayIdx,
-      liuMonthGan: mGan,
-      liuDayGan: dGan,
-    };
   }, [baseChartData, liuNianYear, liuMonth, isLiuMonthLeap, liuDay]);
 
   const chartData = useMemo(() => {
@@ -607,6 +630,14 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     setSelectedPalace(null);
   };
 
+  const handleSetLiuNianYear = (year: number | null) => {
+      setLiuNianYear(year);
+      if (year !== null) {
+          const targetDa = daXianList.find(d => year >= d.startYear && year <= d.endYear);
+          if (targetDa) setDaXianSeq(targetDa.seq);
+      }
+  };
+
   const toggleXiaoXian = () => {
     setShowXiaoXian(!showXiaoXian);
     setFlyingPalace(null);
@@ -929,6 +960,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
           liuMonth={liuMonth}
           isLiuMonthLeap={isLiuMonthLeap}
           liuDay={liuDay}
+          onSetLiuYear={handleSetLiuNianYear}
           onSetLiuMonth={(m, isLeap) => {
             setLiuMonth(m);
             setIsLiuMonthLeap(isLeap);

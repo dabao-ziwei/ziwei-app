@@ -29,7 +29,7 @@ interface PalaceGridProps {
     liu: boolean;
     yue: boolean;
     ri: boolean;
-    ben: boolean; // [修正] 新增本命盤的獨立反轉狀態
+    ben: boolean; 
   };
   onToggleInverted?: () => void;
 
@@ -86,6 +86,7 @@ interface PalaceGridProps {
   liuMonth?: number | null;
   isLiuMonthLeap?: boolean;
   liuDay?: number | null;
+  onSetLiuYear?: (y: number | null) => void;
   onSetLiuMonth?: (m: number | null, isLeap: boolean) => void;
   onSetLiuDay?: (d: number | null) => void;
   liuMonthGan?: number;
@@ -149,6 +150,7 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
       liuMonth,
       isLiuMonthLeap,
       liuDay,
+      onSetLiuYear,
       onSetLiuMonth,
       onSetLiuDay,
       liuMonthGan,
@@ -261,6 +263,7 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
                     liuMonth={liuMonth}
                     isLiuMonthLeap={isLiuMonthLeap}
                     liuDay={liuDay}
+                    onSetLiuYear={onSetLiuYear}
                     onSetLiuMonth={onSetLiuMonth}
                     onSetLiuDay={onSetLiuDay}
                     liuNianYear={liuNianYear}
