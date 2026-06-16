@@ -96,7 +96,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   const [activeSide, setActiveSide] = useState<'A' | 'B' | null>(null);
   const [flyingPalace, setFlyingPalace] = useState<number | null>(null);
 
-  // 自盤飛化（點右下角干支觸發，顯示在自己盤上）
   const [selfFlyingPalaceA, setSelfFlyingPalaceA] = useState<number | null>(null);
   const [selfFlyingPalaceB, setSelfFlyingPalaceB] = useState<number | null>(null);
 
@@ -187,7 +186,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       return engineB.getChartData();
   }, [engineB, daSeqB, liuYearB, showXiaoB]);
 
-  // --- 流月/流日計算 (A) ---
   const { liuMonthIdxA, liuDayIdxA, liuMonthGanA, liuDayGanA } = useMemo(() => {
       if (!chartA || !liuYearA || liuMonthA === null) {
           return { liuMonthIdxA: -1, liuDayIdxA: -1, liuMonthGanA: -1, liuDayGanA: -1 };
@@ -213,17 +211,34 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
           }
           const flowMonthIdx = (flowMonthAnchor + monthSteps) % 12;
 
-          const effectiveMonth = isLiuMonthLeapA ? -Math.abs(liuMonthA) : Math.abs(liuMonthA);
-          const naturalMonthObj = Lunar.fromYmd(liuYearA, effectiveMonth, 1);
-          const mGan = naturalMonthObj.getMonthGanIndex();
+          let effectiveMonth = isLiuMonthLeapA ? -Math.abs(liuMonthA) : Math.abs(liuMonthA);
+          let mGan = -1;
+          try {
+              const naturalMonthObj = Lunar.fromYmd(liuYearA, effectiveMonth, 1);
+              mGan = naturalMonthObj.getMonthGanIndex();
+          } catch (e) {
+              effectiveMonth = Math.abs(liuMonthA);
+              const fallbackObj = Lunar.fromYmd(liuYearA, effectiveMonth, 1);
+              mGan = fallbackObj.getMonthGanIndex();
+          }
 
           if (liuDayA === null) {
               return { liuMonthIdxA: flowMonthIdx, liuDayIdxA: -1, liuMonthGanA: mGan, liuDayGanA: -1 };
           }
 
-          const flowDayIdx = (flowMonthIdx + (liuDayA - 1)) % 12;
-          const naturalDayObj = Lunar.fromYmd(liuYearA, effectiveMonth, liuDayA);
-          const dGan = naturalDayObj.getDayGanIndex();
+          let safeDay = Math.min(liuDayA, 30);
+          let dGan = -1;
+          while (safeDay >= 1) {
+              try {
+                  const naturalDayObj = Lunar.fromYmd(liuYearA, effectiveMonth, safeDay);
+                  dGan = naturalDayObj.getDayGanIndex();
+                  break;
+              } catch (e) {
+                  safeDay--;
+              }
+          }
+
+          const flowDayIdx = (flowMonthIdx + (safeDay - 1)) % 12;
 
           return { liuMonthIdxA: flowMonthIdx, liuDayIdxA: flowDayIdx, liuMonthGanA: mGan, liuDayGanA: dGan };
       } catch {
@@ -231,7 +246,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       }
   }, [chartA, liuYearA, liuMonthA, isLiuMonthLeapA, liuDayA]);
 
-  // --- 流月/流日計算 (B) ---
   const { liuMonthIdxB, liuDayIdxB, liuMonthGanB, liuDayGanB } = useMemo(() => {
       if (!chartB || !liuYearB || liuMonthB === null) {
           return { liuMonthIdxB: -1, liuDayIdxB: -1, liuMonthGanB: -1, liuDayGanB: -1 };
@@ -257,17 +271,34 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
           }
           const flowMonthIdx = (flowMonthAnchor + monthSteps) % 12;
 
-          const effectiveMonth = isLiuMonthLeapB ? -Math.abs(liuMonthB) : Math.abs(liuMonthB);
-          const naturalMonthObj = Lunar.fromYmd(liuYearB, effectiveMonth, 1);
-          const mGan = naturalMonthObj.getMonthGanIndex();
+          let effectiveMonth = isLiuMonthLeapB ? -Math.abs(liuMonthB) : Math.abs(liuMonthB);
+          let mGan = -1;
+          try {
+              const naturalMonthObj = Lunar.fromYmd(liuYearB, effectiveMonth, 1);
+              mGan = naturalMonthObj.getMonthGanIndex();
+          } catch (e) {
+              effectiveMonth = Math.abs(liuMonthB);
+              const fallbackObj = Lunar.fromYmd(liuYearB, effectiveMonth, 1);
+              mGan = fallbackObj.getMonthGanIndex();
+          }
 
           if (liuDayB === null) {
               return { liuMonthIdxB: flowMonthIdx, liuDayIdxB: -1, liuMonthGanB: mGan, liuDayGanB: -1 };
           }
 
-          const flowDayIdx = (flowMonthIdx + (liuDayB - 1)) % 12;
-          const naturalDayObj = Lunar.fromYmd(liuYearB, effectiveMonth, liuDayB);
-          const dGan = naturalDayObj.getDayGanIndex();
+          let safeDay = Math.min(liuDayB, 30);
+          let dGan = -1;
+          while (safeDay >= 1) {
+              try {
+                  const naturalDayObj = Lunar.fromYmd(liuYearB, effectiveMonth, safeDay);
+                  dGan = naturalDayObj.getDayGanIndex();
+                  break;
+              } catch (e) {
+                  safeDay--;
+              }
+          }
+
+          const flowDayIdx = (flowMonthIdx + (safeDay - 1)) % 12;
 
           return { liuMonthIdxB: flowMonthIdx, liuDayIdxB: flowDayIdx, liuMonthGanB: mGan, liuDayGanB: dGan };
       } catch {
@@ -275,7 +306,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       }
   }, [chartB, liuYearB, liuMonthB, isLiuMonthLeapB, liuDayB]);
 
-  // --- 小限命宮位置 ---
   const xiaoXianMingIdxA = useMemo(() => {
       if (!liuYearA || !chartA || !engineA) return -1;
       const virtualAge = liuYearA - chartA.lunarYear + 1;
@@ -364,6 +394,37 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   const isCurrentRevB = liuYearB !== null ? isLiuRevB : (daSeqB >= 0 ? isDaRevB : isBenRevB);
   const reverseFlagsB = { da: isDaRevB, liu: isLiuRevB, yue: false, ri: false, ben: isBenRevB };
 
+  // 同步連動設定
+  const handleSetLiuYearA = (year: number | null) => {
+      setLiuYearA(year);
+      if (year !== null) {
+          const targetDa = daListA.find(d => year >= d.startYear && year <= d.endYear);
+          if (targetDa) setDaSeqA(targetDa.seq);
+      }
+      if (isLocked) {
+          setLiuYearB(year);
+          if (year !== null) {
+              const targetDaB = daListB.find(d => year >= d.startYear && year <= d.endYear);
+              if (targetDaB) setDaSeqB(targetDaB.seq);
+          }
+      }
+  };
+
+  const handleSetLiuYearB = (year: number | null) => {
+      setLiuYearB(year);
+      if (year !== null) {
+          const targetDa = daListB.find(d => year >= d.startYear && year <= d.endYear);
+          if (targetDa) setDaSeqB(targetDa.seq);
+      }
+      if (isLocked) {
+          setLiuYearA(year);
+          if (year !== null) {
+              const targetDaA = daListA.find(d => year >= d.startYear && year <= d.endYear);
+              if (targetDaA) setDaSeqA(targetDaA.seq);
+          }
+      }
+  };
+
   const syncTime = (source: 'A' | 'B', year: number | null) => {
       if (!isLocked) return; 
 
@@ -432,7 +493,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       return getSiHuaMap(gan);
   }, [activeSide, flyingPalace, chartB]);
 
-  // 自盤飛化（右下角干支點擊，顯示在自己盤）
   const selfFlyMapA = useMemo(() => {
       if (selfFlyingPalaceA === null || !chartA) return {};
       return engineA!.getSiHuaMap(chartA.palaces[selfFlyingPalaceA].ganIndex);
@@ -459,7 +519,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       return { year, daSeq: daSeq >= 0 ? daSeq : -1 };
   }, [chartB, daListB]);
 
-  // --- getRelativeNames 完整版 (同 SingleChart 邏輯) ---
   const getRelativeNamesA = (currentIdx: number) => {
       if (!chartA || !engineA) return {};
       const benMingPos = engineA.getMingPos();
@@ -678,12 +737,23 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         liuMonth={liuMonthA}
                         isLiuMonthLeap={isLiuMonthLeapA}
                         liuDay={liuDayA}
+                        onSetLiuYear={handleSetLiuYearA}
                         onSetLiuMonth={(m, isLeap) => {
                             setLiuMonthA(m);
                             setIsLiuMonthLeapA(isLeap);
                             setLiuDayA(null);
+                            if (isLocked) {
+                                setLiuMonthB(m);
+                                setIsLiuMonthLeapB(isLeap);
+                                setLiuDayB(null);
+                            }
                         }}
-                        onSetLiuDay={setLiuDayA}
+                        onSetLiuDay={(d) => {
+                            setLiuDayA(d);
+                            if (isLocked) {
+                                setLiuDayB(d);
+                            }
+                        }}
                         liuMonthGan={liuMonthGanA}
                         liuDayGan={liuDayGanA}
                         liuMonthIdx={liuMonthIdxA}
@@ -745,12 +815,23 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         liuMonth={liuMonthB}
                         isLiuMonthLeap={isLiuMonthLeapB}
                         liuDay={liuDayB}
+                        onSetLiuYear={handleSetLiuYearB}
                         onSetLiuMonth={(m, isLeap) => {
                             setLiuMonthB(m);
                             setIsLiuMonthLeapB(isLeap);
                             setLiuDayB(null);
+                            if (isLocked) {
+                                setLiuMonthA(m);
+                                setIsLiuMonthLeapA(isLeap);
+                                setLiuDayA(null);
+                            }
                         }}
-                        onSetLiuDay={setLiuDayB}
+                        onSetLiuDay={(d) => {
+                            setLiuDayB(d);
+                            if (isLocked) {
+                                setLiuDayA(d);
+                            }
+                        }}
                         liuMonthGan={liuMonthGanB}
                         liuDayGan={liuDayGanB}
                         liuMonthIdx={liuMonthIdxB}

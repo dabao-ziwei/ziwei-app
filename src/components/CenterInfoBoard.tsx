@@ -86,6 +86,7 @@ interface CenterInfoBoardProps {
   liuMonth?: number | null;
   isLiuMonthLeap?: boolean;
   liuDay?: number | null;
+  onSetLiuYear?: (y: number | null) => void;
   onSetLiuMonth?: (m: number | null, isLeap: boolean) => void;
   onSetLiuDay?: (d: number | null) => void;
   liuNianYear?: number | null;
@@ -127,6 +128,7 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
   liuMonth,
   isLiuMonthLeap,
   liuDay,
+  onSetLiuYear,
   onSetLiuMonth,
   onSetLiuDay,
   liuNianYear,
@@ -162,94 +164,114 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     return LunarYear.fromYear(liuNianYear).getLeapMonth();
   }, [liuNianYear]);
 
+  // 利用套件原生函式取得當月最大天數
   const maxDaysInLiuMonth = useMemo(() => {
     if (!liuNianYear || liuMonth === null || liuMonth === undefined) return 30;
+    const m = isLiuMonthLeap ? -Math.abs(liuMonth) : Math.abs(liuMonth);
     try {
-      const m = isLiuMonthLeap ? -Math.abs(liuMonth) : Math.abs(liuMonth);
-      const l = Lunar.fromYmd(liuNianYear, m, 1);
-      return l.getDaysInMonth();
+      return Lunar.fromYmd(liuNianYear, m, 1).getDaysInMonth();
     } catch (e) {
-      return 30;
+      return 29;
     }
   }, [liuNianYear, liuMonth, isLiuMonthLeap]);
 
-  const handlePrevMonth = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!onSetLiuMonth || permissionFlags?.liu_month === 'disabled') return;
+  // --- 強大的原生跨年/跨月/閏月處理邏輯 ---
 
-    if (liuMonth === null || liuMonth === undefined) {
-      onSetLiuMonth(1, false);
+  const changeMonth = (delta: 1 | -1) => {
+    if (!liuNianYear || liuMonth === null || liuMonth === undefined) {
+      if (onSetLiuMonth) onSetLiuMonth(1, false);
       return;
     }
 
-    let nextM = liuMonth;
-    let nextLeap = isLiuMonthLeap || false;
+    const getMonthsArr = (y: number) => {
+      const leap = LunarYear.fromYear(y).getLeapMonth();
+      const arr: { y: number; m: number; leap: boolean }[] = [];
+      for (let i = 1; i <= 12; i++) {
+        arr.push({ y, m: i, leap: false });
+        if (leap === i) arr.push({ y, m: i, leap: true });
+      }
+      return arr;
+    };
 
-    if (nextLeap) {
-      nextLeap = false;
-    } else {
-      let prevNum = nextM - 1;
-      if (prevNum <= 0) prevNum = 12;
+    const currYearArr = getMonthsArr(liuNianYear);
+    const currIdx = currYearArr.findIndex((x) => x.m === liuMonth && x.leap === (isLiuMonthLeap || false));
 
-      if (leapMonthOfLiuNian === prevNum) {
-        nextM = prevNum;
-        nextLeap = true;
+    if (delta === 1) {
+      if (currIdx >= 0 && currIdx < currYearArr.length - 1) {
+        const next = currYearArr[currIdx + 1];
+        if (onSetLiuMonth) onSetLiuMonth(next.m, next.leap);
       } else {
-        nextM = prevNum;
-        nextLeap = false;
+        const nextYearArr = getMonthsArr(liuNianYear + 1);
+        const next = nextYearArr[0];
+        if (onSetLiuYear) onSetLiuYear(next.y);
+        if (onSetLiuMonth) onSetLiuMonth(next.m, next.leap);
+      }
+    } else {
+      if (currIdx > 0) {
+        const prev = currYearArr[currIdx - 1];
+        if (onSetLiuMonth) onSetLiuMonth(prev.m, prev.leap);
+      } else {
+        const prevYearArr = getMonthsArr(liuNianYear - 1);
+        const prev = prevYearArr[prevYearArr.length - 1];
+        if (onSetLiuYear) onSetLiuYear(prev.y);
+        if (onSetLiuMonth) onSetLiuMonth(prev.m, prev.leap);
       }
     }
-    onSetLiuMonth(nextM, nextLeap);
+    if (onSetLiuDay) onSetLiuDay(null);
+  };
+
+  const changeDay = (delta: 1 | -1) => {
+    if (!liuNianYear || liuMonth === null || liuMonth === undefined || liuDay === null || liuDay === undefined) {
+      if (onSetLiuDay) onSetLiuDay(1);
+      return;
+    }
+
+    const effectiveMonth = isLiuMonthLeap ? -Math.abs(liuMonth) : Math.abs(liuMonth);
+    try {
+      // 安全邊界
+      let safeDay = Math.min(liuDay, maxDaysInLiuMonth);
+      let l = Lunar.fromYmd(liuNianYear, effectiveMonth, safeDay);
+      l = l.next(delta);
+      const newY = l.getYear();
+      const newM = l.getMonth(); // 負數代表閏月
+      const newD = l.getDay();
+
+      if (newY !== liuNianYear && onSetLiuYear) {
+        onSetLiuYear(newY);
+      }
+      if (onSetLiuMonth) {
+        onSetLiuMonth(Math.abs(newM), newM < 0);
+      }
+      if (onSetLiuDay) {
+        onSetLiuDay(newD);
+      }
+    } catch (e) {
+      if (onSetLiuDay) onSetLiuDay(1);
+    }
+  };
+
+  const handlePrevMonth = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (permissionFlags?.liu_month === 'disabled') return;
+    changeMonth(-1);
   };
 
   const handleNextMonth = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!onSetLiuMonth || permissionFlags?.liu_month === 'disabled') return;
-
-    if (liuMonth === null || liuMonth === undefined) {
-      onSetLiuMonth(1, false);
-      return;
-    }
-
-    let nextM = liuMonth;
-    let nextLeap = isLiuMonthLeap || false;
-
-    if (!nextLeap && leapMonthOfLiuNian === nextM) {
-      nextLeap = true;
-    } else {
-      nextM = nextM + 1;
-      nextLeap = false;
-      if (nextM > 12) nextM = 1;
-    }
-    onSetLiuMonth(nextM, nextLeap);
+    if (permissionFlags?.liu_month === 'disabled') return;
+    changeMonth(1);
   };
 
   const handlePrevDay = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!onSetLiuDay || permissionFlags?.liu_day === 'disabled') return;
-
-    if (liuDay === null || liuDay === undefined) {
-      onSetLiuDay(1);
-      return;
-    }
-
-    let nextD = liuDay - 1;
-    if (nextD < 1) nextD = maxDaysInLiuMonth;
-    onSetLiuDay(nextD);
+    if (permissionFlags?.liu_day === 'disabled') return;
+    changeDay(-1);
   };
 
   const handleNextDay = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!onSetLiuDay || permissionFlags?.liu_day === 'disabled') return;
-
-    if (liuDay === null || liuDay === undefined) {
-      onSetLiuDay(1);
-      return;
-    }
-
-    let nextD = liuDay + 1;
-    if (nextD > maxDaysInLiuMonth) nextD = 1;
-    onSetLiuDay(nextD);
+    if (permissionFlags?.liu_day === 'disabled') return;
+    changeDay(1);
   };
 
   const { nodes, lines } = useMemo(() => {
@@ -373,7 +395,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     setIsDayPickerOpen(false);
   };
 
-  // [新增] 判斷陰陽
   const yinYangStr = chartData?.direction === 1 ? '陽' : '陰';
   const genderStr = client.gender;
 
@@ -443,11 +464,10 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
             {chartData && (
               <div className="text-[10px] text-gray-500 font-medium mt-1 space-y-0.5">
                 <div>
-                  {/* [修正] 加入陰陽顯示 */}
                   {yinYangStr}{genderStr} | {chartData.bureau}
                 </div>
                 <div className="font-mono">
-                  命主：{chartData.mingZhu}　身主：{chartData.shenZhu}
+                  命主：{chartData.mingZhu} 身主：{chartData.shenZhu}
                 </div>
               </div>
             )}
@@ -660,7 +680,7 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                           title={permissionFlags?.liu_day === 'disabled' ? '權限已到期' : ''}
                         >
                           {permissionFlags?.liu_day === 'disabled' ? <Lock size={12} /> : <Sun size={12} />}
-                          {liuDay !== null ? `${liuDay}日` : '流日'}
+                          {liuDay !== null ? `${Math.min(liuDay, maxDaysInLiuMonth)}日` : '流日'}
                           {liuDay !== null && liuDayGan !== undefined && (
                             <span className="text-[9px] opacity-90 scale-90 ml-0.5 font-mono">({GAN[liuDayGan]})</span>
                           )}
@@ -689,6 +709,8 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                               realIsLeap === !!isLiuMonthLeap &&
                               realLunarDay === d;
 
+                            const isSelectedDay = liuDay !== null && Math.min(liuDay, maxDaysInLiuMonth) === d;
+
                             return (
                               <button
                                 key={d}
@@ -697,7 +719,7 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                                   closePickers();
                                 }}
                                 className={`text-[10px] py-1.5 rounded hover:bg-green-50 text-gray-700 
-                                  ${liuDay === d ? 'bg-green-100 font-bold text-green-700' : ''}
+                                  ${isSelectedDay ? 'bg-green-100 font-bold text-green-700' : ''}
                                   ${isRealDay ? 'border-2 border-red-400 font-bold text-red-600' : ''}
                                 `}
                               >
@@ -721,7 +743,6 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
                 </div>
               )}
 
-              {/* ✅ 硬關閉：年度分析抽屜入口（先整段不顯示） */}
               {DEV_YEARLY_ANALYSIS_ENABLED && null}
             </div>
           </div>
