@@ -334,9 +334,9 @@ const VerticalStar = ({
   divinationSiHua?: any;
 }) => {
   return (
-    <div className="flex flex-col items-center w-[18px] mr-[1px] relative">
-      <span className={`text-[13px] font-bold ${color} leading-[0.9] select-none`}>{star.name[0]}</span>
-      <span className={`text-[13px] font-bold ${color} leading-[0.9] select-none`}>{star.name[1]}</span>
+    <div className="flex flex-col items-center w-[20px] mr-[1px] relative">
+      <span className={`text-[15px] font-bold ${color} leading-[0.9] select-none`}>{star.name[0]}</span>
+      <span className={`text-[15px] font-bold ${color} leading-[0.9] select-none`}>{star.name[1]}</span>
       <span className="text-[10px] text-gray-400 font-normal leading-none scale-90 origin-center my-0">{star.brightness || ''}</span>
 
       <div className="flex flex-col gap-0 w-full items-center mt-0">
