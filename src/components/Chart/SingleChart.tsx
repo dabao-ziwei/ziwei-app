@@ -2,7 +2,8 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { toPng } from 'html-to-image';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { PalaceGrid } from './PalaceGrid';
+import { PalaceGrid, type SiHuaTrace } from './PalaceGrid';
+import type { SiHuaClickPayload } from '../PalaceCard';
 import {
   getClient,
   getRelationships,
@@ -98,6 +99,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
   const [selectedPalace, setSelectedPalace] = useState<number | null>(null);
   const [flyingPalace, setFlyingPalace] = useState<number | null>(null);
+  const [activeSiHuaTrace, setActiveSiHuaTrace] = useState<SiHuaTrace | null>(null);
   const [daXianSeq, setDaXianSeq] = useState<number>(-1);
   const [liuNianYear, setLiuNianYear] = useState<number | null>(null);
   const [showXiaoXian, setShowXiaoXian] = useState<boolean>(false);
@@ -305,8 +307,8 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     return scanYearlyAdvice(chartData, analysisYear);
   }, [chartData, analysisYear]);
 
-  const { divMingIndex, divSiHuaMap } = useMemo(() => {
-    if (mode !== 'divination' || !divNum || divNum.length !== 4) return { divMingIndex: -1, divSiHuaMap: undefined };
+  const { divMingIndex, divSiHuaMap, divSiHuaGanIdx } = useMemo(() => {
+    if (mode !== 'divination' || !divNum || divNum.length !== 4) return { divMingIndex: -1, divSiHuaMap: undefined, divSiHuaGanIdx: -1 };
     const numAB = parseInt(divNum[0] + divNum[1]);
     const finalAB = getRecursiveSum(numAB);
     const targetZhiIndex = finalAB - 1;
@@ -315,7 +317,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     const finalCD = getRecursiveSum(numCD);
     const ganIdx = getDivinationStem(finalCD);
     const siHuaMap = getSiHuaMap(ganIdx);
-    return { divMingIndex: foundMingIdx, divSiHuaMap: siHuaMap };
+    return { divMingIndex: foundMingIdx, divSiHuaMap: siHuaMap, divSiHuaGanIdx: ganIdx };
   }, [divNum, mode, chartData]);
 
   const activeExtraSiHua = useMemo(() => {
@@ -652,6 +654,50 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     setFlyingPalace(flyingPalace === palaceIdx ? null : palaceIdx);
   };
 
+  const handleSiHuaClick = (payload: SiHuaClickPayload) => {
+    if (!chartData) return;
+    if (activeSiHuaTrace?.key === payload.key) {
+      setActiveSiHuaTrace(null);
+      return;
+    }
+
+    let sourcePalaceIdx = -1;
+    let sourceGanIdx = -1;
+
+    if (mode === 'divination' && payload.scope === 'ben' && divSiHuaMap?.[payload.starName] === payload.type) {
+      sourcePalaceIdx = divMingIndex;
+      sourceGanIdx = divSiHuaGanIdx;
+    } else if (payload.scope === 'ben') {
+      sourcePalaceIdx = benMingPos;
+      sourceGanIdx = GAN.indexOf(chartData.bazi[0]);
+    } else if (payload.scope === 'da') {
+      sourcePalaceIdx = daXianList[daXianSeq]?.palaceIdx ?? -1;
+      sourceGanIdx = sourcePalaceIdx >= 0 ? chartData.palaces[sourcePalaceIdx]?.ganIndex ?? -1 : -1;
+    } else if (payload.scope === 'liu' && liuNianYear !== null) {
+      sourcePalaceIdx = chartData.palaces.findIndex((p) => p.zhiIndex === ((liuNianYear - 4) % 12 + 12) % 12);
+      sourceGanIdx = ((liuNianYear - 4) % 10 + 10) % 10;
+    } else if (payload.scope === 'xiao') {
+      sourcePalaceIdx = xiaoXianMingIdx;
+      sourceGanIdx = sourcePalaceIdx >= 0 ? chartData.palaces[sourcePalaceIdx]?.ganIndex ?? -1 : -1;
+    }
+
+    if (sourcePalaceIdx < 0 || sourceGanIdx < 0) return;
+
+    setActiveSiHuaTrace({
+      key: payload.key,
+      sourcePalaceIdx,
+      targetPalaceIdx: payload.palaceIdx,
+      sourceGan: GAN[sourceGanIdx],
+      starName: payload.starName,
+      scope: payload.scope,
+      type: payload.type,
+    });
+  };
+
+  useEffect(() => {
+    setActiveSiHuaTrace(null);
+  }, [currentHour, daXianSeq, liuNianYear, showXiaoXian, liuMonth, liuDay, externalGan, mode]);
+
   const flyingStarsLookup = (() => {
     if (flyingPalace === null) return {};
     const targetPalace = chartData!.palaces[flyingPalace];
@@ -948,6 +994,9 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
           onToggleSmallLimit={toggleXiaoXian}
           onPalaceClick={handlePalaceClick}
           onTriggerClick={handleTriggerClick}
+          onSiHuaClick={handleSiHuaClick}
+          onBlankClick={() => setActiveSiHuaTrace(null)}
+          activeSiHuaTrace={activeSiHuaTrace}
           flyingStarsLookup={flyingStarsLookup}
           permissionFlags={{
             twin: canTwin,

@@ -1,11 +1,21 @@
 // src/components/Chart/PalaceGrid.tsx
 import React, { forwardRef } from 'react';
 import { CenterInfoBoard } from '../CenterInfoBoard';
-import { PalaceCard } from '../PalaceCard';
+import { PalaceCard, type SiHuaClickPayload } from '../PalaceCard';
 import { GAN } from '../../logic/constants';
 import type { Client, Relationship } from '../../db';
-import type { ChartData } from '../../logic/types';
+import type { ChartData, Scope, SiHuaType } from '../../logic/types';
 import type { PermissionState } from '../../logic/permissions';
+
+export interface SiHuaTrace {
+  key: string;
+  sourcePalaceIdx: number;
+  targetPalaceIdx: number;
+  sourceGan: string;
+  starName: string;
+  scope: Scope;
+  type: SiHuaType;
+}
 
 interface PalaceGridProps {
   client: Client;
@@ -71,6 +81,9 @@ interface PalaceGridProps {
   onToggleSmallLimit: () => void;
   onPalaceClick: (idx: number) => void;
   onTriggerClick: (idx: number) => void;
+  onSiHuaClick?: (payload: SiHuaClickPayload) => void;
+  onBlankClick?: () => void;
+  activeSiHuaTrace?: SiHuaTrace | null;
 
   onOpenYearlyAnalysis?: (year: number) => void;
 
@@ -102,6 +115,29 @@ interface PalaceGridProps {
 }
 
 const mod12 = (n: number) => ((n % 12) + 12) % 12;
+
+const siHuaTraceStyles: Record<Scope, { sourceBg: string; targetRing: string; badge: string }> = {
+  ben: {
+    sourceBg: 'bg-red-100/55',
+    targetRing: 'ring-4 ring-red-500 ring-inset z-40',
+    badge: 'bg-red-600 text-white shadow-red-200',
+  },
+  da: {
+    sourceBg: 'bg-slate-200/65',
+    targetRing: 'ring-4 ring-slate-600 ring-inset z-40',
+    badge: 'bg-slate-700 text-white shadow-slate-200',
+  },
+  liu: {
+    sourceBg: 'bg-blue-100/60',
+    targetRing: 'ring-4 ring-blue-500 ring-inset z-40',
+    badge: 'bg-blue-600 text-white shadow-blue-200',
+  },
+  xiao: {
+    sourceBg: 'bg-green-100/60',
+    targetRing: 'ring-4 ring-green-600 ring-inset z-40',
+    badge: 'bg-green-600 text-white shadow-green-200',
+  },
+};
 
 export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
   (
@@ -145,6 +181,9 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
       onToggleSmallLimit,
       onPalaceClick,
       onTriggerClick,
+      onSiHuaClick,
+      onBlankClick,
+      activeSiHuaTrace,
       onOpenYearlyAnalysis,
       permissionFlags,
       liuMonth,
@@ -210,7 +249,7 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
     ]);
 
     return (
-      <div ref={ref} className="w-full h-full bg-white border-2 border-gray-800 shadow-xl z-10 relative pt-2">
+      <div ref={ref} className="w-full h-full bg-white border-2 border-gray-800 shadow-xl z-10 relative pt-2" onClick={onBlankClick}>
         <div className="relative w-full h-full grid grid-cols-4 grid-rows-4">
           <svg className="absolute inset-0 w-full h-full pointer-events-none z-[200]">
             {selectedPalace !== null &&
@@ -233,7 +272,7 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
           {gridLayout.map((palaceIdx, gridPos) => {
             if (gridPos === 5) {
               return (
-                <div key="center-board" className="col-span-2 row-span-2 z-50 relative h-full w-full">
+                  <div key="center-board" className="col-span-2 row-span-2 z-50 relative h-full w-full">
                   <CenterInfoBoard
                     key="center"
                     client={client}
@@ -296,6 +335,9 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
             const isFlyingSource = flyingPalace === palaceIdx;
 
             const isHighlight = palaceIdx === highlightIdx;
+            const isSiHuaSource = activeSiHuaTrace?.sourcePalaceIdx === palaceIdx;
+            const isSiHuaTarget = activeSiHuaTrace?.targetPalaceIdx === palaceIdx;
+            const traceStyle = activeSiHuaTrace ? siHuaTraceStyles[activeSiHuaTrace.scope] : null;
 
             return (
               <div
@@ -304,10 +346,12 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
                 className={`relative cursor-pointer transition-all duration-200 border border-gray-300 box-border overflow-visible
                   ${isConnected ? 'bg-red-50' : 'hover:bg-gray-50'}
                   ${isFlyingSource ? 'ring-4 ring-purple-400 z-50 animate-pulse' : ''}
+                  ${isSiHuaTarget && traceStyle ? traceStyle.targetRing : ''}
                 `}
                 style={isFlyingSource ? { animationIterationCount: 3 } : {}}
               >
                 {isHighlight && <div className={highlightClass}></div>}
+                {isSiHuaSource && traceStyle && <div className={`absolute inset-0 z-[1] pointer-events-none ${traceStyle.sourceBg}`}></div>}
 
                 {isFlyingSource && (
                   <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-purple-600 text-white text-[11px] font-bold px-2 py-0.5 rounded-full shadow-lg z-50 whitespace-nowrap tracking-wide border border-white">
@@ -328,7 +372,10 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
                   isDaXianMing={isDaXianMing && isDaXianActive}
                   isLiuNianMing={isLiuNianMing && isLiuNianActive}
                   isXiaoXianMingPalace={isXiaoXianMingPalace && (isLiuNianActive || isXiaoXianActive)}
-                  onTriggerClick={() => onTriggerClick(palaceIdx)}
+                  onTriggerClick={() => {
+                    onBlankClick?.();
+                    onTriggerClick(palaceIdx);
+                  }}
                   flyingStars={flyingStarsLookup}
                   isTwinMode={isTwinMode}
                   isReverse={isReverse}
@@ -337,7 +384,15 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
                   divinationName={relNames.divinationName}
                   divinationSiHua={mode === 'divination' ? divSiHuaMap : undefined}
                   externalSiHua={externalSiHuaMap}
+                  activeSiHuaKey={activeSiHuaTrace?.key}
+                  onSiHuaClick={onSiHuaClick}
                 />
+
+                {isSiHuaSource && traceStyle && (
+                  <div className={`absolute left-1/2 top-[62%] -translate-x-1/2 z-40 pointer-events-none h-5 min-w-5 px-1.5 rounded-full flex items-center justify-center text-xs font-black leading-none shadow-md border border-white/80 ${traceStyle.badge}`}>
+                    {activeSiHuaTrace.sourceGan}
+                  </div>
+                )}
 
                 {isConnected && <div className="absolute inset-0 border-2 border-red-500 pointer-events-none z-30"></div>}
               </div>

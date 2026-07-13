@@ -1,6 +1,6 @@
 // FILE: src/components/PalaceCard.tsx
 import React from 'react';
-import { type Palace, type Star, type SiHuaType } from '../logic/types';
+import { type Palace, type Scope, type Star, type SiHuaType } from '../logic/types';
 import { GAN, ZHI, STAR_ABBR_MAP, PALACE_REVERSE_MAP } from '../logic/constants';
 
 interface PalaceCardProps {
@@ -39,6 +39,16 @@ interface PalaceCardProps {
 
   externalSiHua?: Record<string, '祿' | '權' | '科' | '忌'>;
   divinationSiHua?: Record<string, '祿' | '權' | '科' | '忌'>;
+  activeSiHuaKey?: string | null;
+  onSiHuaClick?: (payload: SiHuaClickPayload) => void;
+}
+
+export interface SiHuaClickPayload {
+  key: string;
+  palaceIdx: number;
+  starName: string;
+  scope: Scope;
+  type: SiHuaType;
 }
 
 const COMPASS_MAP = [
@@ -95,9 +105,11 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
   isReverse,
   reverseFlags, 
   showCompass,
-  divinationName, 
+  divinationName,
   externalSiHua,
-  divinationSiHua
+  divinationSiHua,
+  activeSiHuaKey,
+  onSiHuaClick
 }) => {
   const palaceGanZhi = `${GAN[palace.ganIndex]}${ZHI[palace.zhiIndex]}`;
   const isBenMing = !daName && !liuName && !xiaoName;
@@ -233,7 +245,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
           </div>
       )}
 
-      <div className="flex-1 flex flex-row gap-0.5 relative z-10 min-h-0 items-start content-start overflow-hidden pointer-events-none">
+      <div className="flex-1 flex flex-row gap-0.5 relative z-10 min-h-0 items-start content-start overflow-hidden">
         {palace.majorStars.map((star, idx) => (
           <VerticalStar
             key={`maj-${idx}`}
@@ -241,6 +253,9 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
             color="text-red-700"
             bgSiHua={{ ben: 'bg-red-600', da: 'bg-gray-500', liu: 'bg-blue-500', xiao: 'bg-green-600' }}
             divinationSiHua={divinationSiHua}
+            palaceIdx={palace.index}
+            activeSiHuaKey={activeSiHuaKey}
+            onSiHuaClick={onSiHuaClick}
           />
         ))}
 
@@ -251,6 +266,9 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
             color="text-black"
             bgSiHua={{ ben: 'bg-red-600', da: 'bg-gray-500', liu: 'bg-blue-500', xiao: 'bg-green-600' }}
             divinationSiHua={divinationSiHua}
+            palaceIdx={palace.index}
+            activeSiHuaKey={activeSiHuaKey}
+            onSiHuaClick={onSiHuaClick}
           />
         ))}
 
@@ -261,6 +279,9 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
             color="text-blue-600"
             bgSiHua={{ ben: 'bg-red-600', da: 'bg-gray-500', liu: 'bg-blue-500', xiao: 'bg-green-600' }}
             divinationSiHua={divinationSiHua}
+            palaceIdx={palace.index}
+            activeSiHuaKey={activeSiHuaKey}
+            onSiHuaClick={onSiHuaClick}
           />
         ))}
 
@@ -271,6 +292,9 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
             color="text-black"
             bgSiHua={{ ben: 'bg-red-600', da: 'bg-gray-500', liu: 'bg-blue-500', xiao: 'bg-green-600' }}
             divinationSiHua={divinationSiHua}
+            palaceIdx={palace.index}
+            activeSiHuaKey={activeSiHuaKey}
+            onSiHuaClick={onSiHuaClick}
           />
         ))}
       </div>
@@ -326,12 +350,18 @@ const VerticalStar = ({
   star,
   color,
   bgSiHua,
-  divinationSiHua, 
+  divinationSiHua,
+  palaceIdx,
+  activeSiHuaKey,
+  onSiHuaClick,
 }: {
   star: Star;
   color: string;
   bgSiHua: any;
   divinationSiHua?: any;
+  palaceIdx: number;
+  activeSiHuaKey?: string | null;
+  onSiHuaClick?: (payload: SiHuaClickPayload) => void;
 }) => {
   return (
     <div className="flex flex-col items-center w-[20px] mr-[1px] relative">
@@ -340,23 +370,53 @@ const VerticalStar = ({
       <span className="text-[10px] text-gray-400 font-normal leading-none scale-90 origin-center my-0">{star.brightness || ''}</span>
 
       <div className="flex flex-col gap-0 w-full items-center mt-0">
-        <SiHuaSlot star={star} scope="ben" bg={bgSiHua.ben} overrideType={divinationSiHua?.[star.name]} />
-        <SiHuaSlot star={star} scope="da" bg={bgSiHua.da} />
-        <SiHuaSlot star={star} scope="liu" bg={bgSiHua.liu} />
-        <SiHuaSlot star={star} scope="xiao" bg={bgSiHua.xiao} />
+        <SiHuaSlot star={star} scope="ben" bg={bgSiHua.ben} overrideType={divinationSiHua?.[star.name]} palaceIdx={palaceIdx} activeSiHuaKey={activeSiHuaKey} onSiHuaClick={onSiHuaClick} />
+        <SiHuaSlot star={star} scope="da" bg={bgSiHua.da} palaceIdx={palaceIdx} activeSiHuaKey={activeSiHuaKey} onSiHuaClick={onSiHuaClick} />
+        <SiHuaSlot star={star} scope="liu" bg={bgSiHua.liu} palaceIdx={palaceIdx} activeSiHuaKey={activeSiHuaKey} onSiHuaClick={onSiHuaClick} />
+        <SiHuaSlot star={star} scope="xiao" bg={bgSiHua.xiao} palaceIdx={palaceIdx} activeSiHuaKey={activeSiHuaKey} onSiHuaClick={onSiHuaClick} />
       </div>
     </div>
   );
 };
 
-const SiHuaSlot = ({ star, scope, bg, overrideType }: { star: Star; scope: 'ben' | 'da' | 'liu' | 'xiao'; bg: string; overrideType?: string }) => {
-  if (scope === 'ben' && overrideType) {
-      return <div className={`w-3.5 h-3.5 flex items-center justify-center text-[11px] text-white rounded-[1px] leading-none shadow-sm ${bg} mb-[1px]`}>{overrideType}</div>;
-  }
-
+const SiHuaSlot = ({
+  star,
+  scope,
+  bg,
+  overrideType,
+  palaceIdx,
+  activeSiHuaKey,
+  onSiHuaClick,
+}: {
+  star: Star;
+  scope: Scope;
+  bg: string;
+  overrideType?: SiHuaType;
+  palaceIdx: number;
+  activeSiHuaKey?: string | null;
+  onSiHuaClick?: (payload: SiHuaClickPayload) => void;
+}) => {
   const sihua = star.sihua?.find((s) => s.scope === scope);
-  if (sihua) {
-    return <div className={`w-3.5 h-3.5 flex items-center justify-center text-[11px] text-white rounded-[1px] leading-none shadow-sm ${bg} mb-[1px]`}>{sihua.type}</div>;
+  const type = scope === 'ben' && overrideType ? overrideType : sihua?.type;
+  if (type) {
+    const key = `${palaceIdx}:${star.name}:${scope}:${type}`;
+    const isActive = activeSiHuaKey === key;
+
+    return (
+      <button
+        type="button"
+        className={`w-3.5 h-3.5 appearance-none border-0 p-0 flex items-center justify-center text-[11px] text-white rounded-[1px] leading-none shadow-sm ${bg} mb-[1px] cursor-pointer transition-all ${
+          isActive ? 'ring-2 ring-offset-1 ring-slate-900 scale-110 z-20' : 'hover:ring-1 hover:ring-offset-1 hover:ring-slate-500'
+        }`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSiHuaClick?.({ key, palaceIdx, starName: star.name, scope, type });
+        }}
+        title={`${star.name}${type}`}
+      >
+        {type}
+      </button>
+    );
   }
   return <div className="w-3.5 h-3.5 mb-[1px]" />;
 };

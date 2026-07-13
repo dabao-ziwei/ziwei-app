@@ -1,7 +1,8 @@
 // FILE: src/components/Chart/DualChart.tsx
 import React, { useMemo, useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { PalaceGrid } from './PalaceGrid';
+import { PalaceGrid, type SiHuaTrace } from './PalaceGrid';
+import type { SiHuaClickPayload } from '../PalaceCard';
 import { ZiWeiEngine } from '../../logic/engine';
 import { GAN, SIHUA_TABLE, ZHI, PALACE_NAMES } from '../../logic/constants';
 import { Loader2, ChevronLeft, Lock, Unlock, ArrowRightLeft } from 'lucide-react';
@@ -95,6 +96,8 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   const [isLocked, setIsLocked] = useState(true);
   const [activeSide, setActiveSide] = useState<'A' | 'B' | null>(null);
   const [flyingPalace, setFlyingPalace] = useState<number | null>(null);
+  const [activeSiHuaTraceA, setActiveSiHuaTraceA] = useState<SiHuaTrace | null>(null);
+  const [activeSiHuaTraceB, setActiveSiHuaTraceB] = useState<SiHuaTrace | null>(null);
 
   const [selfFlyingPalaceA, setSelfFlyingPalaceA] = useState<number | null>(null);
   const [selfFlyingPalaceB, setSelfFlyingPalaceB] = useState<number | null>(null);
@@ -461,6 +464,78 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       }
   };
 
+  const clearSiHuaTrace = () => {
+      setActiveSiHuaTraceA(null);
+      setActiveSiHuaTraceB(null);
+  };
+
+  const buildSiHuaTrace = (
+      payload: SiHuaClickPayload,
+      chart: any,
+      engine: ZiWeiEngine | null,
+      daSeq: number,
+      daList: any[],
+      liuYear: number | null,
+      xiaoXianMingIdx: number
+  ): SiHuaTrace | null => {
+      if (!chart || !engine) return null;
+
+      let sourcePalaceIdx = -1;
+      let sourceGanIdx = -1;
+
+      if (payload.scope === 'ben') {
+          sourcePalaceIdx = engine.getMingPos();
+          sourceGanIdx = GAN.indexOf(chart.bazi[0]);
+      } else if (payload.scope === 'da') {
+          sourcePalaceIdx = daList[daSeq]?.palaceIdx ?? -1;
+          sourceGanIdx = sourcePalaceIdx >= 0 ? chart.palaces[sourcePalaceIdx]?.ganIndex ?? -1 : -1;
+      } else if (payload.scope === 'liu' && liuYear !== null) {
+          sourcePalaceIdx = chart.palaces.findIndex((p: any) => p.zhiIndex === ((liuYear - 4) % 12 + 12) % 12);
+          sourceGanIdx = ((liuYear - 4) % 10 + 10) % 10;
+      } else if (payload.scope === 'xiao') {
+          sourcePalaceIdx = xiaoXianMingIdx;
+          sourceGanIdx = sourcePalaceIdx >= 0 ? chart.palaces[sourcePalaceIdx]?.ganIndex ?? -1 : -1;
+      }
+
+      if (sourcePalaceIdx < 0 || sourceGanIdx < 0) return null;
+
+      return {
+          key: payload.key,
+          sourcePalaceIdx,
+          targetPalaceIdx: payload.palaceIdx,
+          sourceGan: GAN[sourceGanIdx],
+          starName: payload.starName,
+          scope: payload.scope,
+          type: payload.type,
+      };
+  };
+
+  const handleSiHuaClickA = (payload: SiHuaClickPayload) => {
+      if (activeSiHuaTraceA?.key === payload.key) {
+          setActiveSiHuaTraceA(null);
+          return;
+      }
+      const trace = buildSiHuaTrace(payload, chartA, engineA, daSeqA, daListA, liuYearA, xiaoXianMingIdxA);
+      if (!trace) return;
+      setActiveSiHuaTraceA(trace);
+      setActiveSiHuaTraceB(null);
+  };
+
+  const handleSiHuaClickB = (payload: SiHuaClickPayload) => {
+      if (activeSiHuaTraceB?.key === payload.key) {
+          setActiveSiHuaTraceB(null);
+          return;
+      }
+      const trace = buildSiHuaTrace(payload, chartB, engineB, daSeqB, daListB, liuYearB, xiaoXianMingIdxB);
+      if (!trace) return;
+      setActiveSiHuaTraceB(trace);
+      setActiveSiHuaTraceA(null);
+  };
+
+  useEffect(() => {
+      clearSiHuaTrace();
+  }, [hourA, daSeqA, liuYearA, showXiaoA, liuMonthA, liuDayA, hourB, daSeqB, liuYearB, showXiaoB, liuMonthB, liuDayB]);
+
   const handleChangeHourA = (delta: number) => {
       const newHour = calcNextHour(hourA, delta);
       setHourA(newHour);
@@ -732,6 +807,9 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         onTriggerClick={(idx) => {
                             setSelfFlyingPalaceA(selfFlyingPalaceA === idx ? null : idx);
                         }}
+                        onSiHuaClick={handleSiHuaClickA}
+                        onBlankClick={clearSiHuaTrace}
+                        activeSiHuaTrace={activeSiHuaTraceA}
                         currentRealTime={currentRealTimeA}
                         showCompass={false}
                         liuMonth={liuMonthA}
@@ -810,6 +888,9 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         onTriggerClick={(idx) => {
                             setSelfFlyingPalaceB(selfFlyingPalaceB === idx ? null : idx);
                         }}
+                        onSiHuaClick={handleSiHuaClickB}
+                        onBlankClick={clearSiHuaTrace}
+                        activeSiHuaTrace={activeSiHuaTraceB}
                         currentRealTime={currentRealTimeB}
                         showCompass={false}
                         liuMonth={liuMonthB}
