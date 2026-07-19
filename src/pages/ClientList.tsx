@@ -33,11 +33,11 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const [inputValue, setInputValue] = useState(''); 
   
   const initialG = (searchParams.get('g') as 'all' | '男' | '女') || 'all';
-  const initialStar = searchParams.get('star') || null;
+  const initialStars = (searchParams.get('star') || '').split(',').filter(Boolean);
   const initialFav = searchParams.get('fav') === '1';
 
   const [filterGender, setFilterGender] = useState<'all'|'男'|'女'>(initialG);
-  const [filterStar, setFilterStar] = useState<string | null>(initialStar);
+  const [filterStars, setFilterStars] = useState<string[]>(initialStars);
   const [filterFavorite, setFilterFavorite] = useState<boolean>(initialFav);
 
   // --- 2. 資料狀態 ---
@@ -87,11 +87,11 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   useEffect(() => {
       const newParams = new URLSearchParams();
       if (filterGender !== 'all') newParams.set('g', filterGender);
-      if (filterStar) newParams.set('star', filterStar);
+      if (filterStars.length > 0) newParams.set('star', filterStars.join(','));
       if (filterFavorite) newParams.set('fav', '1');
       if (searchParams.toString() !== newParams.toString()) setSearchParams(newParams, { replace: true });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterGender, filterStar, filterFavorite]);
+  }, [filterGender, filterStars, filterFavorite]);
 
   useEffect(() => { localStorage.setItem(STORAGE_KEY_CATS, JSON.stringify(expandedCats)); }, [expandedCats]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_FILTER, JSON.stringify(showOnlyMine)); }, [showOnlyMine]);
@@ -184,6 +184,10 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     return `${hour}:${minuteStr}(${ZHI[zhiIdx] || ''}時)`;
   };
 
+  const toggleStarFilter = (star: string) => {
+    setFilterStars(prev => prev.includes(star) ? prev.filter(s => s !== star) : [...prev, star]);
+  };
+
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (confirm('確定要刪除此命盤嗎？')) { await deleteClient(id); refreshData(); }
@@ -209,11 +213,16 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   // --- [關鍵] 列表過濾邏輯 ---
   const filtered = useMemo(() => {
       return clients.filter(c => {
-        const term = inputValue.toLowerCase();
-        const match = !term || (c.name || '').toLowerCase().includes(term) || (c.birthYear || '').toString().includes(term) || (c.creatorEmail || '').toLowerCase().includes(term);
+        const rawTerm = inputValue.trim();
+        const term = rawTerm.toLowerCase();
+        const starsInTerm = MAJOR_STARS.filter(star => rawTerm.includes(star));
+        const textTerm = starsInTerm.reduce((value, star) => value.replaceAll(star, ' '), rawTerm).trim().toLowerCase();
+        const textMatch = !textTerm || (c.name || '').toLowerCase().includes(textTerm) || (c.birthYear || '').toString().includes(textTerm) || (c.creatorEmail || '').toLowerCase().includes(textTerm);
+        const typedStarMatch = starsInTerm.length === 0 || starsInTerm.every(star => (c.majorStars || '').includes(star));
+        const match = !term || (textMatch && typedStarMatch);
         const genderMatch = filterGender === 'all' || c.gender === filterGender;
-        const starMatch = !filterStar || (c.majorStars || '').includes(filterStar);
-        const favMatch = !filterFavorite || c.is_favorite === true; 
+        const starMatch = filterStars.length === 0 || filterStars.every(star => (c.majorStars || '').includes(star));
+        const favMatch = !filterFavorite || c.is_favorite === true;
         
         let isOwnerMatch = true;
         const isSpecificSuperUser = (currentUserEmail || '').trim().toLowerCase() === SUPER_ADMIN_EMAIL;
@@ -234,7 +243,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         
         return match && genderMatch && starMatch && favMatch && isOwnerMatch;
       });
-  }, [clients, inputValue, filterGender, filterStar, filterFavorite, showOnlyMine, currentUserEmail, currentUserId]);
+  }, [clients, inputValue, filterGender, filterStars, filterFavorite, showOnlyMine, currentUserEmail, currentUserId]);
 
   // --- 列表分組 ---
   const groupedData = useMemo(() => {
@@ -301,12 +310,12 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
                     <Search size={18}/>
                 </div>
-                <input 
-                    type="text" 
-                    placeholder="輸入姓名或年份即時搜尋..." 
-                    className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all text-slate-700 shadow-sm" 
-                    value={inputValue} 
-                    onChange={(e) => setInputValue(e.target.value)} 
+                <input
+                    type="text"
+                    placeholder="輸入姓名、年份或主星組合即時搜尋..."
+                    className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all text-slate-700 shadow-sm"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
                 />
             </div>
              <div className="relative">
@@ -328,8 +337,11 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                   <button onClick={() => setFilterGender('男')} className={`px-3 sm:px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1 ${filterGender === '男' ? 'bg-blue-500 text-white shadow-sm' : 'text-slate-400 hover:text-blue-500'}`}>男</button>
              </div>
              <div className="flex-1 overflow-x-auto no-scrollbar flex items-center gap-2">
-                {filterStar && <button onClick={() => setFilterStar(null)} className="shrink-0 p-1.5 rounded-full bg-slate-200"><X size={14} /></button>}
-                {MAJOR_STARS.map(star => <button key={star} onClick={() => setFilterStar(filterStar===star?null:star)} className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold border ${filterStar===star?'bg-purple-600 text-white':'bg-white text-slate-600'}`}>{star}</button>)}
+                {filterStars.length > 0 && <button onClick={() => setFilterStars([])} className="shrink-0 p-1.5 rounded-full bg-slate-200"><X size={14} /></button>}
+                {MAJOR_STARS.map(star => {
+                    const isSelected = filterStars.includes(star);
+                    return <button key={star} onClick={() => toggleStarFilter(star)} className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold border ${isSelected?'bg-purple-600 text-white':'bg-white text-slate-600'}`}>{star}</button>;
+                })}
              </div>
         </div>
       </div>
