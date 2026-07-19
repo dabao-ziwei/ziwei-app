@@ -29,6 +29,7 @@ import { usePaywall, type PaywallMode, FEATURE_YEARLY_ADVICE_ENABLED, DIVINATION
 import PaywallModal from '../Paywall/PaywallModal';
 
 const OFFICIAL_SITE_URL = 'https://www.dabao.life';
+const MOBILE_LIMIT_GUIDE_KEY = 'ziwei_mobile_limit_guide_seen_v2';
 
 interface SingleChartProps {
   client?: Client;
@@ -124,12 +125,16 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const [isYearlyDrawerOpen, setIsYearlyDrawerOpen] = useState(false);
   const [analysisYear, setAnalysisYear] = useState<number>(new Date().getFullYear());
   const [adviceRules, setAdviceRules] = useState<YearAdviceRule[]>([]);
+  const [mobileGuideStep, setMobileGuideStep] = useState<number | null>(null);
+  const [mobileGuideRect, setMobileGuideRect] = useState<DOMRect | null>(null);
 
   const [isPaywallOpen, setIsPaywallOpen] = useState(false);
   const [paywallMode, setPaywallMode] = useState<PaywallMode>('CONFIRM_DEDUCT');
   const { checkAccess } = usePaywall(userProfile);
 
   const chartRef = useRef<HTMLDivElement>(null);
+  const mobileDaOverviewRef = useRef<HTMLDivElement | null>(null);
+  const mobileSelectedControlsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     getMyProfile().then(setUserProfile);
@@ -767,6 +772,135 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     return { year, daSeq: daSeq >= 0 ? daSeq : -1 };
   }, [baseChartData, baseEngine, daXianList]);
 
+  const getDefaultMobileLiuYear = (seq: number) => {
+    const targetDa = daXianList[seq];
+    if (!targetDa) return null;
+    if (currentRealTime?.daSeq === seq && currentRealTime.year >= targetDa.startYear && currentRealTime.year <= targetDa.endYear) {
+      return currentRealTime.year;
+    }
+    return targetDa.startYear;
+  };
+
+  const resetMobileLimitState = () => {
+    setDaXianSeq(-1);
+    setLiuNianYear(null);
+    setLiuMonth(null);
+    setLiuDay(null);
+    setShowXiaoXian(false);
+    setFlyingPalace(null);
+    setSelectedPalace(null);
+  };
+
+  const selectMobileDaXian = (seq: number, allowToggle = false) => {
+    if (allowToggle && daXianSeq === seq) {
+      resetMobileLimitState();
+      return;
+    }
+
+    const defaultYear = getDefaultMobileLiuYear(seq);
+    setDaXianSeq(seq);
+    setLiuNianYear(defaultYear);
+    setLiuMonth(null);
+    setLiuDay(null);
+    setShowXiaoXian(false);
+    setFlyingPalace(null);
+    setSelectedPalace(null);
+  };
+
+  const stepMobileDaXian = (delta: number) => {
+    if (daXianList.length === 0) return;
+    const currentSeq = daXianSeq >= 0 ? daXianSeq : currentRealTime?.daSeq ?? 0;
+    const nextSeq = Math.max(0, Math.min(daXianList.length - 1, currentSeq + delta));
+    selectMobileDaXian(nextSeq);
+  };
+
+  const stepMobileLiuYear = (delta: number) => {
+    const targetDa = daXianSeq >= 0 ? daXianList[daXianSeq] : null;
+    if (!targetDa) return;
+    const baseYear = liuNianYear ?? getDefaultMobileLiuYear(daXianSeq) ?? targetDa.startYear;
+    const nextYear = Math.max(targetDa.startYear, Math.min(targetDa.endYear, baseYear + delta));
+    if (nextYear === baseYear) return;
+    setLiuNianYear(nextYear);
+    setLiuMonth(null);
+    setLiuDay(null);
+    setShowXiaoXian(false);
+    setFlyingPalace(null);
+    setSelectedPalace(null);
+  };
+
+  const mobileSelectedDa = daXianSeq >= 0 ? daXianList[daXianSeq] : null;
+  const mobileSelectedYear = mobileSelectedDa ? (liuNianYear ?? getDefaultMobileLiuYear(daXianSeq) ?? mobileSelectedDa.startYear) : null;
+  const mobileSelectedYearGanZhi = mobileSelectedYear !== null ? `${GAN[((mobileSelectedYear - 4) % 10 + 10) % 10]}${ZHI[((mobileSelectedYear - 4) % 12 + 12) % 12]}` : '';
+  const mobileSelectedAge = mobileSelectedDa && mobileSelectedYear !== null ? mobileSelectedDa.startAge + (mobileSelectedYear - mobileSelectedDa.startYear) : null;
+
+  useEffect(() => {
+    if (mode === 'divination' || daXianList.length === 0) return;
+    if (typeof window === 'undefined') return;
+    if (!window.matchMedia('(max-width: 639px)').matches) return;
+    if (localStorage.getItem(MOBILE_LIMIT_GUIDE_KEY) === '1') return;
+    setMobileGuideStep(0);
+  }, [mode, daXianList.length]);
+
+  useEffect(() => {
+    if (mobileGuideStep === null) return;
+    const updateRect = () => {
+      const target = mobileGuideStep === 0 ? mobileDaOverviewRef.current : mobileSelectedControlsRef.current;
+      setMobileGuideRect(target ? target.getBoundingClientRect() : null);
+    };
+
+    const timer = window.setTimeout(updateRect, 60);
+    window.addEventListener('resize', updateRect);
+    window.addEventListener('scroll', updateRect, true);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('resize', updateRect);
+      window.removeEventListener('scroll', updateRect, true);
+    };
+  }, [mobileGuideStep, daXianSeq, liuNianYear]);
+
+  const finishMobileLimitGuide = () => {
+    localStorage.setItem(MOBILE_LIMIT_GUIDE_KEY, '1');
+    setMobileGuideStep(null);
+    setMobileGuideRect(null);
+  };
+
+  const nextMobileLimitGuide = () => {
+    if (mobileGuideStep === 0) {
+      const guideSeq = currentRealTime?.daSeq !== undefined && currentRealTime.daSeq >= 0 ? currentRealTime.daSeq : 0;
+      selectMobileDaXian(guideSeq);
+      setMobileGuideStep(1);
+      return;
+    }
+
+    if (mobileGuideStep === 1) {
+      if (currentRealTime?.daSeq !== undefined && currentRealTime.daSeq >= 0) {
+        selectMobileDaXian(currentRealTime.daSeq);
+      }
+      setMobileGuideStep(2);
+      return;
+    }
+
+    finishMobileLimitGuide();
+  };
+
+  const mobileGuideCopy = mobileGuideStep === 0
+    ? {
+        title: '手機版大限選擇',
+        body: '大限改成上下兩排，一次看完十個大限，不需要左右滑動。點任一大限即可進入流年選擇。',
+        action: '下一步',
+      }
+    : mobileGuideStep === 1
+    ? {
+        title: '切換大限與流年',
+        body: '上排左右切換大限，下排左右切換流年。再按一次中間的大限按鈕，就會回到大限總覽。',
+        action: '下一步',
+      }
+    : {
+        title: '目前大限',
+        body: '選到目前大限時，流年會自動停在今年；選其他大限時，流年會從該大限第一年開始。',
+        action: '知道了',
+      };
+
   const handleDownload = async () => {
     if (!chartRef.current) return;
     try {
@@ -1029,7 +1163,78 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       </div>
 
       {mode !== 'divination' && daXianList.length > 0 && (
-        <div className="shrink-0 bg-white border-t border-gray-200 w-full z-40 overflow-hidden">
+        <div className="sm:hidden shrink-0 bg-white border-t border-gray-200 w-full z-40 pb-[env(safe-area-inset-bottom)]">
+          {mobileSelectedDa ? (
+            <div ref={mobileSelectedControlsRef} className="grid grid-rows-2 border-t border-slate-100">
+              <div className="grid grid-cols-[44px_1fr_44px] h-11 border-b border-slate-200">
+                <button
+                  onClick={() => stepMobileDaXian(-1)}
+                  disabled={daXianSeq <= 0}
+                  className="text-lg font-bold text-slate-500 disabled:text-slate-200 border-r border-slate-200"
+                >
+                  &lt;
+                </button>
+                <button
+                  onClick={() => selectMobileDaXian(daXianSeq, true)}
+                  className="flex flex-col items-center justify-center bg-indigo-600 text-white font-bold leading-tight"
+                >
+                  <span className="text-sm">{mobileSelectedDa.name} {mobileSelectedDa.ganZhi}</span>
+                  <span className="text-[10px] opacity-80">{mobileSelectedDa.startAge}-{mobileSelectedDa.endAge} 歲</span>
+                </button>
+                <button
+                  onClick={() => stepMobileDaXian(1)}
+                  disabled={daXianSeq >= daXianList.length - 1}
+                  className="text-lg font-bold text-slate-500 disabled:text-slate-200 border-l border-slate-200"
+                >
+                  &gt;
+                </button>
+              </div>
+              <div className="grid grid-cols-[44px_1fr_44px] h-11">
+                <button
+                  onClick={() => stepMobileLiuYear(-1)}
+                  disabled={!mobileSelectedDa || mobileSelectedYear === null || mobileSelectedYear <= mobileSelectedDa.startYear}
+                  className="text-lg font-bold text-slate-500 disabled:text-slate-200 border-r border-slate-200"
+                >
+                  &lt;
+                </button>
+                <div className="flex flex-col items-center justify-center bg-blue-600 text-white font-bold leading-tight">
+                  <span className="text-sm">{mobileSelectedYear}{mobileSelectedYearGanZhi}</span>
+                  <span className="text-[10px] opacity-80">{mobileSelectedAge !== null ? `${mobileSelectedAge} 歲` : ''}</span>
+                </div>
+                <button
+                  onClick={() => stepMobileLiuYear(1)}
+                  disabled={!mobileSelectedDa || mobileSelectedYear === null || mobileSelectedYear >= mobileSelectedDa.endYear}
+                  className="text-lg font-bold text-slate-500 disabled:text-slate-200 border-l border-slate-200"
+                >
+                  &gt;
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div ref={mobileDaOverviewRef} className="grid grid-cols-5 grid-rows-2 w-full">
+              {daXianList.map((item: any) => {
+                const isRealTime = currentRealTime && currentRealTime.daSeq === item.seq;
+                return (
+                  <button
+                    key={item.seq}
+                    onClick={() => selectMobileDaXian(item.seq, true)}
+                    className="relative h-12 border-r border-b border-slate-200 last:border-r-0 bg-white text-slate-600 active:bg-indigo-50"
+                  >
+                    {isRealTime && <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500 shadow-sm"></div>}
+                    <div className="flex flex-col items-center justify-center leading-tight">
+                      <span className="text-xs font-bold">{item.name}</span>
+                      <span className="text-[10px] opacity-70">{item.ganZhi}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {mode !== 'divination' && daXianList.length > 0 && (
+        <div className="hidden sm:block shrink-0 bg-white border-t border-gray-200 w-full z-40 overflow-hidden">
           <div className="flex overflow-x-auto no-scrollbar w-full">
             {daXianList.map((item: any) => {
               const isActive = daXianSeq === item.seq;
@@ -1055,7 +1260,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       )}
 
       {mode !== 'divination' && daXianList.length > 0 && (
-        <div className="shrink-0 bg-slate-50 border-t border-gray-200 w-full z-40 overflow-hidden pb-[env(safe-area-inset-bottom)]">
+        <div className="hidden sm:block shrink-0 bg-slate-50 border-t border-gray-200 w-full z-40 overflow-hidden pb-[env(safe-area-inset-bottom)]">
           <div className="flex overflow-x-auto no-scrollbar w-full pt-0.5 pb-1">
             {liuNianList.map((item) => {
               const isActive = liuNianYear === item.year;
@@ -1073,6 +1278,43 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
                 </button>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {mobileGuideStep !== null && mobileGuideRect && (
+        <div className="sm:hidden fixed inset-0 z-[300] pointer-events-auto">
+          <div className="absolute inset-0 bg-black/35"></div>
+          <div
+            className="absolute rounded-xl border-2 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.35)] pointer-events-none"
+            style={{
+              left: mobileGuideRect.left - 6,
+              top: mobileGuideRect.top - 6,
+              width: mobileGuideRect.width + 12,
+              height: mobileGuideRect.height + 12,
+            }}
+          ></div>
+          <div
+            className="absolute left-4 right-4 bg-white rounded-xl shadow-2xl border border-slate-200 p-4"
+            style={{
+              top: mobileGuideRect.top > 180 ? mobileGuideRect.top - 166 : mobileGuideRect.bottom + 18,
+            }}
+          >
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div>
+                <h3 className="text-base font-bold text-slate-800">{mobileGuideCopy.title}</h3>
+                <p className="text-sm text-slate-600 leading-relaxed mt-1">{mobileGuideCopy.body}</p>
+              </div>
+              <button onClick={finishMobileLimitGuide} className="text-slate-400 hover:text-slate-600 p-1">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex items-center justify-between pt-2">
+              <span className="text-xs font-bold text-slate-400">{mobileGuideStep + 1} / 3</span>
+              <button onClick={nextMobileLimitGuide} className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-bold shadow-sm">
+                {mobileGuideCopy.action}
+              </button>
+            </div>
           </div>
         </div>
       )}
