@@ -1,13 +1,15 @@
 // FILE: src/components/Chart/DualChart.tsx
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PalaceGrid, type SiHuaTrace } from './PalaceGrid';
 import type { SiHuaClickPayload } from '../PalaceCard';
 import { ZiWeiEngine } from '../../logic/engine';
 import { GAN, SIHUA_TABLE, ZHI, PALACE_NAMES } from '../../logic/constants';
-import { Loader2, ChevronLeft, Lock, Unlock, ArrowRightLeft } from 'lucide-react';
+import { Loader2, ChevronLeft, Lock, Unlock, ArrowRightLeft, PenLine } from 'lucide-react';
 import { Solar, Lunar, LunarYear } from 'lunar-typescript';
 import type { Client } from '../../db';
+import { WhiteboardOverlay } from '../Whiteboard/WhiteboardOverlay';
+import { exportAndShareWhiteboard } from '../../logic/whiteboardExport';
 
 interface DualChartProps {
   onBack?: () => void;
@@ -83,6 +85,7 @@ const calcNextHour = (currentHour: number, delta: number) => {
 export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const dualCaptureRef = useRef<HTMLDivElement>(null);
   
   const clientA = location.state?.clientA as Client;
   const clientB = location.state?.clientB as Client;
@@ -94,6 +97,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   }, [clientA, clientB, navigate]);
 
   const [isLocked, setIsLocked] = useState(true);
+  const [isWhiteboardActive, setIsWhiteboardActive] = useState(false);
   const [activeSide, setActiveSide] = useState<'A' | 'B' | null>(null);
   const [flyingPalace, setFlyingPalace] = useState<number | null>(null);
   const [activeSiHuaTraceA, setActiveSiHuaTraceA] = useState<SiHuaTrace | null>(null);
@@ -397,6 +401,43 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   const isCurrentRevB = liuYearB !== null ? isLiuRevB : (daSeqB >= 0 ? isDaRevB : isBenRevB);
   const reverseFlagsB = { da: isDaRevB, liu: isLiuRevB, yue: false, ri: false, ben: isBenRevB };
 
+  const whiteboardStorageKey = useMemo(() => [
+      'dual',
+      clientA?.id || 'temporary-a',
+      clientB?.id || 'temporary-b',
+      hourA,
+      hourB,
+      daSeqA,
+      daSeqB,
+      liuYearA ?? 'none',
+      liuYearB ?? 'none',
+      liuMonthA ?? 'none',
+      liuMonthB ?? 'none',
+      liuDayA ?? 'none',
+      liuDayB ?? 'none',
+      isTwinA ? 'twin-a' : 'normal-a',
+      isTwinB ? 'twin-b' : 'normal-b',
+      isCurrentRevA ? 'reversed-a' : 'forward-a',
+      isCurrentRevB ? 'reversed-b' : 'forward-b',
+  ].join(':'), [
+      clientA?.id,
+      clientB?.id,
+      daSeqA,
+      daSeqB,
+      hourA,
+      hourB,
+      isCurrentRevA,
+      isCurrentRevB,
+      isTwinA,
+      isTwinB,
+      liuDayA,
+      liuDayB,
+      liuMonthA,
+      liuMonthB,
+      liuYearA,
+      liuYearB,
+  ]);
+
   // 同步連動設定
   const handleSetLiuYearA = (year: number | null) => {
       setLiuYearA(year);
@@ -676,6 +717,14 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
 
   const dummyNav = () => {};
 
+  const handleWhiteboardExport = async () => {
+      if (!dualCaptureRef.current) return;
+      await exportAndShareWhiteboard(
+          dualCaptureRef.current,
+          `${clientA.name}_${clientB.name}_合盤_白板紀錄.png`
+      );
+  };
+
   const renderControlBar = (
       daList: any[], 
       daSeq: number, 
@@ -748,22 +797,33 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                 </div>
             </div>
 
-            <button 
-                onClick={() => setIsLocked(!isLocked)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${isLocked ? 'bg-amber-100 text-amber-700 border-amber-300' : 'bg-gray-100 text-gray-500 border-gray-300'}`}
-            >
-                {isLocked ? <Lock size={14} /> : <Unlock size={14} />}
-                {isLocked ? '時間鎖定' : '獨立操作'}
-            </button>
+            <div className="flex items-center gap-2">
+                <button
+                    onClick={() => setIsWhiteboardActive((current) => !current)}
+                    className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${isWhiteboardActive ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50'}`}
+                    title={isWhiteboardActive ? '結束白板書寫' : '開啟白板'}
+                >
+                    <PenLine size={15} /> 白板
+                </button>
+                <button
+                    onClick={() => setIsLocked(!isLocked)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${isLocked ? 'bg-amber-100 text-amber-700 border-amber-300' : 'bg-gray-100 text-gray-500 border-gray-300'}`}
+                >
+                    {isLocked ? <Lock size={14} /> : <Unlock size={14} />}
+                    {isLocked ? '時間鎖定' : '獨立操作'}
+                </button>
+            </div>
         </div>
 
         {/* Dual Grid Container */}
-        <div className="flex-1 flex overflow-hidden relative">
+        <div className="flex-1 flex flex-col overflow-hidden relative">
+          <div ref={dualCaptureRef} className="flex-1 flex overflow-hidden relative min-h-0">
             
             {/* Left Chart (A) */}
             <div className="flex-1 flex flex-col border-r-2 border-gray-300 relative min-w-0">
                 <div className="flex-1 relative min-h-0">
                     <PalaceGrid
+                        presentationScale={isWhiteboardActive ? 1.1 : 1}
                         client={clientA}
                         chartData={chartA}
                         relationships={[]}
@@ -838,13 +898,13 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         liuDayIdx={liuDayIdxA}
                     />
                 </div>
-                {renderControlBar(daListA, daSeqA, setDaSeqA, setLiuYearA, setLiuYearB, engineA!, chartA, liuYearA, 'A', currentRealTimeA)}
             </div>
 
             {/* Right Chart (B) */}
             <div className="flex-1 flex flex-col relative min-w-0">
                 <div className="flex-1 relative min-h-0">
                     <PalaceGrid
+                        presentationScale={isWhiteboardActive ? 1.1 : 1}
                         client={clientB}
                         chartData={chartB}
                         relationships={[]}
@@ -919,9 +979,24 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         liuDayIdx={liuDayIdxB}
                     />
                 </div>
-                {renderControlBar(daListB, daSeqB, setDaSeqB, setLiuYearB, setLiuYearA, engineB!, chartB, liuYearB, 'B', currentRealTimeB)}
             </div>
 
+            <WhiteboardOverlay
+                active={isWhiteboardActive}
+                storageKey={whiteboardStorageKey}
+                onDone={() => setIsWhiteboardActive(false)}
+                onExport={handleWhiteboardExport}
+            />
+          </div>
+
+          <div className="shrink-0 flex w-full">
+            <div className="flex-1 min-w-0 border-r-2 border-gray-300">
+              {renderControlBar(daListA, daSeqA, setDaSeqA, setLiuYearA, setLiuYearB, engineA!, chartA, liuYearA, 'A', currentRealTimeA)}
+            </div>
+            <div className="flex-1 min-w-0">
+              {renderControlBar(daListB, daSeqB, setDaSeqB, setLiuYearB, setLiuYearA, engineB!, chartB, liuYearB, 'B', currentRealTimeB)}
+            </div>
+          </div>
         </div>
     </div>
   );

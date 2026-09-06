@@ -112,6 +112,9 @@ interface PalaceGridProps {
 
   liuMonthIdx?: number;
   liuDayIdx?: number;
+
+  /** 白板講解時放大盤面內容，但維持宮位格線與畫布的外部尺寸不變。 */
+  presentationScale?: number;
 }
 
 const mod12 = (n: number) => ((n % 12) + 12) % 12;
@@ -197,6 +200,7 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
       currentRealTime,
       liuMonthIdx = -1,
       liuDayIdx = -1,
+      presentationScale = 1,
     },
     ref
   ) => {
@@ -248,8 +252,23 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
       getIsBenMingMing,
     ]);
 
+    const safePresentationScale = Math.min(1.3, Math.max(1, presentationScale));
+    const presentationStyle = safePresentationScale > 1
+      ? {
+          width: `${100 / safePresentationScale}%`,
+          height: `${100 / safePresentationScale}%`,
+          transform: `scale(${safePresentationScale})`,
+          transformOrigin: 'top left',
+        }
+      : undefined;
+
     return (
-      <div ref={ref} className="w-full h-full bg-white border-2 border-gray-800 shadow-xl z-10 relative pt-2" onClick={onBlankClick}>
+      <div
+        ref={ref}
+        className="w-full h-full bg-white border-2 border-gray-800 shadow-xl z-10 relative pt-2"
+        style={presentationStyle}
+        onClick={onBlankClick}
+      >
         <div className="relative w-full h-full grid grid-cols-4 grid-rows-4">
           <svg className="absolute inset-0 w-full h-full pointer-events-none z-[200]">
             {selectedPalace !== null &&
