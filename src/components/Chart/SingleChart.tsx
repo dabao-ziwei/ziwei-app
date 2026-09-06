@@ -19,7 +19,7 @@ import {
 } from '../../db';
 import { ZiWeiEngine } from '../../logic/engine';
 import { GAN, ZHI, PALACE_NAMES, SIHUA_TABLE } from '../../logic/constants';
-import { Loader2, UserPlus, X, ChevronLeft, Camera, Users, Compass, Sparkles, MessageCircle, Star } from 'lucide-react';
+import { Loader2, UserPlus, X, ChevronLeft, Camera, Users, Compass, Sparkles, MessageCircle, Star, PenLine } from 'lucide-react';
 import { getFeaturePermission } from '../../logic/permissions';
 import { Lunar, LunarYear } from 'lunar-typescript';
 import { YearlyAnalysisBoard } from './YearlyAnalysisBoard';
@@ -27,6 +27,8 @@ import { YearlyAnalysisDrawer } from './YearlyAnalysisDrawer';
 import { scanYearlyAdvice } from '../../logic/advice/yearAdvice';
 import { usePaywall, type PaywallMode, FEATURE_YEARLY_ADVICE_ENABLED, DIVINATION_COST } from '../../hooks/usePaywall';
 import PaywallModal from '../Paywall/PaywallModal';
+import { WhiteboardOverlay } from '../Whiteboard/WhiteboardOverlay';
+import { exportAndShareWhiteboard } from '../../logic/whiteboardExport';
 
 const OFFICIAL_SITE_URL = 'https://www.dabao.life';
 const MOBILE_LIMIT_GUIDE_KEY = 'ziwei_mobile_limit_guide_seen_v2';
@@ -106,6 +108,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const [showXiaoXian, setShowXiaoXian] = useState<boolean>(false);
   const [isTwinMode, setIsTwinMode] = useState<boolean>(false);
   const [showCompass, setShowCompass] = useState<boolean>(false);
+  const [isWhiteboardActive, setIsWhiteboardActive] = useState(false);
 
   const [reverseMap, setReverseMap] = useState<Record<string, boolean>>({});
 
@@ -618,6 +621,35 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   else if (daXianSeq >= 0) isCurrentReverseOn = isDaRev;
   else isCurrentReverseOn = isBenRev; // [修正] 如果都沒有選，就看本命盤反轉狀態
 
+  const whiteboardStorageKey = useMemo(() => [
+    'single',
+    client?.id || 'temporary',
+    mode,
+    currentHour,
+    isTwinMode ? 'twin' : 'normal',
+    isCurrentReverseOn ? 'reversed' : 'forward',
+    showCompass ? 'compass' : 'no-compass',
+    daXianSeq,
+    liuNianYear ?? 'none',
+    liuMonth ?? 'none',
+    isLiuMonthLeap ? 'leap' : 'regular',
+    liuDay ?? 'none',
+    externalGan ?? 'none',
+  ].join(':'), [
+    client?.id,
+    currentHour,
+    daXianSeq,
+    externalGan,
+    isCurrentReverseOn,
+    isLiuMonthLeap,
+    isTwinMode,
+    liuDay,
+    liuMonth,
+    liuNianYear,
+    mode,
+    showCompass,
+  ]);
+
   const handleDaXianClick = (seq: number) => {
     setDaXianSeq(daXianSeq === seq ? -1 : seq);
     setLiuNianYear(null);
@@ -907,7 +939,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       const dataUrl = await toPng(chartRef.current, {
         cacheBust: true,
         backgroundColor: '#ffffff',
-        filter: (node) => !(node.classList?.contains('no-screenshot')),
+        filter: (node) => !node.classList?.contains('no-screenshot') && !node.classList?.contains('whiteboard-layer'),
       });
       const link = document.createElement('a');
       let suffix = mode === 'divination' ? '_紫占' : '_本命盤';
@@ -918,6 +950,13 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
     } catch (err) {
       console.error('Download failed:', err);
     }
+  };
+
+  const handleWhiteboardExport = async () => {
+    if (!chartRef.current) return;
+    let suffix = mode === 'divination' ? '_紫占' : '_本命盤';
+    if (isCurrentReverseOn) suffix += '_顛倒';
+    await exportAndShareWhiteboard(chartRef.current, `${client!.name}${suffix}_白板紀錄.png`);
   };
 
   if (loading || !client || !baseChartData || !baseEngine || !chartData) {
@@ -948,6 +987,17 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
               title="顯示方位"
             >
               <Compass size={16} />
+            </button>
+
+            <button
+              onClick={() => setIsWhiteboardActive((current) => !current)}
+              className={`relative px-3 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all text-sm font-bold shadow-sm border
+                ${isWhiteboardActive ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50'}
+              `}
+              title={isWhiteboardActive ? '結束白板書寫' : '開啟白板'}
+            >
+              <PenLine size={16} />
+              <span>白板</span>
             </button>
 
             {(!client?.id?.startsWith('temp-')) && (
@@ -1088,8 +1138,9 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
           </div>
         )}
 
+        <div ref={chartRef} className="relative h-full w-full">
         <PalaceGrid
-          ref={chartRef}
+          presentationScale={isWhiteboardActive ? 1.22 : 1}
           client={client!}
           chartData={chartData}
           relationships={relationships}
@@ -1160,6 +1211,13 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
             setIsYearlyDrawerOpen(true);
           }}
         />
+        <WhiteboardOverlay
+          active={isWhiteboardActive}
+          storageKey={whiteboardStorageKey}
+          onDone={() => setIsWhiteboardActive(false)}
+          onExport={handleWhiteboardExport}
+        />
+        </div>
       </div>
 
       {mode !== 'divination' && daXianList.length > 0 && (
