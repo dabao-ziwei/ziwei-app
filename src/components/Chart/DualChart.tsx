@@ -7,7 +7,7 @@ import { ZiWeiEngine } from '../../logic/engine';
 import { GAN, SIHUA_TABLE, ZHI, PALACE_NAMES } from '../../logic/constants';
 import { Loader2, ChevronLeft, Lock, Unlock, ArrowRightLeft, PenLine } from 'lucide-react';
 import { Solar, Lunar, LunarYear } from 'lunar-typescript';
-import type { Client } from '../../db';
+import { checkIsSuperAdmin, getMyProfile, type Client, type UserProfile } from '../../db';
 import { WhiteboardOverlay } from '../Whiteboard/WhiteboardOverlay';
 import { exportAndShareWhiteboard } from '../../logic/whiteboardExport';
 
@@ -97,6 +97,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   }, [clientA, clientB, navigate]);
 
   const [isLocked, setIsLocked] = useState(true);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isWhiteboardActive, setIsWhiteboardActive] = useState(false);
   const [activeSide, setActiveSide] = useState<'A' | 'B' | null>(null);
   const [flyingPalace, setFlyingPalace] = useState<number | null>(null);
@@ -125,6 +126,12 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   const [liuMonthB, setLiuMonthB] = useState<number | null>(null);
   const [isLiuMonthLeapB, setIsLiuMonthLeapB] = useState<boolean>(false);
   const [liuDayB, setLiuDayB] = useState<number | null>(null);
+
+  useEffect(() => {
+      getMyProfile().then(setUserProfile);
+  }, []);
+
+  const canUseWhiteboard = useMemo(() => checkIsSuperAdmin(userProfile?.email), [userProfile?.email]);
 
   const engineA = useMemo(() => clientA ? new ZiWeiEngine(clientA.birthYear, clientA.birthMonth, clientA.birthDay, hourA, clientA.birthMinute, clientA.gender) : null, [clientA, hourA]);
   const engineB = useMemo(() => clientB ? new ZiWeiEngine(clientB.birthYear, clientB.birthMonth, clientB.birthDay, hourB, clientB.birthMinute, clientB.gender) : null, [clientB, hourB]);
@@ -798,13 +805,15 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
             </div>
 
             <div className="flex items-center gap-2">
-                <button
-                    onClick={() => setIsWhiteboardActive((current) => !current)}
-                    className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${isWhiteboardActive ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50'}`}
-                    title={isWhiteboardActive ? '結束白板書寫' : '開啟白板'}
-                >
-                    <PenLine size={15} /> 白板
-                </button>
+                {canUseWhiteboard && (
+                    <button
+                        onClick={() => setIsWhiteboardActive((current) => !current)}
+                        className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${isWhiteboardActive ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50'}`}
+                        title={isWhiteboardActive ? '結束白板書寫' : '開啟白板'}
+                    >
+                        <PenLine size={15} /> 白板
+                    </button>
+                )}
                 <button
                     onClick={() => setIsLocked(!isLocked)}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${isLocked ? 'bg-amber-100 text-amber-700 border-amber-300' : 'bg-gray-100 text-gray-500 border-gray-300'}`}
@@ -823,7 +832,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
             <div className="flex-1 flex flex-col border-r-2 border-gray-300 relative min-w-0">
                 <div className="flex-1 relative min-h-0">
                     <PalaceGrid
-                        presentationScale={isWhiteboardActive ? 1.1 : 1}
+                        presentationScale={canUseWhiteboard && isWhiteboardActive ? 1.1 : 1}
                         client={clientA}
                         chartData={chartA}
                         relationships={[]}
@@ -904,7 +913,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
             <div className="flex-1 flex flex-col relative min-w-0">
                 <div className="flex-1 relative min-h-0">
                     <PalaceGrid
-                        presentationScale={isWhiteboardActive ? 1.1 : 1}
+                        presentationScale={canUseWhiteboard && isWhiteboardActive ? 1.1 : 1}
                         client={clientB}
                         chartData={chartB}
                         relationships={[]}
@@ -981,12 +990,14 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                 </div>
             </div>
 
-            <WhiteboardOverlay
-                active={isWhiteboardActive}
-                storageKey={whiteboardStorageKey}
-                onDone={() => setIsWhiteboardActive(false)}
-                onExport={handleWhiteboardExport}
-            />
+            {canUseWhiteboard && (
+                <WhiteboardOverlay
+                    active={isWhiteboardActive}
+                    storageKey={whiteboardStorageKey}
+                    onDone={() => setIsWhiteboardActive(false)}
+                    onExport={handleWhiteboardExport}
+                />
+            )}
           </div>
 
           <div className="shrink-0 flex w-full">

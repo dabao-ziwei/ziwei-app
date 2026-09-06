@@ -15,7 +15,8 @@ import {
   type YearAdviceRule,
   consumeDivinationV2,
   issueGuestToken,
-  toggleFavorite
+  toggleFavorite,
+  checkIsSuperAdmin,
 } from '../../db';
 import { ZiWeiEngine } from '../../logic/engine';
 import { GAN, ZHI, PALACE_NAMES, SIHUA_TABLE } from '../../logic/constants';
@@ -187,6 +188,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const canXiao = useMemo(() => getFeaturePermission(userProfile, 'xiao_limit'), [userProfile]);
   const canLiuMonth = useMemo(() => getFeaturePermission(userProfile, 'liu_month'), [userProfile]);
   const canLiuDay = useMemo(() => getFeaturePermission(userProfile, 'liu_day'), [userProfile]);
+  const canUseWhiteboard = useMemo(() => checkIsSuperAdmin(userProfile?.email), [userProfile?.email]);
 
   const baseEngine = useMemo(() => {
     if (!client || currentHour === -1) return null;
@@ -989,16 +991,18 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
               <Compass size={16} />
             </button>
 
-            <button
-              onClick={() => setIsWhiteboardActive((current) => !current)}
-              className={`relative px-3 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all text-sm font-bold shadow-sm border
-                ${isWhiteboardActive ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50'}
-              `}
-              title={isWhiteboardActive ? '結束白板書寫' : '開啟白板'}
-            >
-              <PenLine size={16} />
-              <span>白板</span>
-            </button>
+            {canUseWhiteboard && (
+              <button
+                onClick={() => setIsWhiteboardActive((current) => !current)}
+                className={`relative px-3 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all text-sm font-bold shadow-sm border
+                  ${isWhiteboardActive ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50'}
+                `}
+                title={isWhiteboardActive ? '結束白板書寫' : '開啟白板'}
+              >
+                <PenLine size={16} />
+                <span>白板</span>
+              </button>
+            )}
 
             {(!client?.id?.startsWith('temp-')) && (
               <button
@@ -1140,7 +1144,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
         <div ref={chartRef} className="relative h-full w-full">
         <PalaceGrid
-          presentationScale={isWhiteboardActive ? 1.22 : 1}
+          presentationScale={canUseWhiteboard && isWhiteboardActive ? 1.22 : 1}
           client={client!}
           chartData={chartData}
           relationships={relationships}
@@ -1211,12 +1215,14 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
             setIsYearlyDrawerOpen(true);
           }}
         />
-        <WhiteboardOverlay
-          active={isWhiteboardActive}
-          storageKey={whiteboardStorageKey}
-          onDone={() => setIsWhiteboardActive(false)}
-          onExport={handleWhiteboardExport}
-        />
+        {canUseWhiteboard && (
+          <WhiteboardOverlay
+            active={isWhiteboardActive}
+            storageKey={whiteboardStorageKey}
+            onDone={() => setIsWhiteboardActive(false)}
+            onExport={handleWhiteboardExport}
+          />
+        )}
         </div>
       </div>
 
