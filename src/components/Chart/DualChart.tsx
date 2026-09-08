@@ -408,42 +408,12 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   const isCurrentRevB = liuYearB !== null ? isLiuRevB : (daSeqB >= 0 ? isDaRevB : isBenRevB);
   const reverseFlagsB = { da: isDaRevB, liu: isLiuRevB, yue: false, ri: false, ben: isBenRevB };
 
+  // 同一張合盤共用一份白板，切換大限／流年時不另開草稿。
   const whiteboardStorageKey = useMemo(() => [
-      'dual',
-      clientA?.id || 'temporary-a',
-      clientB?.id || 'temporary-b',
-      hourA,
-      hourB,
-      daSeqA,
-      daSeqB,
-      liuYearA ?? 'none',
-      liuYearB ?? 'none',
-      liuMonthA ?? 'none',
-      liuMonthB ?? 'none',
-      liuDayA ?? 'none',
-      liuDayB ?? 'none',
-      isTwinA ? 'twin-a' : 'normal-a',
-      isTwinB ? 'twin-b' : 'normal-b',
-      isCurrentRevA ? 'reversed-a' : 'forward-a',
-      isCurrentRevB ? 'reversed-b' : 'forward-b',
-  ].join(':'), [
-      clientA?.id,
-      clientB?.id,
-      daSeqA,
-      daSeqB,
-      hourA,
-      hourB,
-      isCurrentRevA,
-      isCurrentRevB,
-      isTwinA,
-      isTwinB,
-      liuDayA,
-      liuDayB,
-      liuMonthA,
-      liuMonthB,
-      liuYearA,
-      liuYearB,
-  ]);
+    'dual',
+    clientA?.id || 'temporary-a',
+    clientB?.id || 'temporary-b',
+  ].join(':'), [clientA?.id, clientB?.id]);
 
   // 同步連動設定
   const handleSetLiuYearA = (year: number | null) => {

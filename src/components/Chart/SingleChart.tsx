@@ -623,34 +623,12 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   else if (daXianSeq >= 0) isCurrentReverseOn = isDaRev;
   else isCurrentReverseOn = isBenRev; // [修正] 如果都沒有選，就看本命盤反轉狀態
 
+  // 同一張命盤共用一份白板，切換大限／流年時不另開草稿。
   const whiteboardStorageKey = useMemo(() => [
     'single',
     client?.id || 'temporary',
     mode,
-    currentHour,
-    isTwinMode ? 'twin' : 'normal',
-    isCurrentReverseOn ? 'reversed' : 'forward',
-    showCompass ? 'compass' : 'no-compass',
-    daXianSeq,
-    liuNianYear ?? 'none',
-    liuMonth ?? 'none',
-    isLiuMonthLeap ? 'leap' : 'regular',
-    liuDay ?? 'none',
-    externalGan ?? 'none',
-  ].join(':'), [
-    client?.id,
-    currentHour,
-    daXianSeq,
-    externalGan,
-    isCurrentReverseOn,
-    isLiuMonthLeap,
-    isTwinMode,
-    liuDay,
-    liuMonth,
-    liuNianYear,
-    mode,
-    showCompass,
-  ]);
+  ].join(':'), [client?.id, mode]);
 
   const handleDaXianClick = (seq: number) => {
     setDaXianSeq(daXianSeq === seq ? -1 : seq);
