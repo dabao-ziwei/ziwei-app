@@ -30,6 +30,7 @@ import { usePaywall, type PaywallMode, FEATURE_YEARLY_ADVICE_ENABLED, DIVINATION
 import PaywallModal from '../Paywall/PaywallModal';
 import { WhiteboardOverlay } from '../Whiteboard/WhiteboardOverlay';
 import { exportAndShareWhiteboard } from '../../logic/whiteboardExport';
+import { useWhiteboardMode } from '../../hooks/useWhiteboardMode';
 
 const OFFICIAL_SITE_URL = 'https://www.dabao.life';
 const MOBILE_LIMIT_GUIDE_KEY = 'ziwei_mobile_limit_guide_seen_v2';
@@ -109,7 +110,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const [showXiaoXian, setShowXiaoXian] = useState<boolean>(false);
   const [isTwinMode, setIsTwinMode] = useState<boolean>(false);
   const [showCompass, setShowCompass] = useState<boolean>(false);
-  const [isWhiteboardActive, setIsWhiteboardActive] = useState(false);
+  const { finishWhiteboard, isWhiteboardActive, toggleWhiteboard } = useWhiteboardMode();
 
   const [reverseMap, setReverseMap] = useState<Record<string, boolean>>({});
 
@@ -623,34 +624,12 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   else if (daXianSeq >= 0) isCurrentReverseOn = isDaRev;
   else isCurrentReverseOn = isBenRev; // [修正] 如果都沒有選，就看本命盤反轉狀態
 
+  // 同一張命盤共用一份白板，切換大限／流年時不另開草稿。
   const whiteboardStorageKey = useMemo(() => [
     'single',
     client?.id || 'temporary',
     mode,
-    currentHour,
-    isTwinMode ? 'twin' : 'normal',
-    isCurrentReverseOn ? 'reversed' : 'forward',
-    showCompass ? 'compass' : 'no-compass',
-    daXianSeq,
-    liuNianYear ?? 'none',
-    liuMonth ?? 'none',
-    isLiuMonthLeap ? 'leap' : 'regular',
-    liuDay ?? 'none',
-    externalGan ?? 'none',
-  ].join(':'), [
-    client?.id,
-    currentHour,
-    daXianSeq,
-    externalGan,
-    isCurrentReverseOn,
-    isLiuMonthLeap,
-    isTwinMode,
-    liuDay,
-    liuMonth,
-    liuNianYear,
-    mode,
-    showCompass,
-  ]);
+  ].join(':'), [client?.id, mode]);
 
   const handleDaXianClick = (seq: number) => {
     setDaXianSeq(daXianSeq === seq ? -1 : seq);
@@ -993,7 +972,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
             {canUseWhiteboard && (
               <button
-                onClick={() => setIsWhiteboardActive((current) => !current)}
+                onClick={toggleWhiteboard}
                 className={`relative px-3 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all text-sm font-bold shadow-sm border
                   ${isWhiteboardActive ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50'}
                 `}
@@ -1219,7 +1198,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
           <WhiteboardOverlay
             active={isWhiteboardActive}
             storageKey={whiteboardStorageKey}
-            onDone={() => setIsWhiteboardActive(false)}
+            onDone={finishWhiteboard}
             onExport={handleWhiteboardExport}
           />
         )}

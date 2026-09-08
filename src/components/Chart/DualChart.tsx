@@ -10,6 +10,7 @@ import { Solar, Lunar, LunarYear } from 'lunar-typescript';
 import { checkIsSuperAdmin, getMyProfile, type Client, type UserProfile } from '../../db';
 import { WhiteboardOverlay } from '../Whiteboard/WhiteboardOverlay';
 import { exportAndShareWhiteboard } from '../../logic/whiteboardExport';
+import { useWhiteboardMode } from '../../hooks/useWhiteboardMode';
 
 interface DualChartProps {
   onBack?: () => void;
@@ -98,7 +99,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
 
   const [isLocked, setIsLocked] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [isWhiteboardActive, setIsWhiteboardActive] = useState(false);
+  const { finishWhiteboard, isWhiteboardActive, toggleWhiteboard } = useWhiteboardMode();
   const [activeSide, setActiveSide] = useState<'A' | 'B' | null>(null);
   const [flyingPalace, setFlyingPalace] = useState<number | null>(null);
   const [activeSiHuaTraceA, setActiveSiHuaTraceA] = useState<SiHuaTrace | null>(null);
@@ -408,42 +409,12 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   const isCurrentRevB = liuYearB !== null ? isLiuRevB : (daSeqB >= 0 ? isDaRevB : isBenRevB);
   const reverseFlagsB = { da: isDaRevB, liu: isLiuRevB, yue: false, ri: false, ben: isBenRevB };
 
+  // 同一張合盤共用一份白板，切換大限／流年時不另開草稿。
   const whiteboardStorageKey = useMemo(() => [
-      'dual',
-      clientA?.id || 'temporary-a',
-      clientB?.id || 'temporary-b',
-      hourA,
-      hourB,
-      daSeqA,
-      daSeqB,
-      liuYearA ?? 'none',
-      liuYearB ?? 'none',
-      liuMonthA ?? 'none',
-      liuMonthB ?? 'none',
-      liuDayA ?? 'none',
-      liuDayB ?? 'none',
-      isTwinA ? 'twin-a' : 'normal-a',
-      isTwinB ? 'twin-b' : 'normal-b',
-      isCurrentRevA ? 'reversed-a' : 'forward-a',
-      isCurrentRevB ? 'reversed-b' : 'forward-b',
-  ].join(':'), [
-      clientA?.id,
-      clientB?.id,
-      daSeqA,
-      daSeqB,
-      hourA,
-      hourB,
-      isCurrentRevA,
-      isCurrentRevB,
-      isTwinA,
-      isTwinB,
-      liuDayA,
-      liuDayB,
-      liuMonthA,
-      liuMonthB,
-      liuYearA,
-      liuYearB,
-  ]);
+    'dual',
+    clientA?.id || 'temporary-a',
+    clientB?.id || 'temporary-b',
+  ].join(':'), [clientA?.id, clientB?.id]);
 
   // 同步連動設定
   const handleSetLiuYearA = (year: number | null) => {
@@ -807,7 +778,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
             <div className="flex items-center gap-2">
                 {canUseWhiteboard && (
                     <button
-                        onClick={() => setIsWhiteboardActive((current) => !current)}
+                        onClick={toggleWhiteboard}
                         className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${isWhiteboardActive ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50'}`}
                         title={isWhiteboardActive ? '結束白板書寫' : '開啟白板'}
                     >
@@ -994,7 +965,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                 <WhiteboardOverlay
                     active={isWhiteboardActive}
                     storageKey={whiteboardStorageKey}
-                    onDone={() => setIsWhiteboardActive(false)}
+                    onDone={finishWhiteboard}
                     onExport={handleWhiteboardExport}
                 />
             )}

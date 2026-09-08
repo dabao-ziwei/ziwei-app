@@ -12,7 +12,7 @@ import {
 import {
   loadWhiteboardDraft,
   pruneWhiteboardDrafts,
-  removeWhiteboardDraft,
+  removeWhiteboardDraftScope,
   saveWhiteboardDraft,
 } from '../../logic/whiteboardStorage';
 import type {
@@ -188,6 +188,7 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
   const eraserChangedRef = useRef(false);
   const firstCanvasSizeRef = useRef<CanvasSize | null>(null);
   const loadedStorageKeyRef = useRef<string | null>(null);
+  const draftLoadVersionRef = useRef(0);
 
   const [strokes, setStrokes] = useState<WhiteboardStroke[]>([]);
   const [activeStroke, setActiveStroke] = useState<WhiteboardStroke | null>(null);
@@ -232,6 +233,8 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
 
   useEffect(() => {
     let cancelled = false;
+    const loadVersion = draftLoadVersionRef.current + 1;
+    draftLoadVersionRef.current = loadVersion;
     const previousKey = loadedStorageKeyRef.current;
     if (previousKey && previousKey !== storageKey) {
       void saveWhiteboardDraft(previousKey, strokesRef.current).catch((error) => {
@@ -245,7 +248,7 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
     firstCanvasSizeRef.current = null;
 
     void loadWhiteboardDraft(storageKey).then((savedStrokes) => {
-      if (cancelled) return;
+      if (cancelled || draftLoadVersionRef.current !== loadVersion) return;
       const rect = svgRef.current?.getBoundingClientRect();
       const referenceStroke = savedStrokes[0];
       firstCanvasSizeRef.current = referenceStroke
@@ -258,7 +261,7 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
       setLoadedKey(storageKey);
     }).catch((error) => {
       console.warn('白板草稿讀取失敗。', error);
-      if (!cancelled) {
+      if (!cancelled && draftLoadVersionRef.current === loadVersion) {
         loadedStorageKeyRef.current = storageKey;
         setLoadedKey(storageKey);
       }
@@ -428,9 +431,18 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
   };
 
   const clearAll = () => {
-    if (strokesRef.current.length === 0) return;
-    commitSnapshot([]);
-    void removeWhiteboardDraft(storageKey);
+    draftLoadVersionRef.current += 1;
+    loadedStorageKeyRef.current = storageKey;
+    setLoadedKey(storageKey);
+    activeStrokeRef.current = null;
+    setActiveStroke(null);
+    eraserStartRef.current = null;
+    eraserChangedRef.current = false;
+    resetHistory([]);
+    setSizeWarning(false);
+    void removeWhiteboardDraftScope(storageKey).catch((error) => {
+      console.warn('白板筆跡清除失敗。', error);
+    });
   };
 
   const handleExport = async () => {
@@ -473,59 +485,67 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
           className="no-screenshot pointer-events-auto fixed inset-x-0 top-0 z-[301] h-[56px] border-b border-slate-200 bg-white shadow-sm"
           aria-hidden="true"
         />
-        <div className="no-screenshot pointer-events-auto fixed top-[5px] left-1/2 z-[302] -translate-x-1/2 max-w-[calc(100%-16px)] rounded-xl border border-slate-300 bg-white px-1.5 py-1 shadow-lg">
-          <div className="flex max-w-full items-center gap-1 overflow-x-auto scrollbar-hide">
-            <button
-              onClick={() => setTool('select')}
-              className={`flex shrink-0 items-center gap-1 rounded-lg px-2 py-2 ${tool === 'select' ? 'bg-sky-100 text-sky-700' : 'text-slate-600 hover:bg-slate-100'}`}
-              title="操作命盤"
-            >
-              <MousePointer2 size={18} />
-              <span className="hidden text-xs font-bold sm:inline">操作</span>
-            </button>
-
-            <div className="h-7 w-px shrink-0 bg-slate-200" />
-
-            <button onClick={() => setTool('pen')} className={`p-2 rounded-lg ${tool === 'pen' ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-100'}`} title="畫筆"><Pencil size={18} /></button>
-
-            <div className="h-7 w-px shrink-0 bg-slate-200" />
-
-            {COLORS.map((option) => (
+        <div className="no-screenshot pointer-events-auto fixed inset-x-2 top-[5px] z-[302] flex items-center gap-1 rounded-xl border border-slate-300 bg-white px-1.5 py-1 shadow-lg">
+          <div className="min-w-0 flex-1 overflow-x-auto scrollbar-hide">
+            <div className="flex w-max items-center gap-1">
               <button
-                key={option}
-                onClick={() => { setColor(option); setTool('pen'); }}
-                className={`h-7 w-7 shrink-0 rounded-full border-2 ${color === option && tool !== 'highlighter' ? 'border-slate-900 ring-2 ring-slate-300' : 'border-white'}`}
-                style={{ backgroundColor: option }}
-                title="選擇畫筆顏色"
-              />
-            ))}
-
-            <div className="h-7 w-px shrink-0 bg-slate-200" />
-
-            {SIZES.map((option) => (
-              <button
-                key={option}
-                onClick={() => setSize(option)}
-                className={`h-8 w-8 shrink-0 rounded-lg flex items-center justify-center ${size === option ? 'bg-slate-200' : 'hover:bg-slate-100'}`}
-                title={`筆畫粗細 ${option}`}
+                onClick={() => setTool('select')}
+                className={`flex shrink-0 items-center gap-1 rounded-lg px-2 py-2 ${tool === 'select' ? 'bg-sky-100 text-sky-700' : 'text-slate-600 hover:bg-slate-100'}`}
+                title="操作命盤"
               >
-                <span className="rounded-full bg-slate-800" style={{ width: option + 3, height: option + 3 }} />
+                <MousePointer2 size={18} />
+                <span className="hidden text-xs font-bold sm:inline">操作</span>
               </button>
-            ))}
 
-            <div className="h-7 w-px shrink-0 bg-slate-200" />
+              <div className="h-7 w-px shrink-0 bg-slate-200" />
 
-            <button onClick={undo} disabled={historyIndex <= 0} className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-30" title="復原"><Undo2 size={18} /></button>
-            <button onClick={redo} disabled={historyIndex >= historyLength - 1} className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-30" title="重做"><Redo2 size={18} /></button>
-            <button onClick={clearAll} disabled={strokes.length === 0} className="p-2 rounded-lg text-rose-600 hover:bg-rose-50 disabled:opacity-30" title="清除全部"><Trash2 size={18} /></button>
+              <button onClick={() => setTool('pen')} className={`p-2 rounded-lg ${tool === 'pen' ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-100'}`} title="畫筆"><Pencil size={18} /></button>
 
-            <button onClick={handleExport} disabled={strokes.length === 0 || isExporting} className="ml-1 flex shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-40" title="匯出或分享白板圖">
-              <Download size={16} /> {isExporting ? '匯出中' : '匯出／分享'}
-            </button>
-            <button onClick={onDone} className="flex shrink-0 items-center gap-1 rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-white hover:bg-slate-900" title="完成書寫並回到命盤操作">
-              <Check size={16} /> 完成
-            </button>
+              <div className="h-7 w-px shrink-0 bg-slate-200" />
+
+              {COLORS.map((option) => (
+                <button
+                  key={option}
+                  onClick={() => { setColor(option); setTool('pen'); }}
+                  className={`h-7 w-7 shrink-0 rounded-full border-2 ${color === option && tool !== 'highlighter' ? 'border-slate-900 ring-2 ring-slate-300' : 'border-white'}`}
+                  style={{ backgroundColor: option }}
+                  title="選擇畫筆顏色"
+                />
+              ))}
+
+              <div className="h-7 w-px shrink-0 bg-slate-200" />
+
+              {SIZES.map((option) => (
+                <button
+                  key={option}
+                  onClick={() => setSize(option)}
+                  className={`h-8 w-8 shrink-0 rounded-lg flex items-center justify-center ${size === option ? 'bg-slate-200' : 'hover:bg-slate-100'}`}
+                  title={`筆畫粗細 ${option}`}
+                >
+                  <span className="rounded-full bg-slate-800" style={{ width: option + 3, height: option + 3 }} />
+                </button>
+              ))}
+
+              <div className="h-7 w-px shrink-0 bg-slate-200" />
+
+              <button onClick={undo} disabled={historyIndex <= 0} className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-30" title="復原"><Undo2 size={18} /></button>
+              <button onClick={redo} disabled={historyIndex >= historyLength - 1} className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-30" title="重做"><Redo2 size={18} /></button>
+              <button
+                onClick={clearAll}
+                className="flex shrink-0 items-center gap-1 rounded-lg px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50"
+                title="清空白板"
+              >
+                <Trash2 size={18} /> 清空白板
+              </button>
+
+              <button onClick={handleExport} disabled={strokes.length === 0 || isExporting} className="ml-1 flex shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-40" title="匯出或分享白板圖">
+                <Download size={16} /> {isExporting ? '匯出中' : '匯出／分享'}
+              </button>
+            </div>
           </div>
+          <button onClick={onDone} className="flex shrink-0 items-center gap-1 rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-white hover:bg-slate-900" title="完成書寫並回到命盤操作">
+            <Check size={16} /> 完成
+          </button>
         </div>
         {sizeWarning && (
           <div className="no-screenshot pointer-events-none fixed bottom-3 left-1/2 z-[302] -translate-x-1/2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-center text-[11px] font-bold text-amber-700 shadow-lg">

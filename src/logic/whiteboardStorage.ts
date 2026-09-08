@@ -41,11 +41,13 @@ export const saveWhiteboardDraft = async (key: string, strokes: WhiteboardStroke
   });
 };
 
-export const removeWhiteboardDraft = async (key: string): Promise<void> => {
-  await whiteboardDb.drafts.delete(key);
+export const removeWhiteboardDraftScope = async (scopeKey: string): Promise<void> => {
+  await whiteboardDb.transaction('rw', whiteboardDb.drafts, async () => {
+    await whiteboardDb.drafts.delete(scopeKey);
+    await whiteboardDb.drafts.where('key').startsWith(`${scopeKey}:`).delete();
+  });
 };
 
 export const pruneWhiteboardDrafts = async (): Promise<void> => {
   await whiteboardDb.drafts.where('updatedAt').below(Date.now() - DRAFT_TTL_MS).delete();
 };
-
