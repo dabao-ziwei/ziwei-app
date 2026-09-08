@@ -530,7 +530,13 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
 
               <button onClick={undo} disabled={historyIndex <= 0} className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-30" title="復原"><Undo2 size={18} /></button>
               <button onClick={redo} disabled={historyIndex >= historyLength - 1} className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-30" title="重做"><Redo2 size={18} /></button>
-              <button onClick={clearAll} className="p-2 rounded-lg text-rose-600 hover:bg-rose-50" title="清除全部"><Trash2 size={18} /></button>
+              <button
+                onClick={clearAll}
+                className="flex shrink-0 items-center gap-1 rounded-lg px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50"
+                title="清空白板"
+              >
+                <Trash2 size={18} /> 清空白板
+              </button>
 
               <button onClick={handleExport} disabled={strokes.length === 0 || isExporting} className="ml-1 flex shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-40" title="匯出或分享白板圖">
                 <Download size={16} /> {isExporting ? '匯出中' : '匯出／分享'}
