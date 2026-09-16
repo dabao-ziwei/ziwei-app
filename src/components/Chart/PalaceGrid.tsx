@@ -115,6 +115,8 @@ interface PalaceGridProps {
 
   /** 白板講解時放大盤面內容，但維持宮位格線與畫布的外部尺寸不變。 */
   presentationScale?: number;
+  /** 白板啟用時，宮位左下四分之一可點選三方四正，盤面禁用觸控拖曳。 */
+  whiteboardInteractionMode?: boolean;
 }
 
 const mod12 = (n: number) => ((n % 12) + 12) % 12;
@@ -201,6 +203,7 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
       liuMonthIdx = -1,
       liuDayIdx = -1,
       presentationScale = 1,
+      whiteboardInteractionMode = false,
     },
     ref
   ) => {
@@ -266,7 +269,7 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
       <div
         ref={ref}
         className="w-full h-full bg-white border-2 border-gray-800 shadow-xl z-10 relative pt-2"
-        style={presentationStyle}
+        style={{ ...presentationStyle, touchAction: whiteboardInteractionMode ? 'none' : undefined }}
         onClick={onBlankClick}
       >
         <div className="relative w-full h-full grid grid-cols-4 grid-rows-4">
@@ -361,7 +364,17 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
             return (
               <div
                 key={palaceIdx}
-                onClick={() => onPalaceClick(palaceIdx)}
+                onClick={(event) => {
+                  if (whiteboardInteractionMode) {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    const relativeX = event.clientX - rect.left;
+                    const relativeY = event.clientY - rect.top;
+                    const isLowerLeftHotZone = relativeX <= rect.width * 0.5
+                      && relativeY >= rect.height * 0.5;
+                    if (!isLowerLeftHotZone) return;
+                  }
+                  onPalaceClick(palaceIdx);
+                }}
                 className={`relative cursor-pointer transition-all duration-200 border border-gray-300 box-border overflow-visible
                   ${isConnected ? 'bg-red-50' : 'hover:bg-gray-50'}
                   ${isFlyingSource ? 'ring-4 ring-purple-400 z-50 animate-pulse' : ''}

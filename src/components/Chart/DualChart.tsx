@@ -804,6 +804,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                 <div className="flex-1 relative min-h-0">
                     <PalaceGrid
                         presentationScale={canUseWhiteboard && isWhiteboardActive ? 1.1 : 1}
+                        whiteboardInteractionMode={canUseWhiteboard && isWhiteboardActive}
                         client={clientA}
                         chartData={chartA}
                         relationships={[]}
@@ -885,6 +886,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                 <div className="flex-1 relative min-h-0">
                     <PalaceGrid
                         presentationScale={canUseWhiteboard && isWhiteboardActive ? 1.1 : 1}
+                        whiteboardInteractionMode={canUseWhiteboard && isWhiteboardActive}
                         client={clientB}
                         chartData={chartB}
                         relationships={[]}
@@ -965,6 +967,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                 <WhiteboardOverlay
                     active={isWhiteboardActive}
                     storageKey={whiteboardStorageKey}
+                    interactionRootRef={dualCaptureRef}
                     onDone={finishWhiteboard}
                     onExport={handleWhiteboardExport}
                 />
