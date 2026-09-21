@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getStroke } from 'perfect-freehand';
+import { attachWhiteboardInput } from '../../logic/whiteboardInput';
 import {
   Check,
   Download,
@@ -16,7 +17,6 @@ import {
   saveWhiteboardDraft,
 } from '../../logic/whiteboardStorage';
 import type {
-  WhiteboardDrawingTool,
   WhiteboardPoint,
   WhiteboardStroke,
   WhiteboardTool,
@@ -28,6 +28,7 @@ const SIZES = [3, 6, 10] as const;
 interface WhiteboardOverlayProps {
   active: boolean;
   storageKey: string;
+  interactionRootRef: React.RefObject<HTMLElement | null>;
   onDone: () => void;
   onExport: () => Promise<void>;
 }
@@ -36,6 +37,8 @@ interface CanvasSize {
   width: number;
   height: number;
 }
+
+type InputNotice = 'pen' | 'touch' | 'mouse' | null;
 
 const createStrokeId = () => {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
@@ -77,65 +80,6 @@ const toFreehandPath = (stroke: WhiteboardStroke): string => {
   return getSvgPathFromStroke(outline);
 };
 
-const distanceToSegment = (
-  pointX: number,
-  pointY: number,
-  startX: number,
-  startY: number,
-  endX: number,
-  endY: number
-) => {
-  const dx = endX - startX;
-  const dy = endY - startY;
-  if (dx === 0 && dy === 0) return Math.hypot(pointX - startX, pointY - startY);
-
-  const projection = Math.max(
-    0,
-    Math.min(1, ((pointX - startX) * dx + (pointY - startY) * dy) / (dx * dx + dy * dy))
-  );
-  const nearestX = startX + projection * dx;
-  const nearestY = startY + projection * dy;
-  return Math.hypot(pointX - nearestX, pointY - nearestY);
-};
-
-const strokeTouchesPoint = (
-  stroke: WhiteboardStroke,
-  x: number,
-  y: number,
-  canvasSize: CanvasSize,
-  radius: number
-) => {
-  const scaleX = canvasSize.width / stroke.canvasWidth;
-  const scaleY = canvasSize.height / stroke.canvasHeight;
-  const points = stroke.points;
-  if (points.length === 0) return false;
-
-  if (points.length === 1) {
-    const point = points[0];
-    return !!point && Math.hypot(x - point[0] * scaleX, y - point[1] * scaleY) <= radius;
-  }
-
-  for (let index = 1; index < points.length; index += 1) {
-    const previous = points[index - 1];
-    const current = points[index];
-    if (!previous || !current) continue;
-    if (
-      distanceToSegment(
-        x,
-        y,
-        previous[0] * scaleX,
-        previous[1] * scaleY,
-        current[0] * scaleX,
-        current[1] * scaleY
-      ) <= radius + stroke.size / 2
-    ) {
-      return true;
-    }
-  }
-
-  return false;
-};
-
 const DrawingStroke = React.memo(({ stroke, canvasSize }: { stroke: WhiteboardStroke; canvasSize: CanvasSize }) => {
   const scaleX = canvasSize.width / stroke.canvasWidth;
   const scaleY = canvasSize.height / stroke.canvasHeight;
@@ -175,6 +119,7 @@ DrawingStroke.displayName = 'DrawingStroke';
 export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
   active,
   storageKey,
+  interactionRootRef,
   onDone,
   onExport,
 }) => {
@@ -184,11 +129,10 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
   const historyRef = useRef<WhiteboardStroke[][]>([[]]);
   const historyIndexRef = useRef(0);
   const animationFrameRef = useRef<number | null>(null);
-  const eraserStartRef = useRef<WhiteboardStroke[] | null>(null);
-  const eraserChangedRef = useRef(false);
   const firstCanvasSizeRef = useRef<CanvasSize | null>(null);
   const loadedStorageKeyRef = useRef<string | null>(null);
   const draftLoadVersionRef = useRef(0);
+  const inputNoticeTimerRef = useRef<number | null>(null);
 
   const [strokes, setStrokes] = useState<WhiteboardStroke[]>([]);
   const [activeStroke, setActiveStroke] = useState<WhiteboardStroke | null>(null);
@@ -201,6 +145,7 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
   const [sizeWarning, setSizeWarning] = useState(false);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [inputNotice, setInputNotice] = useState<InputNotice>(null);
 
   const updateStrokes = useCallback((next: WhiteboardStroke[]) => {
     strokesRef.current = next;
@@ -316,6 +261,7 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
 
   useEffect(() => () => {
     if (animationFrameRef.current !== null) cancelAnimationFrame(animationFrameRef.current);
+    if (inputNoticeTimerRef.current !== null) window.clearTimeout(inputNoticeTimerRef.current);
   }, []);
 
   const scheduleActiveStrokeRender = useCallback(() => {
@@ -334,85 +280,67 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
     return [event.clientX - rect.left, event.clientY - rect.top, pressure];
   }, []);
 
-  const eraseAt = useCallback((point: WhiteboardPoint) => {
-    const next = strokesRef.current.filter(
-      (stroke) => !strokeTouchesPoint(stroke, point[0], point[1], canvasSize, 14)
-    );
-    if (next.length !== strokesRef.current.length) {
-      eraserChangedRef.current = true;
-      updateStrokes(next);
-    }
-  }, [canvasSize, updateStrokes]);
+  const showInputNotice = useCallback((pointerType: string) => {
+    const notice: InputNotice = pointerType === 'pen'
+      ? 'pen'
+      : pointerType === 'touch'
+        ? 'touch'
+        : 'mouse';
+    setInputNotice(notice);
+    if (inputNoticeTimerRef.current !== null) window.clearTimeout(inputNoticeTimerRef.current);
+    inputNoticeTimerRef.current = window.setTimeout(() => setInputNotice(null), 1400);
+  }, []);
 
-  const handlePointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
-    if (!active || tool === 'select' || !event.isPrimary) return;
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    const point = getCanvasPoint(event.nativeEvent);
+  const startDrawing = useCallback((event: PointerEvent) => {
+    const point = getCanvasPoint(event);
     if (!point) return;
-
-    if (tool === 'eraser') {
-      eraserStartRef.current = strokesRef.current;
-      eraserChangedRef.current = false;
-      eraseAt(point);
-      return;
-    }
-
-    const drawingTool = tool as WhiteboardDrawingTool;
     const nextStroke: WhiteboardStroke = {
       id: createStrokeId(),
-      tool: drawingTool,
-      color: drawingTool === 'highlighter' ? '#facc15' : color,
-      size: drawingTool === 'highlighter' ? Math.max(size * 3, 18) : size,
-      opacity: drawingTool === 'highlighter' ? 0.35 : 1,
+      tool: 'pen',
+      color,
+      size,
+      opacity: 1,
       points: [point],
       canvasWidth: canvasSize.width,
       canvasHeight: canvasSize.height,
     };
     activeStrokeRef.current = nextStroke;
     setActiveStroke(nextStroke);
-  };
+  }, [canvasSize.height, canvasSize.width, color, getCanvasPoint, size]);
 
-  const handlePointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
-    if (!active || tool === 'select' || !event.isPrimary) return;
-    if (!activeStrokeRef.current && !eraserStartRef.current) return;
-    event.preventDefault();
-
-    const coalescedEvents = event.nativeEvent.getCoalescedEvents?.() ?? [];
-    const nativeEvents = coalescedEvents.length > 0 ? coalescedEvents : [event.nativeEvent];
-    const points = nativeEvents.map(getCanvasPoint).filter((point): point is WhiteboardPoint => point !== null);
-    if (points.length === 0) return;
-
-    if (tool === 'eraser') {
-      points.forEach(eraseAt);
-      return;
-    }
-
+  const continueDrawing = useCallback((event: PointerEvent) => {
     const current = activeStrokeRef.current;
     if (!current) return;
-    activeStrokeRef.current = current.tool === 'line'
-      ? { ...current, points: [current.points[0] as WhiteboardPoint, points[points.length - 1] as WhiteboardPoint] }
-      : { ...current, points: [...current.points, ...points] };
+    const coalescedEvents = event.getCoalescedEvents?.() ?? [];
+    const events = coalescedEvents.length > 0 ? coalescedEvents : [event];
+    const points = events.map(getCanvasPoint).filter((point): point is WhiteboardPoint => point !== null);
+    if (points.length === 0) return;
+    activeStrokeRef.current = { ...current, points: [...current.points, ...points] };
     scheduleActiveStrokeRender();
-  };
+  }, [getCanvasPoint, scheduleActiveStrokeRender]);
 
-  const finishPointerGesture = (event: React.PointerEvent<SVGSVGElement>) => {
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-
-    if (eraserStartRef.current) {
-      if (eraserChangedRef.current) commitSnapshot(strokesRef.current);
-      eraserStartRef.current = null;
-      eraserChangedRef.current = false;
-      return;
-    }
-
+  const finishDrawing = useCallback(() => {
     const completedStroke = activeStrokeRef.current;
-    if (completedStroke) commitSnapshot([...strokesRef.current, completedStroke]);
     activeStrokeRef.current = null;
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
     setActiveStroke(null);
-  };
+    if (completedStroke) commitSnapshot([...strokesRef.current, completedStroke]);
+  }, [commitSnapshot]);
+
+  useEffect(() => {
+    const root = interactionRootRef.current;
+    if (!active || !root) return;
+    return attachWhiteboardInput(root, {
+      mouseDraws: tool !== 'select',
+      onStart: startDrawing,
+      onMove: continueDrawing,
+      onEnd: finishDrawing,
+      onInput: showInputNotice,
+    });
+  }, [active, continueDrawing, finishDrawing, interactionRootRef, showInputNotice, startDrawing, storageKey, tool]);
 
   const undo = () => {
     if (historyIndexRef.current <= 0) return;
@@ -436,8 +364,6 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
     setLoadedKey(storageKey);
     activeStrokeRef.current = null;
     setActiveStroke(null);
-    eraserStartRef.current = null;
-    eraserChangedRef.current = false;
     resetHistory([]);
     setSizeWarning(false);
     void removeWhiteboardDraftScope(storageKey).catch((error) => {
@@ -467,12 +393,7 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
     <div className="whiteboard-layer absolute inset-0 z-[300] pointer-events-none">
       <svg
         ref={svgRef}
-        className={`absolute inset-0 w-full h-full select-none ${active && tool !== 'select' ? 'pointer-events-auto cursor-crosshair' : 'pointer-events-none'}`}
-        style={{ touchAction: active && tool !== 'select' ? 'none' : 'auto' }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={finishPointerGesture}
-        onPointerCancel={finishPointerGesture}
+        className="pointer-events-none absolute inset-0 h-full w-full select-none"
         aria-label="命盤白板畫布"
       >
         {renderedStrokes}
@@ -483,15 +404,16 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
         <>
         <div
           className="no-screenshot pointer-events-auto fixed inset-x-0 top-0 z-[301] h-[56px] border-b border-slate-200 bg-white shadow-sm"
+          data-whiteboard-toolbar
           aria-hidden="true"
         />
-        <div className="no-screenshot pointer-events-auto fixed inset-x-2 top-[5px] z-[302] flex items-center gap-1 rounded-xl border border-slate-300 bg-white px-1.5 py-1 shadow-lg">
+        <div data-whiteboard-toolbar className="no-screenshot pointer-events-auto fixed inset-x-2 top-[5px] z-[302] flex items-center gap-1 rounded-xl border border-slate-300 bg-white px-1.5 py-1 shadow-lg">
           <div className="min-w-0 flex-1 overflow-x-auto scrollbar-hide">
             <div className="flex w-max items-center gap-1">
               <button
                 onClick={() => setTool('select')}
                 className={`flex shrink-0 items-center gap-1 rounded-lg px-2 py-2 ${tool === 'select' ? 'bg-sky-100 text-sky-700' : 'text-slate-600 hover:bg-slate-100'}`}
-                title="操作命盤"
+                title="滑鼠操作命盤（手指隨時可操作，Apple Pencil 隨時可書寫）"
               >
                 <MousePointer2 size={18} />
                 <span className="hidden text-xs font-bold sm:inline">操作</span>
@@ -499,7 +421,7 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
 
               <div className="h-7 w-px shrink-0 bg-slate-200" />
 
-              <button onClick={() => setTool('pen')} className={`p-2 rounded-lg ${tool === 'pen' ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-100'}`} title="畫筆"><Pencil size={18} /></button>
+              <button onClick={() => setTool('pen')} className={`p-2 rounded-lg ${tool === 'pen' ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-100'}`} title="滑鼠畫筆（Apple Pencil 隨時可書寫）"><Pencil size={18} /></button>
 
               <div className="h-7 w-px shrink-0 bg-slate-200" />
 
@@ -550,6 +472,13 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
         {sizeWarning && (
           <div className="no-screenshot pointer-events-none fixed bottom-3 left-1/2 z-[302] -translate-x-1/2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-center text-[11px] font-bold text-amber-700 shadow-lg">
             畫面尺寸已改變，筆跡可能稍有位移；建議先匯出確認。
+          </div>
+        )}
+        {inputNotice && (
+          <div className="no-screenshot pointer-events-none fixed bottom-3 left-1/2 z-[303] -translate-x-1/2 rounded-full bg-slate-900/90 px-3 py-1.5 text-[11px] font-bold text-white shadow-lg">
+            {inputNotice === 'pen' && '已辨識：Apple Pencil（書寫）'}
+            {inputNotice === 'touch' && '已辨識：手指（操作）'}
+            {inputNotice === 'mouse' && '已辨識：滑鼠（依工具列模式操作）'}
           </div>
         )}
         </>
