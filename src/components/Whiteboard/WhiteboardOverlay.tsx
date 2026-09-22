@@ -29,6 +29,7 @@ interface WhiteboardOverlayProps {
   active: boolean;
   storageKey: string;
   interactionRootRef: React.RefObject<HTMLElement | null>;
+  chartLayout?: 'single' | 'dual';
   onDone: () => void;
   onExport: () => Promise<void>;
 }
@@ -120,6 +121,7 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
   active,
   storageKey,
   interactionRootRef,
+  chartLayout = 'single',
   onDone,
   onExport,
 }) => {
@@ -394,9 +396,19 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
 
   return (
     <div className="whiteboard-layer absolute inset-0 z-[300] pointer-events-none">
+      {active && tool === 'pen' && (
+        chartLayout === 'dual' ? (
+          <>
+            <div className="absolute left-[12.5%] top-1/4 h-1/2 w-1/4 border border-slate-200 bg-white" aria-hidden="true" />
+            <div className="absolute left-[62.5%] top-1/4 h-1/2 w-1/4 border border-slate-200 bg-white" aria-hidden="true" />
+          </>
+        ) : (
+          <div className="absolute left-1/4 top-1/4 h-1/2 w-1/2 border border-slate-200 bg-white" aria-hidden="true" />
+        )
+      )}
       <svg
         ref={svgRef}
-        className="pointer-events-none absolute inset-0 h-full w-full select-none"
+        className={`${active && tool === 'pen' ? 'pointer-events-auto touch-none' : 'pointer-events-none'} absolute inset-0 h-full w-full select-none`}
         aria-label="命盤白板畫布"
       >
         {renderedStrokes}
