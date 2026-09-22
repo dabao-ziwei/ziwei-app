@@ -147,6 +147,10 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
   const [isExporting, setIsExporting] = useState(false);
   const [inputNotice, setInputNotice] = useState<InputNotice>(null);
 
+  useEffect(() => {
+    if (active) setTool('pen');
+  }, [active]);
+
   const updateStrokes = useCallback((next: WhiteboardStroke[]) => {
     strokesRef.current = next;
     setStrokes(next);
@@ -332,9 +336,8 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
 
   useEffect(() => {
     const root = interactionRootRef.current;
-    if (!active || !root) return;
+    if (!active || tool !== 'pen' || !root) return;
     return attachWhiteboardInput(root, {
-      mouseDraws: tool !== 'select',
       onStart: startDrawing,
       onMove: continueDrawing,
       onEnd: finishDrawing,
@@ -412,16 +415,23 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
             <div className="flex w-max items-center gap-1">
               <button
                 onClick={() => setTool('select')}
-                className={`flex shrink-0 items-center gap-1 rounded-lg px-2 py-2 ${tool === 'select' ? 'bg-sky-100 text-sky-700' : 'text-slate-600 hover:bg-slate-100'}`}
-                title="滑鼠操作命盤（手指隨時可操作，Apple Pencil 隨時可書寫）"
+                className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2 ${tool === 'select' ? 'bg-sky-100 text-sky-700' : 'text-slate-600 hover:bg-slate-100'}`}
+                title="操作命盤上的宮干、三方四正與時間選項"
               >
                 <MousePointer2 size={18} />
-                <span className="hidden text-xs font-bold sm:inline">操作</span>
+                <span className="text-xs font-bold">操作模式</span>
               </button>
 
               <div className="h-7 w-px shrink-0 bg-slate-200" />
 
-              <button onClick={() => setTool('pen')} className={`p-2 rounded-lg ${tool === 'pen' ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-100'}`} title="滑鼠畫筆（Apple Pencil 隨時可書寫）"><Pencil size={18} /></button>
+              <button
+                onClick={() => setTool('pen')}
+                className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2 ${tool === 'pen' ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-100'}`}
+                title="在命盤上書寫；此模式不會觸發命盤操作"
+              >
+                <Pencil size={18} />
+                <span className="text-xs font-bold">書寫模式</span>
+              </button>
 
               <div className="h-7 w-px shrink-0 bg-slate-200" />
 
@@ -476,9 +486,9 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
         )}
         {inputNotice && (
           <div className="no-screenshot pointer-events-none fixed bottom-3 left-1/2 z-[303] -translate-x-1/2 rounded-full bg-slate-900/90 px-3 py-1.5 text-[11px] font-bold text-white shadow-lg">
-            {inputNotice === 'pen' && '已辨識：Apple Pencil（書寫）'}
-            {inputNotice === 'touch' && '已辨識：手指（操作）'}
-            {inputNotice === 'mouse' && '已辨識：滑鼠（依工具列模式操作）'}
+            {inputNotice === 'pen' && 'Apple Pencil 書寫中'}
+            {inputNotice === 'touch' && '手指書寫中'}
+            {inputNotice === 'mouse' && '滑鼠書寫中'}
           </div>
         )}
         </>

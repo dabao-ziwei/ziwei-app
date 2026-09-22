@@ -1124,7 +1124,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         <div ref={chartRef} className="relative h-full w-full">
         <PalaceGrid
           presentationScale={canUseWhiteboard && isWhiteboardActive ? 1.22 : 1}
-          whiteboardInteractionMode={canUseWhiteboard && isWhiteboardActive}
           client={client!}
           chartData={chartData}
           relationships={relationships}
