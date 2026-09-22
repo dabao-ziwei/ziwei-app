@@ -2,10 +2,8 @@ import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import { attachWhiteboardInput } from '../src/logic/whiteboardInput.ts';
 
-// Small DOM boundary for pointer-sequence tests; native browser hit testing and
-// iPad hardware palm rejection still require the manual device checks.
 class TestElement extends EventTarget {
-  style = { userSelect: 'text' };
+  style = { userSelect: 'text', touchAction: 'auto' };
   captures = new Set();
   toolbar = false;
   closest() { return this.toolbar ? this : null; }
@@ -34,7 +32,7 @@ function pointer(type, pointerType, pointerId = 1, extra = {}) {
   return event;
 }
 
-function setup(mouseDraws = true) {
+function setup() {
   globalThis.Element = TestElement;
   globalThis.window = new EventTarget();
   globalThis.document = new EventTarget();
@@ -42,99 +40,56 @@ function setup(mouseDraws = true) {
   const toolbar = new TestElement();
   toolbar.toolbar = true;
   const strokes = [];
+  const inputs = [];
   let current = null;
   dispose = attachWhiteboardInput(root, {
-    mouseDraws,
     onStart: event => { current = [[event.clientX, event.clientY]]; },
     onMove: event => current?.push([event.clientX, event.clientY]),
     onEnd: () => { if (current) strokes.push(current); current = null; },
-    onInput: () => {},
+    onInput: input => inputs.push(input),
   });
   const send = (type, input = 'pen', id = 1, extra = {}) => {
     const event = pointer(type, input, id, extra);
     root.dispatchEvent(event);
     return event;
   };
-  return { root, toolbar, strokes, send, current: () => current };
+  return { root, toolbar, strokes, inputs, send, current: () => current };
 }
 
-test('pen contact immediately draws, including a stationary dot, in mouse operation mode', () => {
-  const f = setup(false);
-  assert.equal(f.send('pointerdown').defaultPrevented, true);
-  assert.deepEqual(f.current(), [[30, 80]]);
-  f.send('pointerup');
-  assert.equal(f.strokes.length, 1);
-  assert.equal(f.send('click').defaultPrevented, true, 'pen must not activate a palace');
-  assert.equal(f.root.captures.size, 0);
-});
+for (const input of ['pen', 'touch', 'mouse']) {
+  test(`${input} writes and cannot activate the chart in writing mode`, () => {
+    const f = setup();
+    assert.equal(f.send('pointerdown', input).defaultPrevented, true);
+    f.send('pointermove', input, 1, { clientX: 60 });
+    f.send('pointerup', input, 1, { clientX: 90 });
+    assert.equal(f.strokes.length, 1);
+    assert.equal(f.inputs[0], input);
+    assert.equal(f.send('click', input).defaultPrevented, true);
+    assert.equal(f.root.captures.size, 0);
+    dispose();
+  });
+}
 
-test('finger taps operate without creating ink, even while mouse pen mode is selected', () => {
+test('toolbar remains interactive for pen, touch and mouse', () => {
   const f = setup();
-  assert.equal(f.send('pointerdown', 'touch').defaultPrevented, false);
-  assert.equal(f.send('pointerup', 'touch').defaultPrevented, false);
-  assert.equal(f.send('click', 'touch').defaultPrevented, false);
-  assert.equal(f.strokes.length, 0);
-  assert.equal(f.current(), null);
-});
-
-test('finger drag is ignored even if it returns to its original position', () => {
-  const f = setup();
-  f.send('pointerdown', 'touch');
-  f.send('pointermove', 'touch', 1, { clientX: 90 });
-  f.send('pointermove', 'touch');
-  assert.equal(f.send('pointerup', 'touch').defaultPrevented, true);
-  assert.equal(f.send('click', 'touch').defaultPrevented, true);
-  assert.equal(f.strokes.length, 0);
-  // Reusing an OS pointer ID for a fresh tap must not swallow that tap.
-  f.send('pointerdown', 'touch');
-  f.send('pointerup', 'touch');
-  assert.equal(f.send('click', 'touch').defaultPrevented, false);
-});
-
-test('a palm resting before pen contact remains blocked after the pen lifts', () => {
-  const f = setup();
-  f.send('pointerdown', 'touch', 2);
-  f.send('pointerdown', 'pen', 1);
-  f.send('pointermove', 'pen', 1, { clientX: 90 });
-  f.send('pointerup', 'pen', 1);
-  f.send('pointerup', 'touch', 2);
-  assert.equal(f.send('click', 'touch', 2).defaultPrevented, true);
-  assert.equal(f.strokes.length, 1);
-  f.send('pointerdown', 'touch', 3);
-  f.send('pointerup', 'touch', 3);
-  assert.equal(f.send('click', 'touch', 3).defaultPrevented, false);
-});
-
-test('touch during writing cannot activate chart or toolbar', () => {
-  const f = setup();
-  f.send('pointerdown');
-  const target = f.toolbar;
-  assert.equal(f.send('pointerdown', 'touch', 2, { target }).defaultPrevented, true);
-  f.send('pointerup', 'pen');
-  f.send('pointerup', 'touch', 2, { target });
-  assert.equal(f.send('click', 'touch', 2, { target }).defaultPrevented, true);
-});
-
-test('pen and finger can use toolbar buttons outside a stroke', () => {
-  const f = setup();
-  for (const input of ['pen', 'touch']) {
+  for (const input of ['pen', 'touch', 'mouse']) {
     const target = f.toolbar;
     assert.equal(f.send('pointerdown', input, 4, { target }).defaultPrevented, false);
-    f.send('pointerup', input, 4, { target });
+    assert.equal(f.send('pointerup', input, 4, { target }).defaultPrevented, false);
     assert.equal(f.send('click', input, 4, { target }).defaultPrevented, false);
   }
   assert.equal(f.strokes.length, 0);
 });
 
-test('multi-touch does not operate the chart or draw', () => {
+test('secondary contacts are swallowed without interrupting the active stroke', () => {
   const f = setup();
-  f.send('pointerdown', 'touch', 1);
-  f.send('pointerdown', 'touch', 2, { isPrimary: false });
-  for (const id of [1, 2]) {
-    f.send('pointerup', 'touch', id);
-    assert.equal(f.send('click', 'touch', id).defaultPrevented, true);
-  }
-  assert.equal(f.strokes.length, 0);
+  f.send('pointerdown', 'pen', 1);
+  assert.equal(f.send('pointerdown', 'touch', 2, { isPrimary: false }).defaultPrevented, true);
+  f.send('pointermove', 'touch', 2, { clientX: 100, isPrimary: false });
+  f.send('pointerup', 'touch', 2, { isPrimary: false });
+  assert.notEqual(f.current(), null);
+  f.send('pointerup', 'pen', 1);
+  assert.equal(f.strokes.length, 1);
 });
 
 test('cancel, lost capture and blur finish once and allow the next stroke', () => {
@@ -152,16 +107,15 @@ test('cancel, lost capture and blur finish once and allow the next stroke', () =
   }
 });
 
-test('mouse follows its explicit mode and cleanup restores ordinary interaction', () => {
-  const f = setup(false);
-  f.send('pointerdown', 'mouse');
-  f.send('pointerup', 'mouse');
-  assert.equal(f.send('click', 'mouse').defaultPrevented, false);
-  assert.equal(f.strokes.length, 0);
+test('cleanup restores ordinary interaction styles and event flow', () => {
+  const f = setup();
+  assert.equal(f.root.style.userSelect, 'none');
+  assert.equal(f.root.style.touchAction, 'none');
   f.send('pointerdown', 'pen');
   dispose();
   assert.equal(f.root.style.userSelect, 'text');
+  assert.equal(f.root.style.touchAction, 'auto');
   assert.equal(f.root.captures.size, 0);
-  assert.equal(f.send('pointerdown', 'pen').defaultPrevented, false);
-  assert.equal(f.strokes.length, 1);
+  assert.equal(f.send('pointerdown', 'touch').defaultPrevented, false);
+  assert.equal(f.send('click', 'touch').defaultPrevented, false);
 });
