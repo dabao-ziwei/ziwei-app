@@ -966,6 +966,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                     active={isWhiteboardActive}
                     storageKey={whiteboardStorageKey}
                     interactionRootRef={dualCaptureRef}
+                    chartLayout="dual"
                     onDone={finishWhiteboard}
                     onExport={handleWhiteboardExport}
                 />
