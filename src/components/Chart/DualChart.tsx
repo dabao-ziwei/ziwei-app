@@ -87,6 +87,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const dualCaptureRef = useRef<HTMLDivElement>(null);
+  const dualWhiteboardRef = useRef<HTMLDivElement>(null);
   
   const clientA = location.state?.clientA as Client;
   const clientB = location.state?.clientB as Client;
@@ -696,9 +697,9 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   const dummyNav = () => {};
 
   const handleWhiteboardExport = async () => {
-      if (!dualCaptureRef.current) return;
+      if (!dualWhiteboardRef.current) return;
       await exportAndShareWhiteboard(
-          dualCaptureRef.current,
+          dualWhiteboardRef.current,
           `${clientA.name}_${clientB.name}_合盤_白板紀錄.png`
       );
   };
@@ -796,7 +797,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
         </div>
 
         {/* Dual Grid Container */}
-        <div className="flex-1 flex flex-col overflow-hidden relative">
+        <div ref={dualWhiteboardRef} className="flex-1 flex flex-col overflow-hidden relative">
           <div ref={dualCaptureRef} className="flex-1 flex overflow-hidden relative min-h-0">
             
             {/* Left Chart (A) */}
@@ -961,16 +962,6 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                 </div>
             </div>
 
-            {canUseWhiteboard && (
-                <WhiteboardOverlay
-                    active={isWhiteboardActive}
-                    storageKey={whiteboardStorageKey}
-                    interactionRootRef={dualCaptureRef}
-                    chartLayout="dual"
-                    onDone={finishWhiteboard}
-                    onExport={handleWhiteboardExport}
-                />
-            )}
           </div>
 
           <div className="shrink-0 flex w-full">
@@ -981,6 +972,16 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
               {renderControlBar(daListB, daSeqB, setDaSeqB, setLiuYearB, setLiuYearA, engineB!, chartB, liuYearB, 'B', currentRealTimeB)}
             </div>
           </div>
+          {canUseWhiteboard && (
+              <WhiteboardOverlay
+                  active={isWhiteboardActive}
+                  storageKey={whiteboardStorageKey}
+                  chartSurfaceRef={dualCaptureRef}
+                  chartLayout="dual"
+                  onDone={finishWhiteboard}
+                  onExport={handleWhiteboardExport}
+              />
+          )}
         </div>
     </div>
   );

@@ -138,6 +138,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const { checkAccess } = usePaywall(userProfile);
 
   const chartRef = useRef<HTMLDivElement>(null);
+  const whiteboardCaptureRef = useRef<HTMLDivElement>(null);
   const mobileDaOverviewRef = useRef<HTMLDivElement | null>(null);
   const mobileSelectedControlsRef = useRef<HTMLDivElement | null>(null);
 
@@ -934,10 +935,10 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   };
 
   const handleWhiteboardExport = async () => {
-    if (!chartRef.current) return;
+    if (!whiteboardCaptureRef.current) return;
     let suffix = mode === 'divination' ? '_紫占' : '_本命盤';
     if (isCurrentReverseOn) suffix += '_顛倒';
-    await exportAndShareWhiteboard(chartRef.current, `${client!.name}${suffix}_白板紀錄.png`);
+    await exportAndShareWhiteboard(whiteboardCaptureRef.current, `${client!.name}${suffix}_白板紀錄.png`);
   };
 
   if (loading || !client || !baseChartData || !baseEngine || !chartData) {
@@ -1073,6 +1074,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
         )}
       </div>
 
+      <div ref={whiteboardCaptureRef} className="relative flex min-h-0 flex-1 flex-col">
       <div className={`flex-1 min-h-0 w-full relative ${mode === 'divination' ? 'pb-[env(safe-area-inset-bottom)]' : ''}`}>
         {isExternalInputOpen && (
           <div className="absolute inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1194,15 +1196,6 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
             setIsYearlyDrawerOpen(true);
           }}
         />
-        {canUseWhiteboard && (
-          <WhiteboardOverlay
-            active={isWhiteboardActive}
-            storageKey={whiteboardStorageKey}
-            interactionRootRef={chartRef}
-            onDone={finishWhiteboard}
-            onExport={handleWhiteboardExport}
-          />
-        )}
         </div>
       </div>
 
@@ -1325,6 +1318,17 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
           </div>
         </div>
       )}
+
+      {canUseWhiteboard && (
+        <WhiteboardOverlay
+          active={isWhiteboardActive}
+          storageKey={whiteboardStorageKey}
+          chartSurfaceRef={chartRef}
+          onDone={finishWhiteboard}
+          onExport={handleWhiteboardExport}
+        />
+      )}
+      </div>
 
       {mobileGuideStep !== null && mobileGuideRect && (
         <div className="sm:hidden fixed inset-0 z-[300] pointer-events-auto">
