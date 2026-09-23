@@ -14,10 +14,19 @@ interface WhiteboardInputOptions {
  */
 export function attachWhiteboardInput(root: HTMLElement, options: WhiteboardInputOptions) {
   let drawingPointerId: number | null = null;
-  const previousUserSelect = root.style.userSelect;
-  const previousTouchAction = root.style.touchAction;
-  root.style.userSelect = 'none';
-  root.style.touchAction = 'none';
+  const writingStyle = root.style as CSSStyleDeclaration & { webkitTouchCallout?: string };
+  const previousStyle = {
+    userSelect: writingStyle.userSelect,
+    webkitUserSelect: writingStyle.webkitUserSelect,
+    webkitTouchCallout: writingStyle.webkitTouchCallout,
+    touchAction: writingStyle.touchAction,
+    overscrollBehavior: writingStyle.overscrollBehavior,
+  };
+  writingStyle.userSelect = 'none';
+  writingStyle.webkitUserSelect = 'none';
+  writingStyle.webkitTouchCallout = 'none';
+  writingStyle.touchAction = 'none';
+  writingStyle.overscrollBehavior = 'none';
 
   const stop = (event: Event) => {
     event.preventDefault();
@@ -71,6 +80,10 @@ export function attachWhiteboardInput(root: HTMLElement, options: WhiteboardInpu
   root.addEventListener('click', blockChartEvent, { capture: true });
   root.addEventListener('contextmenu', blockChartEvent, { capture: true });
   root.addEventListener('dragstart', blockChartEvent, { capture: true });
+  root.addEventListener('selectstart', blockChartEvent, { capture: true });
+  root.addEventListener('touchstart', blockChartEvent, { capture: true, passive: false });
+  root.addEventListener('touchmove', blockChartEvent, { capture: true, passive: false });
+  root.addEventListener('gesturestart', blockChartEvent, { capture: true });
   window.addEventListener('blur', blur);
   document.addEventListener('visibilitychange', visibility);
 
@@ -83,10 +96,17 @@ export function attachWhiteboardInput(root: HTMLElement, options: WhiteboardInpu
     root.removeEventListener('click', blockChartEvent, { capture: true });
     root.removeEventListener('contextmenu', blockChartEvent, { capture: true });
     root.removeEventListener('dragstart', blockChartEvent, { capture: true });
+    root.removeEventListener('selectstart', blockChartEvent, { capture: true });
+    root.removeEventListener('touchstart', blockChartEvent, { capture: true });
+    root.removeEventListener('touchmove', blockChartEvent, { capture: true });
+    root.removeEventListener('gesturestart', blockChartEvent, { capture: true });
     window.removeEventListener('blur', blur);
     document.removeEventListener('visibilitychange', visibility);
     finishDrawing();
-    root.style.userSelect = previousUserSelect;
-    root.style.touchAction = previousTouchAction;
+    writingStyle.userSelect = previousStyle.userSelect;
+    writingStyle.webkitUserSelect = previousStyle.webkitUserSelect;
+    writingStyle.webkitTouchCallout = previousStyle.webkitTouchCallout;
+    writingStyle.touchAction = previousStyle.touchAction;
+    writingStyle.overscrollBehavior = previousStyle.overscrollBehavior;
   };
 }

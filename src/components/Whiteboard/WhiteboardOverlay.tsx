@@ -28,7 +28,7 @@ const SIZES = [3, 6, 10] as const;
 interface WhiteboardOverlayProps {
   active: boolean;
   storageKey: string;
-  interactionRootRef: React.RefObject<HTMLElement | null>;
+  chartSurfaceRef: React.RefObject<HTMLElement | null>;
   chartLayout?: 'single' | 'dual';
   onDone: () => void;
   onExport: () => Promise<void>;
@@ -120,12 +120,14 @@ DrawingStroke.displayName = 'DrawingStroke';
 export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
   active,
   storageKey,
-  interactionRootRef,
+  chartSurfaceRef,
   chartLayout = 'single',
   onDone,
   onExport,
 }) => {
+  const overlayRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const inputSurfaceRef = useRef<HTMLDivElement>(null);
   const strokesRef = useRef<WhiteboardStroke[]>([]);
   const activeStrokeRef = useRef<WhiteboardStroke | null>(null);
   const historyRef = useRef<WhiteboardStroke[][]>([[]]);
@@ -148,6 +150,7 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [inputNotice, setInputNotice] = useState<InputNotice>(null);
+  const [centerPanelStyles, setCenterPanelStyles] = useState<React.CSSProperties[]>([]);
 
   useEffect(() => {
     if (active) setTool('pen');
@@ -242,7 +245,8 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
 
   useEffect(() => {
     const svg = svgRef.current;
-    if (!svg) return;
+    const chartSurface = chartSurfaceRef.current;
+    if (!svg || !chartSurface) return;
 
     const updateSize = () => {
       const rect = svg.getBoundingClientRect();
@@ -257,13 +261,27 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
         setSizeWarning(widthChange > 0.05 || heightChange > 0.05);
       }
       setCanvasSize(nextSize);
+
+      const chartRect = chartSurface.getBoundingClientRect();
+      const chartLeft = chartRect.left - rect.left;
+      const chartTop = chartRect.top - rect.top;
+      const chartCount = chartLayout === 'dual' ? 2 : 1;
+      const chartWidth = chartRect.width / chartCount;
+      const inset = 10;
+      setCenterPanelStyles(Array.from({ length: chartCount }, (_, index) => ({
+        left: chartLeft + chartWidth * index + chartWidth * 0.25 + inset,
+        top: chartTop + chartRect.height * 0.25 + inset,
+        width: Math.max(0, chartWidth * 0.5 - inset * 2),
+        height: Math.max(0, chartRect.height * 0.5 - inset * 2),
+      })));
     };
 
     updateSize();
     const observer = new ResizeObserver(updateSize);
     observer.observe(svg);
+    observer.observe(chartSurface);
     return () => observer.disconnect();
-  }, []);
+  }, [chartLayout, chartSurfaceRef]);
 
   useEffect(() => () => {
     if (animationFrameRef.current !== null) cancelAnimationFrame(animationFrameRef.current);
@@ -337,15 +355,15 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
   }, [commitSnapshot]);
 
   useEffect(() => {
-    const root = interactionRootRef.current;
-    if (!active || tool !== 'pen' || !root) return;
-    return attachWhiteboardInput(root, {
+    const inputSurface = inputSurfaceRef.current;
+    if (!active || tool !== 'pen' || !inputSurface) return;
+    return attachWhiteboardInput(inputSurface, {
       onStart: startDrawing,
       onMove: continueDrawing,
       onEnd: finishDrawing,
       onInput: showInputNotice,
     });
-  }, [active, continueDrawing, finishDrawing, interactionRootRef, showInputNotice, startDrawing, storageKey, tool]);
+  }, [active, continueDrawing, finishDrawing, showInputNotice, startDrawing, storageKey, tool]);
 
   const undo = () => {
     if (historyIndexRef.current <= 0) return;
@@ -395,25 +413,37 @@ export const WhiteboardOverlay: React.FC<WhiteboardOverlayProps> = ({
   );
 
   return (
-    <div className="whiteboard-layer absolute inset-0 z-[300] pointer-events-none">
-      {active && tool === 'pen' && (
-        chartLayout === 'dual' ? (
-          <>
-            <div className="absolute left-[12.5%] top-1/4 h-1/2 w-1/4 border border-slate-200 bg-white" aria-hidden="true" />
-            <div className="absolute left-[62.5%] top-1/4 h-1/2 w-1/4 border border-slate-200 bg-white" aria-hidden="true" />
-          </>
-        ) : (
-          <div className="absolute left-1/4 top-1/4 h-1/2 w-1/2 border border-slate-200 bg-white" aria-hidden="true" />
-        )
-      )}
+    <div ref={overlayRef} className="whiteboard-layer absolute inset-0 z-[300] pointer-events-none">
+      {active && tool === 'pen' && centerPanelStyles.map((style, index) => (
+        <div
+          key={`whiteboard-center-${index}`}
+          className="absolute border border-slate-200 bg-white"
+          style={style}
+          aria-hidden="true"
+        />
+      ))}
       <svg
         ref={svgRef}
-        className={`${active && tool === 'pen' ? 'pointer-events-auto touch-none' : 'pointer-events-none'} absolute inset-0 h-full w-full select-none`}
+        className="pointer-events-none absolute inset-0 z-[1] h-full w-full select-none"
         aria-label="命盤白板畫布"
       >
         {renderedStrokes}
         {activeStroke && <DrawingStroke stroke={activeStroke} canvasSize={canvasSize} />}
       </svg>
+
+      {active && tool === 'pen' && (
+        <div
+          ref={inputSurfaceRef}
+          className="pointer-events-auto absolute inset-0 z-[2] cursor-crosshair touch-none select-none"
+          style={{
+            WebkitUserSelect: 'none',
+            WebkitTouchCallout: 'none',
+            overscrollBehavior: 'none',
+          } as React.CSSProperties}
+          role="application"
+          aria-label="命盤白板書寫區"
+        />
+      )}
 
       {active && (
         <>
