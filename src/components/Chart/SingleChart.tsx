@@ -570,19 +570,19 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const effectiveDaXianSeq = daXianSeq === -1 ? 0 : daXianSeq;
 
   const liuNianList = useMemo(() => {
-    if (mode === 'divination') return [];
+    if (mode === 'divination' || !baseChartData) return [];
     const targetDaXian = daXianList[effectiveDaXianSeq];
     if (!targetDaXian) return [];
     const list: { year: number; age: number; label: string }[] = [];
     for (let i = 0; i < 10; i++) {
       const year = targetDaXian.startYear + i;
-      const age = targetDaXian.startAge + i;
+      const age = year - baseChartData.lunarYear + 1;
       const gan = (year - 4) % 10;
       const zhi = (year - 4) % 12;
       list.push({ year, age, label: `${year}${GAN[gan]}${ZHI[zhi]} ${age}` });
     }
     return list;
-  }, [effectiveDaXianSeq, daXianList, mode]);
+  }, [baseChartData, effectiveDaXianSeq, daXianList, mode]);
 
   const xiaoXianMingIdx = useMemo(() => {
     if (!liuNianYear || !baseChartData || !baseEngine) return -1;
@@ -845,7 +845,9 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const mobileSelectedDa = daXianSeq >= 0 ? daXianList[daXianSeq] : null;
   const mobileSelectedYear = mobileSelectedDa ? (liuNianYear ?? getDefaultMobileLiuYear(daXianSeq) ?? mobileSelectedDa.startYear) : null;
   const mobileSelectedYearGanZhi = mobileSelectedYear !== null ? `${GAN[((mobileSelectedYear - 4) % 10 + 10) % 10]}${ZHI[((mobileSelectedYear - 4) % 12 + 12) % 12]}` : '';
-  const mobileSelectedAge = mobileSelectedDa && mobileSelectedYear !== null ? mobileSelectedDa.startAge + (mobileSelectedYear - mobileSelectedDa.startYear) : null;
+  const mobileSelectedAge = baseChartData && mobileSelectedYear !== null
+    ? mobileSelectedYear - baseChartData.lunarYear + 1
+    : null;
 
   useEffect(() => {
     if (mode === 'divination' || daXianList.length === 0) return;
