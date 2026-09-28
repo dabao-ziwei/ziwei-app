@@ -263,7 +263,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
           <VerticalStar
             key={`min-${idx}`}
             star={star}
-            color="text-black"
+            color={star.name === '天馬' ? 'text-blue-600' : 'text-black'}
             bgSiHua={{ ben: 'bg-red-600', da: 'bg-gray-500', liu: 'bg-blue-500', xiao: 'bg-green-600' }}
             divinationSiHua={divinationSiHua}
             palaceIdx={palace.index}
@@ -276,7 +276,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
           <VerticalStar
             key={`mic-${idx}`}
             star={star}
-            color="text-blue-600"
+            color={star.name === '紅鸞' || star.name === '天喜' ? 'text-black' : 'text-blue-600'}
             bgSiHua={{ ben: 'bg-red-600', da: 'bg-gray-500', liu: 'bg-blue-500', xiao: 'bg-green-600' }}
             divinationSiHua={divinationSiHua}
             palaceIdx={palace.index}
