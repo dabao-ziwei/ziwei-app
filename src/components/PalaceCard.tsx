@@ -301,7 +301,7 @@ export const PalaceCard: React.FC<PalaceCardProps> = ({
 
       <div className="absolute right-1 top-[35%] flex flex-col gap-1 items-end pointer-events-none z-20">
         {isBody && isBenMing && <div className="w-4 h-4 bg-blue-600 text-white text-[10px] flex items-center justify-center rounded-[2px] shadow-sm">身</div>}
-        {isXiaoXianMing && <div className="w-4 h-4 bg-blue-600 text-white text-[10px] flex items-center justify-center rounded-[2px] shadow-sm">限</div>}
+        {isXiaoXianMing && <div className="w-4 h-4 bg-green-600 text-white text-[10px] flex items-center justify-center rounded-[2px] shadow-sm">限</div>}
       </div>
 
       <div className="mt-auto flex justify-between items-end z-10 shrink-0 w-full relative pointer-events-none">
