@@ -610,7 +610,6 @@ export class ZiWeiEngine {
 
     if (dg >= 0) placeLyt(dg, '大');
     if (lg >= 0) placeLyt(lg, '年');
-    if (xg !== null && xg >= 0 && showXiao) placeLyt(xg, '小');
 
     if (lz >= 0) {
       const luanPos = (3 - lz + 12) % 12;
@@ -618,6 +617,9 @@ export class ZiWeiEngine {
       this.addStar(luanPos, '年鸞', 'limit');
       this.addStar(xiPos, '年喜', 'limit');
     }
+
+    // 動態星曜依大限、流年、小限排列；小限最後加入，固定顯示在最右側。
+    if (xg !== null && xg >= 0 && showXiao) placeLyt(xg, '小');
   }
 
   public getSiHuaMap(ganIndex: number): Record<string, SiHuaType> {
