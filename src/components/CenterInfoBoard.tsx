@@ -395,7 +395,12 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
     setIsDayPickerOpen(false);
   };
 
-  const yinYangStr = chartData?.direction === 1 ? '陽' : '陰';
+  const lunarYearGan = chartData?.bazi.trim().charAt(0) ?? '';
+  const lunarYearGanIndex = GAN.indexOf(lunarYearGan);
+  const isYangYear = lunarYearGanIndex >= 0
+    ? lunarYearGanIndex % 2 === 0
+    : (chartData?.direction === 1) === (client.gender === '男');
+  const yinYangStr = isYangYear ? '陽' : '陰';
   const genderStr = client.gender;
 
   return (
