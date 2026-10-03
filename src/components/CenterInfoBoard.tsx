@@ -27,23 +27,100 @@ import { GAN } from '../logic/constants';
 // ✅ 硬關閉開關：先全部不顯示（不做 email 判斷、不做 auth 判斷）
 const DEV_YEARLY_ANALYSIS_ENABLED = false;
 
-const ArrowHead = ({ x, y, rotation }: { x: number; y: number; rotation: number }) => (
-  <polygon points="0,0 -6,-4 -6,4" fill="#cbd5e1" transform={`translate(${x}, ${y}) rotate(${rotation})`} />
-);
-
-const GRAPH_CONFIG = {
-  Y_GAP: 80,
-  X_GAP: 130,
-  SIBLING_GAP: 90,
-};
-
 interface GraphNode {
   id: string;
   x: number;
   y: number;
   data: Client;
-  relType: string;
+  generation: number;
 }
+
+interface GraphLine {
+  id: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+const PARENT_RELATIONS = new Set(['父親', '母親', '爸爸', '媽媽', '父', '母', '長輩']);
+const CHILD_RELATIONS = new Set(['子女', '兒子', '女兒', '長男', '長女', '次男', '次女', '晚輩']);
+const PARTNER_RELATIONS = new Set(['配偶', '伴侶', '情侶', '丈夫', '妻子', '先生', '太太']);
+
+const getGenerationDelta = (relationType: string) => {
+  if (PARENT_RELATIONS.has(relationType)) return -1;
+  if (CHILD_RELATIONS.has(relationType)) return 1;
+  return 0;
+};
+
+interface PeerEdge {
+  fromId: string;
+  toId: string;
+  weight: number;
+}
+
+const orderPeerComponent = (ids: string[], edges: PeerEdge[], preferredId?: string) => {
+  if (ids.length <= 2) return ids;
+
+  const scoreOrder = (order: string[]) => {
+    const indexById = new Map(order.map((id, index) => [id, index]));
+    let score = 0;
+    edges.forEach((edge) => {
+      const fromIndex = indexById.get(edge.fromId);
+      const toIndex = indexById.get(edge.toId);
+      if (fromIndex === undefined || toIndex === undefined) return;
+      const extraDistance = Math.max(0, Math.abs(fromIndex - toIndex) - 1);
+      score += edge.weight * extraDistance * extraDistance;
+    });
+    if (preferredId && indexById.has(preferredId)) {
+      score += Math.abs(indexById.get(preferredId)! - (order.length - 1) / 2) * 0.01;
+    }
+    return score;
+  };
+
+  // 家庭群組通常很小；小群組直接找出最不會把伴侶拆開、連線最短的排列。
+  if (ids.length <= 8) {
+    let bestOrder = [...ids];
+    let bestScore = Number.POSITIVE_INFINITY;
+    const candidate = [...ids];
+    const visit = (index: number) => {
+      if (index === candidate.length) {
+        const score = scoreOrder(candidate);
+        if (score < bestScore) {
+          bestScore = score;
+          bestOrder = [...candidate];
+        }
+        return;
+      }
+      for (let i = index; i < candidate.length; i += 1) {
+        [candidate[index], candidate[i]] = [candidate[i], candidate[index]];
+        visit(index + 1);
+        [candidate[index], candidate[i]] = [candidate[i], candidate[index]];
+      }
+    };
+    visit(0);
+    return bestOrder;
+  }
+
+  // 大群組使用穩定的局部交換，避免排列計算隨人數階乘成長。
+  let order = [...ids];
+  let improved = true;
+  while (improved) {
+    improved = false;
+    let currentScore = scoreOrder(order);
+    for (let i = 0; i < order.length - 1; i += 1) {
+      const candidateOrder = [...order];
+      [candidateOrder[i], candidateOrder[i + 1]] = [candidateOrder[i + 1], candidateOrder[i]];
+      const candidateScore = scoreOrder(candidateOrder);
+      if (candidateScore < currentScore) {
+        order = candidateOrder;
+        currentScore = candidateScore;
+        improved = true;
+      }
+    }
+  }
+  return order;
+};
 
 interface CenterInfoBoardProps {
   client: Client;
@@ -277,93 +354,188 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
   const { nodes, lines } = useMemo(() => {
     if (!hasRelations) return { nodes: [], lines: [] };
 
-    const calculatedNodes: GraphNode[] = [];
+    const clients = new Map<string, Client>([[client.id, client]]);
+    const adjacency = new Map<string, Array<{ nextId: string; generationDelta: number }>>();
 
-    calculatedNodes.push({
-      id: 'center',
-      x: 0,
-      y: 0,
-      data: client,
-      relType: 'self',
+    relationships.forEach((relationship) => {
+      if (!relationship.from_client || !relationship.to_client) return;
+      clients.set(relationship.from_client.id, relationship.from_client);
+      clients.set(relationship.to_client.id, relationship.to_client);
+      const generationDelta = getGenerationDelta(relationship.relation_type);
+      adjacency.set(relationship.from_client_id, [
+        ...(adjacency.get(relationship.from_client_id) || []),
+        { nextId: relationship.to_client_id, generationDelta },
+      ]);
+      adjacency.set(relationship.to_client_id, [
+        ...(adjacency.get(relationship.to_client_id) || []),
+        { nextId: relationship.from_client_id, generationDelta: -generationDelta },
+      ]);
     });
 
-    const parents = relationships.filter((r) => ['父親', '母親', '爸爸', '媽媽', '父', '母'].includes(r.relation_type));
-    const children = relationships.filter((r) => ['子女', '兒子', '女兒', '長男', '長女', '次男', '次女'].includes(r.relation_type));
-    const partners = relationships.filter((r) => ['配偶', '老公', '老婆', '丈夫', '妻子', '情侶'].includes(r.relation_type));
-    const others = relationships.filter((r) => !parents.includes(r) && !children.includes(r) && !partners.includes(r));
+    const generationById = new Map<string, number>([[client.id, 0]]);
+    const queue = [client.id];
+    while (queue.length > 0) {
+      const currentId = queue.shift()!;
+      const currentGeneration = generationById.get(currentId) || 0;
+      for (const { nextId, generationDelta } of adjacency.get(currentId) || []) {
+        if (generationById.has(nextId)) continue;
+        generationById.set(nextId, currentGeneration + generationDelta);
+        queue.push(nextId);
+      }
+    }
 
-    const layoutGroup = (group: Relationship[], direction: 'top' | 'bottom' | 'left' | 'right') => {
-      const count = group.length;
-      if (count === 0) return;
+    const idsByGeneration = new Map<number, string[]>();
+    generationById.forEach((generation, id) => {
+      idsByGeneration.set(generation, [...(idsByGeneration.get(generation) || []), id]);
+    });
 
-      group.forEach((rel, index) => {
-        if (!rel.related_client) return;
-        const centerOffset = ((count - 1) * GRAPH_CONFIG.SIBLING_GAP) / 2;
-        const offset = index * GRAPH_CONFIG.SIBLING_GAP - centerOffset;
+    const peerEdges: PeerEdge[] = relationships.flatMap((relationship) => {
+      const fromGeneration = generationById.get(relationship.from_client_id);
+      const toGeneration = generationById.get(relationship.to_client_id);
+      if (fromGeneration === undefined || fromGeneration !== toGeneration) return [];
+      return [{
+        fromId: relationship.from_client_id,
+        toId: relationship.to_client_id,
+        weight: PARTNER_RELATIONS.has(relationship.relation_type) ? 100 : 10,
+      }];
+    });
 
-        let x = 0,
-          y = 0;
-        switch (direction) {
-          case 'top':
-            y = -GRAPH_CONFIG.Y_GAP;
-            x = offset;
-            break;
-          case 'bottom':
-            y = GRAPH_CONFIG.Y_GAP;
-            x = offset;
-            break;
-          case 'left':
-            x = -GRAPH_CONFIG.X_GAP;
-            y = offset;
-            break;
-          case 'right':
-            x = GRAPH_CONFIG.X_GAP;
-            y = offset;
-            break;
-        }
-        calculatedNodes.push({ id: rel.related_client.id, x, y, data: rel.related_client, relType: rel.relation_type });
+    interface GenerationComponent {
+      generation: number;
+      ids: string[];
+      orderedIds: string[];
+      desiredCenter: number;
+    }
+
+    const componentsByGeneration = new Map<number, GenerationComponent[]>();
+    idsByGeneration.forEach((ids, generation) => {
+      const idSet = new Set(ids);
+      const peerAdjacency = new Map<string, string[]>();
+      ids.forEach((id) => peerAdjacency.set(id, []));
+      peerEdges.forEach((edge) => {
+        if (!idSet.has(edge.fromId) || !idSet.has(edge.toId)) return;
+        peerAdjacency.get(edge.fromId)!.push(edge.toId);
+        peerAdjacency.get(edge.toId)!.push(edge.fromId);
       });
-    };
 
-    layoutGroup(parents, 'top');
-    layoutGroup(children, 'bottom');
-    layoutGroup(others, 'left');
-    layoutGroup(partners, 'right');
-
-    const calculatedLines = calculatedNodes
-      .filter((n) => n.id !== 'center')
-      .map((node) => {
-        let d = '';
-        let arrowRotation = 0;
-        let arrowX = node.x;
-        let arrowY = node.y;
-
-        const halfW = 42;
-        const halfH = 16;
-
-        if (Math.abs(node.y) > Math.abs(node.x)) {
-          const cY = node.y / 2;
-          d = `M 0 0 C 0 ${cY}, ${node.x} ${cY}, ${node.x} ${node.y}`;
-          if (node.y > 0) {
-            arrowRotation = 90;
-            arrowY = node.y - halfH;
-          } else {
-            arrowRotation = -90;
-            arrowY = node.y + halfH;
-          }
-        } else {
-          const cX = node.x / 2;
-          d = `M 0 0 C ${cX} 0, ${cX} ${node.y}, ${node.x} ${node.y}`;
-          if (node.x > 0) {
-            arrowRotation = 0;
-            arrowX = node.x - halfW;
-          } else {
-            arrowRotation = 180;
-            arrowX = node.x + halfW;
+      const remaining = new Set(ids);
+      const components: GenerationComponent[] = [];
+      while (remaining.size > 0) {
+        const firstId = remaining.values().next().value as string;
+        const componentIds: string[] = [];
+        const componentQueue = [firstId];
+        remaining.delete(firstId);
+        while (componentQueue.length > 0) {
+          const id = componentQueue.shift()!;
+          componentIds.push(id);
+          for (const nextId of peerAdjacency.get(id) || []) {
+            if (!remaining.has(nextId)) continue;
+            remaining.delete(nextId);
+            componentQueue.push(nextId);
           }
         }
-        return { targetId: node.id, d, arrowX, arrowY, rotation: arrowRotation };
+        const componentIdSet = new Set(componentIds);
+        const componentEdges = peerEdges.filter((edge) => componentIdSet.has(edge.fromId) && componentIdSet.has(edge.toId));
+        components.push({
+          generation,
+          ids: componentIds,
+          orderedIds: orderPeerComponent(componentIds, componentEdges, componentIdSet.has(client.id) ? client.id : undefined),
+          desiredCenter: 0,
+        });
+      }
+      componentsByGeneration.set(generation, components);
+    });
+
+    const horizontalGap = 112;
+    const componentGap = 64;
+    const verticalGap = 105;
+    const xById = new Map<string, number>();
+
+    const generations = Array.from(componentsByGeneration.keys()).sort((a, b) => {
+      const distanceDiff = Math.abs(a) - Math.abs(b);
+      return distanceDiff !== 0 ? distanceDiff : a - b;
+    });
+
+    generations.forEach((generation) => {
+      const components = componentsByGeneration.get(generation) || [];
+      components.forEach((component, index) => {
+        const connectedXs: number[] = [];
+        relationships.forEach((relationship) => {
+          const fromInComponent = component.ids.includes(relationship.from_client_id);
+          const toInComponent = component.ids.includes(relationship.to_client_id);
+          const otherId = fromInComponent
+            ? relationship.to_client_id
+            : toInComponent
+              ? relationship.from_client_id
+              : null;
+          if (otherId && xById.has(otherId)) connectedXs.push(xById.get(otherId)!);
+        });
+        component.desiredCenter = connectedXs.length > 0
+          ? connectedXs.reduce((sum, x) => sum + x, 0) / connectedXs.length
+          : index * (horizontalGap + componentGap);
       });
+
+      const rootComponent = generation === 0
+        ? components.find((component) => component.ids.includes(client.id))
+        : undefined;
+      if (rootComponent) rootComponent.desiredCenter = 0;
+
+      const orderedComponents = [...components].sort((a, b) => a.desiredCenter - b.desiredCenter);
+      const centers: number[] = [];
+      orderedComponents.forEach((component, index) => {
+        const halfWidth = ((component.orderedIds.length - 1) * horizontalGap) / 2;
+        if (index === 0) {
+          centers.push(component.desiredCenter);
+          return;
+        }
+        const previous = orderedComponents[index - 1];
+        const previousHalfWidth = ((previous.orderedIds.length - 1) * horizontalGap) / 2;
+        centers.push(Math.max(
+          component.desiredCenter,
+          centers[index - 1] + previousHalfWidth + componentGap + halfWidth,
+        ));
+      });
+
+      if (centers.length > 0) {
+        const shift = orderedComponents.reduce(
+          (sum, component, index) => sum + component.desiredCenter - centers[index],
+          0,
+        ) / orderedComponents.length;
+        centers.forEach((center, componentIndex) => {
+          const component = orderedComponents[componentIndex];
+          const shiftedCenter = center + shift;
+          component.orderedIds.forEach((id, index) => {
+            xById.set(id, shiftedCenter + (index - (component.orderedIds.length - 1) / 2) * horizontalGap);
+          });
+        });
+      }
+    });
+
+    const calculatedNodes: GraphNode[] = Array.from(generationById.entries()).flatMap(([id, generation]) => {
+      const person = clients.get(id);
+      if (!person) return [];
+      return [{
+        id,
+        x: xById.get(id) || 0,
+        y: generation * verticalGap,
+        data: person,
+        generation,
+      }];
+    });
+
+    const nodeById = new Map(calculatedNodes.map((node) => [node.id, node]));
+    const calculatedLines: GraphLine[] = relationships.flatMap((relationship) => {
+      const source = nodeById.get(relationship.from_client_id);
+      const target = nodeById.get(relationship.to_client_id);
+      if (!source || !target) return [];
+      return [{
+        id: [relationship.from_client_id, relationship.to_client_id].sort().join(':'),
+        x1: source.x,
+        y1: source.y,
+        x2: target.x,
+        y2: target.y,
+      }];
+    });
 
     return { nodes: calculatedNodes, lines: calculatedLines };
   }, [client, relationships, hasRelations]);
@@ -408,7 +580,7 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
       <div className={`flex w-full h-full bg-white`}>
         <div
           className={`h-full flex flex-col p-1 border-r border-gray-100 bg-white z-[300] relative transition-all duration-300 ${
-            hasRelations ? 'basis-[35%] shrink-0' : 'w-full'
+            hasRelations ? 'w-full md:basis-[35%] md:shrink-0' : 'w-full'
           }`}
         >
           {historyStack.length > 0 && (
@@ -763,15 +935,14 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
               <motion.div className="relative" style={{ x: 0, y: 0 }}>
                 <svg className="absolute overflow-visible pointer-events-none" style={{ left: 0, top: 0 }}>
                   {lines.map((line) => (
-                    <g key={line.targetId}>
-                      <path d={line.d} fill="none" stroke="#cbd5e1" strokeWidth="2" />
-                      <ArrowHead x={line.arrowX} y={line.arrowY} rotation={line.rotation} />
+                    <g key={line.id}>
+                      <line x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2} stroke="#cbd5e1" strokeWidth="2" />
                     </g>
                   ))}
                 </svg>
 
                 {nodes.map((node) => {
-                  const isCenter = node.id === 'center';
+                  const isCenter = node.id === client.id;
                   const isSelected = selectedNodeId === node.id;
                   return (
                     <div

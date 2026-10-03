@@ -6,7 +6,7 @@ import { PalaceGrid, type SiHuaTrace } from './PalaceGrid';
 import type { SiHuaClickPayload } from '../PalaceCard';
 import {
   getClient,
-  getRelationships,
+  getRelationshipNetwork,
   getMyProfile,
   loadYearAdviceRules,
   type Client,
@@ -31,6 +31,7 @@ import PaywallModal from '../Paywall/PaywallModal';
 import { WhiteboardOverlay } from '../Whiteboard/WhiteboardOverlay';
 import { exportAndShareWhiteboard } from '../../logic/whiteboardExport';
 import { useWhiteboardMode } from '../../hooks/useWhiteboardMode';
+import { shiftShichen } from '../../logic/shichen';
 
 const OFFICIAL_SITE_URL = 'https://www.dabao.life';
 const MOBILE_LIMIT_GUIDE_KEY = 'ziwei_mobile_limit_guide_seen_v2';
@@ -67,20 +68,6 @@ const getRecursiveSum = (n: number): number => {
 
 const getDivinationStem = (n: number): number => {
   return (n - 3 + 10) % 10;
-};
-
-const calcNextHour = (currentHour: number, delta: number) => {
-  const hours = [0, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23];
-  let currentIndex = hours.indexOf(currentHour);
-  if (currentIndex === -1) {
-    currentIndex = hours.findIndex((h) => h >= currentHour);
-  }
-
-  let nextIndex = currentIndex + delta;
-  if (nextIndex < 0) nextIndex = hours.length - 1;
-  if (nextIndex >= hours.length) nextIndex = 0;
-
-  return hours[nextIndex];
 };
 
 export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, onBack, mode = 'standard' }) => {
@@ -150,7 +137,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       if (client) {
         setLoading(false);
         if (client.id && !client.id.startsWith('temp-') && mode !== 'divination') {
-          getRelationships(client.id).then(setRelationships);
+          getRelationshipNetwork(client.id).then(setRelationships);
         } else {
           setRelationships([]);
         }
@@ -165,7 +152,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
           if (data) {
             setClient(data);
             setCurrentHour(data.birthHour);
-            getRelationships(data.id).then(setRelationships);
+            getRelationshipNetwork(data.id).then(setRelationships);
           } else {
             alert('找不到此命盤');
             navigate('/list');
@@ -423,7 +410,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   };
 
   const changeHour = (delta: number) => {
-    const nextHour = calcNextHour(currentHour, delta);
+    const nextHour = shiftShichen(currentHour, delta);
     setCurrentHour(nextHour);
     resetAllStates();
   };

@@ -9,6 +9,7 @@ import { Loader2, ChevronLeft, Lock, Unlock, ArrowRightLeft, PenLine } from 'luc
 import { Solar, Lunar, LunarYear } from 'lunar-typescript';
 import { checkIsSuperAdmin, getMyProfile, type Client, type UserProfile } from '../../db';
 import { WhiteboardOverlay } from '../Whiteboard/WhiteboardOverlay';
+import { shiftShichen } from '../../logic/shichen';
 import { exportAndShareWhiteboard } from '../../logic/whiteboardExport';
 import { useWhiteboardMode } from '../../hooks/useWhiteboardMode';
 
@@ -67,20 +68,6 @@ const getCurrentDaLimitIndex = (chartData: any, engine: ZiWeiEngine) => {
         }
     }
     return 0;
-};
-
-const calcNextHour = (currentHour: number, delta: number) => {
-    const hours = [0, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23];
-    let currentIndex = hours.indexOf(currentHour);
-    if (currentIndex === -1) {
-        currentIndex = hours.findIndex(h => h >= currentHour);
-    }
-    
-    let nextIndex = currentIndex + delta;
-    if (nextIndex < 0) nextIndex = hours.length - 1;
-    if (nextIndex >= hours.length) nextIndex = 0;
-    
-    return hours[nextIndex];
 };
 
 export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
@@ -557,7 +544,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   }, [hourA, daSeqA, liuYearA, showXiaoA, liuMonthA, liuDayA, hourB, daSeqB, liuYearB, showXiaoB, liuMonthB, liuDayB]);
 
   const handleChangeHourA = (delta: number) => {
-      const newHour = calcNextHour(hourA, delta);
+      const newHour = shiftShichen(hourA, delta);
       setHourA(newHour);
       setDaSeqA(-1); setLiuYearA(null); setShowXiaoA(false);
       setLiuMonthA(null); setLiuDayA(null);
@@ -567,7 +554,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   };
 
   const handleChangeHourB = (delta: number) => {
-      const newHour = calcNextHour(hourB, delta);
+      const newHour = shiftShichen(hourB, delta);
       setHourB(newHour);
       setDaSeqB(-1); setLiuYearB(null); setShowXiaoB(false);
       setLiuMonthB(null); setLiuDayB(null);

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Search, Users, UserPlus, Sparkles } from 'lucide-react';
 import { loadClients, getRelationships, type Client } from '../db';
-import { AddChartModal } from '../components/AddChartModal';
+import { AddChartModal, type AddChartSubmitAction } from '../components/AddChartModal';
 
 export const CompatibilitySetup = () => {
   const location = useLocation();
@@ -44,11 +44,11 @@ export const CompatibilitySetup = () => {
   };
 
   // 處理新增臨時對象
-  const handleTempAdd = async (data: any) => {
+  const handleTempAdd = async (data: any, action: AddChartSubmitAction) => {
       // 為了適配 AddChartModal 的介面，我們這裡動態載入 db 的 saveClient
       const { saveClient } = await import('../db');
       const newId = await saveClient(data);
-      if (newId) {
+      if (newId && action === 'save-and-open') {
           const newClient = { ...data, id: newId };
           handleSelect(newClient);
       }

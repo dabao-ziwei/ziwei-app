@@ -9,9 +9,11 @@ import { ZHI } from '../logic/constants';
 interface AddChartModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (client: any) => Promise<void>;
+  onSave: (client: any, action: AddChartSubmitAction) => Promise<void>;
   editData?: Client | null;
 }
+
+export type AddChartSubmitAction = 'save' | 'save-and-open';
 
 const CATEGORIES = ['我', '家人', '朋友', '客戶', '名人', '其他'];
 const DEFAULT_RELATIONS = ['配偶', '情侶', '父親', '母親', '子女', '哥哥', '姐姐', '弟弟', '妹妹', '親戚', '朋友'];
@@ -76,7 +78,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
   
   const [category, setCategory] = useState('客戶');
   const [isFavorite, setIsFavorite] = useState(false); 
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittingAction, setSubmittingAction] = useState<AddChartSubmitAction | null>(null);
 
   const [linkTarget, setLinkTarget] = useState<Client | null>(null);
   const [linkType, setLinkType] = useState('配偶');
@@ -155,13 +157,13 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
       }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (action: AddChartSubmitAction) => {
     if (!name || !year || !month || !day || !hour || !minute) {
       alert("請填寫完整資訊");
       return;
     }
 
-    setIsSubmitting(true);
+    setSubmittingAction(action);
 
     try {
       const birthYear = parseInt(year);
@@ -199,7 +201,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
           };
       }
       
-      await onSave(payload);
+      await onSave(payload, action);
 
       onClose();
 
@@ -207,7 +209,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
       console.error('Save Error:', err);
       alert(`發生錯誤：${err.message}`);
     } finally {
-      setIsSubmitting(false);
+      setSubmittingAction(null);
     }
   };
 
@@ -355,13 +357,20 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
         </div>
         
         <div className="p-4 bg-gray-50 flex gap-3 shrink-0">
-          <button onClick={onClose} disabled={isSubmitting} className="flex-1 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50">取消</button>
-          <button 
-            onClick={handleSubmit} 
-            disabled={isSubmitting}
+          <button onClick={onClose} disabled={submittingAction !== null} className="px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50">取消</button>
+          <button
+            onClick={() => handleSubmit('save')}
+            disabled={submittingAction !== null}
+            className="flex-1 py-2.5 bg-white border border-blue-500 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors font-bold flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+          >
+            {submittingAction === 'save' ? <Loader2 className="animate-spin" size={20} /> : '儲存'}
+          </button>
+          <button
+            onClick={() => handleSubmit('save-and-open')}
+            disabled={submittingAction !== null}
             className="flex-1 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 shadow-lg shadow-red-200 transition-all font-bold flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
           >
-            {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : '✓ 儲存並排盤'}
+            {submittingAction === 'save-and-open' ? <Loader2 className="animate-spin" size={20} /> : '✓ 儲存並排盤'}
           </button>
         </div>
       </div>
