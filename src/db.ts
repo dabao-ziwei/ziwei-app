@@ -67,7 +67,9 @@ export interface Relationship {
   to_client_id: string;
   relation_type: string;
   related_client?: Client;
-  is_reverse?: boolean; 
+  from_client?: Client;
+  to_client?: Client;
+  is_reverse?: boolean;
   is_inferred?: boolean;
   inferred_from?: string;
 }
@@ -177,18 +179,30 @@ export const loadClients = async (loadAllForAdmin = false): Promise<Client[]> =>
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
   const isSuperViewer = checkIsSuperAdmin(user.email);
-  
-  let query = supabase.from('clients')
-    .select('*')
-    .eq('is_deleted', false)
-    .order('created_at', { ascending: false });
-    
-  if (!isSuperViewer || !loadAllForAdmin) { 
-      query = query.eq('user_id', user.id); 
+
+  const pageSize = 1000;
+  const clients: any[] = [];
+  let from = 0;
+
+  while (true) {
+      let query = supabase.from('clients')
+        .select('*')
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, from + pageSize - 1);
+
+      if (!isSuperViewer || !loadAllForAdmin) {
+          query = query.eq('user_id', user.id);
+      }
+
+      const { data, error } = await query;
+      if (error) return [];
+
+      clients.push(...(data || []));
+      if (!data || data.length < pageSize) break;
+      from += pageSize;
   }
-  
-  const { data, error } = await query;
-  if (error) return [];
   
   let userIdToEmailMap: Record<string, string> = {};
   if (isSuperViewer && loadAllForAdmin) {
@@ -196,7 +210,7 @@ export const loadClients = async (loadAllForAdmin = false): Promise<Client[]> =>
       if (profiles) profiles.forEach(p => userIdToEmailMap[p.id] = p.email);
   }
   
-  return data.map((item: any) => ({ ...mapClientToEntity(item), creatorEmail: userIdToEmailMap[item.user_id] || '', is_deleted: item.is_deleted }));
+  return clients.map((item: any) => ({ ...mapClientToEntity(item), creatorEmail: userIdToEmailMap[item.user_id] || '', is_deleted: item.is_deleted }));
 };
 
 export const getClient = async (id: string): Promise<Client | null> => {
@@ -250,6 +264,81 @@ export const getRelationships = async (clientId: string): Promise<Relationship[]
     const { data, error } = await supabase.from('relationships').select(`*, to_c:clients!to_client_id (*)`).eq('from_client_id', clientId);
     if (error || !data) return [];
     return data.map((r: any) => ({ id: r.id, from_client_id: r.from_client_id, to_client_id: r.to_client_id, relation_type: r.relation_type, related_client: mapClientToEntity(r.to_c) }));
+};
+
+export const getRelationshipNetwork = async (rootClientId: string): Promise<Relationship[]> => {
+    const rootClient = await getClient(rootClientId);
+    if (!rootClient) return [];
+
+    const clients = new Map<string, Client>([[rootClient.id, rootClient]]);
+    const rowsById = new Map<string, Relationship>();
+    const visitedClientIds = new Set<string>();
+    let frontier = [rootClientId];
+
+    // 由目前命主逐層向外查找，不讀取使用者的整張關係表。
+    // 同時查入向與出向，可兼容早期只有單向紀錄的關係資料。
+    while (frontier.length > 0) {
+        const currentIds = frontier.filter((id) => !visitedClientIds.has(id));
+        if (currentIds.length === 0) break;
+        currentIds.forEach((id) => visitedClientIds.add(id));
+
+        const [outgoingResult, incomingResult] = await Promise.all([
+            supabase.from('relationships')
+                .select(`*, to_c:clients!to_client_id (*)`)
+                .in('from_client_id', currentIds),
+            supabase.from('relationships')
+                .select(`*, from_c:clients!from_client_id (*)`)
+                .in('to_client_id', currentIds),
+        ]);
+
+        if (outgoingResult.error || incomingResult.error) {
+            console.error('Failed to load relationship network:', outgoingResult.error || incomingResult.error);
+            return [];
+        }
+        const nextIds = new Set<string>();
+
+        for (const row of outgoingResult.data || []) {
+            const fromClient = clients.get(row.from_client_id);
+            if (!fromClient || !row.to_c || row.to_c.is_deleted === true) continue;
+            const toClient = mapClientToEntity(row.to_c);
+            clients.set(toClient.id, toClient);
+            rowsById.set(row.id, {
+                id: row.id,
+                from_client_id: row.from_client_id,
+                to_client_id: row.to_client_id,
+                relation_type: row.relation_type,
+                from_client: fromClient,
+                to_client: toClient,
+            });
+            if (!visitedClientIds.has(toClient.id)) nextIds.add(toClient.id);
+        }
+
+        for (const row of incomingResult.data || []) {
+            const toClient = clients.get(row.to_client_id);
+            if (!toClient || !row.from_c || row.from_c.is_deleted === true) continue;
+            const fromClient = mapClientToEntity(row.from_c);
+            clients.set(fromClient.id, fromClient);
+            rowsById.set(row.id, {
+                id: row.id,
+                from_client_id: row.from_client_id,
+                to_client_id: row.to_client_id,
+                relation_type: row.relation_type,
+                from_client: fromClient,
+                to_client: toClient,
+            });
+            if (!visitedClientIds.has(fromClient.id)) nextIds.add(fromClient.id);
+        }
+
+        frontier = Array.from(nextIds);
+    }
+
+    // 新版資料會為同一關係保存正反兩筆；畫面只需要一條連線。
+    const relationshipsByPair = new Map<string, Relationship>();
+    rowsById.forEach((relationship) => {
+        const pairKey = [relationship.from_client_id, relationship.to_client_id].sort().join(':');
+        if (!relationshipsByPair.has(pairKey)) relationshipsByPair.set(pairKey, relationship);
+    });
+    return Array.from(relationshipsByPair.values());
 };
 
 // [修改] 支援雙向寫入

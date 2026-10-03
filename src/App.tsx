@@ -3,7 +3,7 @@ import { LegalPage } from './pages/LegalPage';
 import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet, useNavigate } from 'react-router-dom';
 import { ChartBoard } from './components/ChartBoard';
-import { AddChartModal } from './components/AddChartModal';
+import { AddChartModal, type AddChartSubmitAction } from './components/AddChartModal';
 import { Auth } from './components/Auth';
 import { UpdatePassword } from './components/UpdatePassword';
 import { ClientList } from './pages/ClientList'; 
@@ -76,7 +76,7 @@ function App() {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const handleSaveClient = async (clientData: any) => {
+  const handleSaveClient = async (clientData: any, action: AddChartSubmitAction) => {
     try {
       const savedId = await saveClient(clientData);
       
@@ -90,12 +90,12 @@ function App() {
       setIsModalOpen(false);
       setEditingClient(null);
 
-      if (savedId) {
+      if (savedId && action === 'save-and-open') {
         navigate(`/chart/${savedId}`);
       }
     } catch (error) {
       console.error("Save failed:", error);
-      alert("儲存失敗，請重試");
+      throw error;
     }
   };
 
