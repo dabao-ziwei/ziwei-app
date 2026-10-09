@@ -266,6 +266,11 @@ export const getRelationships = async (clientId: string): Promise<Relationship[]
     return data.map((r: any) => ({ id: r.id, from_client_id: r.from_client_id, to_client_id: r.to_client_id, relation_type: r.relation_type, related_client: mapClientToEntity(r.to_c) }));
 };
 
+export const toggleVip = async (id: string, isVip: boolean): Promise<boolean> => {
+    const { error } = await supabase.from('clients').update({ type: isVip ? 'VIP' : '客戶' }).eq('id', id);
+    return !error;
+};
+
 export const getRelationshipNetwork = async (rootClientId: string): Promise<Relationship[]> => {
     const rootClient = await getClient(rootClientId);
     if (!rootClient) return [];

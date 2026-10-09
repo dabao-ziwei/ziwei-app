@@ -15,7 +15,7 @@ interface AddChartModalProps {
 
 export type AddChartSubmitAction = 'save' | 'save-and-open';
 
-const CATEGORIES = ['我', '家人', '朋友', '客戶', '名人', '其他'];
+const CATEGORIES = ['我', '家人', '朋友', '客戶', 'VIP', '名人', '其他'];
 const DEFAULT_RELATIONS = ['配偶', '情侶', '父親', '母親', '子女', '哥哥', '姐姐', '弟弟', '妹妹', '親戚', '朋友'];
 
 // --- 時辰快捷選單對照表 ---

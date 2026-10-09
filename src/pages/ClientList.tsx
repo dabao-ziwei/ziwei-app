@@ -1,7 +1,7 @@
 // FILE: src/pages/ClientList.tsx
 import React, { useEffect, useState, useMemo } from 'react';
-import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, UserCog, LogOut, User, Sparkles, Network, ArrowLeft, Wrench, X, Star } from 'lucide-react';
-import { loadClients, deleteClient, getMyProfile, getUsedChartCount, checkIsSuperAdmin, toggleFavorite, type Client, type UserProfile } from '../db';
+import { Search, Plus, Edit2, Trash2, ChevronDown, ChevronRight, Menu, UserCog, LogOut, User, Sparkles, Network, ArrowLeft, Wrench, X, Star, Crown } from 'lucide-react';
+import { loadClients, deleteClient, getMyProfile, getUsedChartCount, checkIsSuperAdmin, toggleFavorite, toggleVip, type Client, type UserProfile } from '../db';
 import { supabase } from '../supabase';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { ZHI } from '../logic/constants';
@@ -12,7 +12,7 @@ import { AddChartModal } from '../components/AddChartModal';
 import { ZiWeiEngine } from '../logic/engine';
 import { getFeaturePermission } from '../logic/permissions';
 
-const CATEGORIES = ["我", "家人", "朋友", "客戶", "名人", "其他", "紫占"];
+const CATEGORIES = ["我", "家人", "朋友", "客戶", "VIP", "名人", "其他", "紫占"];
 const MAJOR_STARS = ['紫微', '天機', '太陽', '武曲', '天同', '廉貞', '天府', '太陰', '貪狼', '巨門', '天相', '天梁', '七殺', '破軍'];
 const SUPER_ADMIN_EMAIL = 'stephenwu.0926@gmail.com';
 
@@ -34,11 +34,13 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   
   const initialG = (searchParams.get('g') as 'all' | '男' | '女') || 'all';
   const initialStars = (searchParams.get('star') || '').split(',').filter(Boolean);
-  const initialFav = searchParams.get('fav') === '1';
+  const initialVip = searchParams.get('vip') === '1';
+  const initialFav = searchParams.get('fav') === '1' && !initialVip;
 
   const [filterGender, setFilterGender] = useState<'all'|'男'|'女'>(initialG);
   const [filterStars, setFilterStars] = useState<string[]>(initialStars);
   const [filterFavorite, setFilterFavorite] = useState<boolean>(initialFav);
+  const [filterVip, setFilterVip] = useState<boolean>(initialVip);
 
   // --- 2. 資料狀態 ---
   const [clients, setClients] = useState<Client[]>([]); 
@@ -72,6 +74,24 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false); 
   const [isDivinationModalOpen, setIsDivinationModalOpen] = useState(false);
   const [relationClient, setRelationClient] = useState<Client | null>(null);
+  const [pendingVipIds, setPendingVipIds] = useState<string[]>([]);
+
+  const handleToggleVip = async (e: React.MouseEvent, target: Client) => {
+    e.stopPropagation();
+    if (pendingVipIds.includes(target.id)) return;
+    setPendingVipIds(prev => [...prev, target.id]);
+    try {
+      const nextVip = target.type !== 'VIP';
+      const success = await toggleVip(target.id, nextVip);
+      if (!success) throw new Error('VIP update failed');
+      setClients(prev => prev.map(c => c.id === target.id ? { ...c, type: nextVip ? 'VIP' : '客戶' } : c));
+      setExpandedCats(prev => prev.includes(nextVip ? 'VIP' : '客戶') ? prev : [...prev, nextVip ? 'VIP' : '客戶']);
+    } catch {
+      alert('設定 VIP 失敗，請檢查網路連線');
+    } finally {
+      setPendingVipIds(prev => prev.filter(id => id !== target.id));
+    }
+  };
 
   const canDivination = useMemo(() => getFeaturePermission(userProfile, 'divination'), [userProfile]);
 
@@ -89,9 +109,10 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
       if (filterGender !== 'all') newParams.set('g', filterGender);
       if (filterStars.length > 0) newParams.set('star', filterStars.join(','));
       if (filterFavorite) newParams.set('fav', '1');
+      if (filterVip) newParams.set('vip', '1');
       if (searchParams.toString() !== newParams.toString()) setSearchParams(newParams, { replace: true });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterGender, filterStars, filterFavorite]);
+  }, [filterGender, filterStars, filterFavorite, filterVip]);
 
   useEffect(() => { localStorage.setItem(STORAGE_KEY_CATS, JSON.stringify(expandedCats)); }, [expandedCats]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_FILTER, JSON.stringify(showOnlyMine)); }, [showOnlyMine]);
@@ -223,6 +244,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         const genderMatch = filterGender === 'all' || c.gender === filterGender;
         const starMatch = filterStars.length === 0 || filterStars.every(star => (c.majorStars || '').includes(star));
         const favMatch = !filterFavorite || c.is_favorite === true;
+        const vipMatch = !filterVip || c.type === 'VIP';
         
         let isOwnerMatch = true;
         const isSpecificSuperUser = (currentUserEmail || '').trim().toLowerCase() === SUPER_ADMIN_EMAIL;
@@ -241,9 +263,9 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
             }
         }
         
-        return match && genderMatch && starMatch && favMatch && isOwnerMatch;
+        return match && genderMatch && starMatch && favMatch && vipMatch && isOwnerMatch;
       });
-  }, [clients, inputValue, filterGender, filterStars, filterFavorite, showOnlyMine, currentUserEmail, currentUserId]);
+  }, [clients, inputValue, filterGender, filterStars, filterFavorite, filterVip, showOnlyMine, currentUserEmail, currentUserId]);
 
   // --- 列表分組 ---
   const groupedData = useMemo(() => {
@@ -330,7 +352,8 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         </div>
         <div className="flex gap-2 items-center">
              <div className="bg-slate-100 p-1 rounded-lg flex items-center shrink-0">
-                  <button onClick={() => setFilterFavorite(!filterFavorite)} className={`px-3 sm:px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1 sm:mr-1 ${filterFavorite ? 'bg-yellow-50 text-yellow-600 shadow-sm border border-yellow-200' : 'text-slate-400 hover:text-yellow-500'}`} title="只顯示最愛"><Star size={14} className={filterFavorite ? "fill-current" : ""} /> <span className="hidden sm:inline">最愛</span></button>
+                  <button onClick={() => { const next = !filterFavorite; setFilterFavorite(next); if (next) setFilterVip(false); }} className={`px-3 sm:px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1 sm:mr-1 ${filterFavorite ? 'bg-yellow-50 text-yellow-600 shadow-sm border border-yellow-200' : 'text-slate-400 hover:text-yellow-500'}`} title="只顯示最愛"><Star size={14} className={filterFavorite ? "fill-current" : ""} /> <span className="hidden sm:inline">最愛</span></button>
+                  <button onClick={() => { const next = !filterVip; setFilterVip(next); if (next) setFilterFavorite(false); }} className={`px-3 sm:px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1 sm:mr-1 ${filterVip ? 'bg-purple-50 text-purple-700 shadow-sm border border-purple-200' : 'text-slate-400 hover:text-purple-600'}`} title="只顯示 VIP"><Crown size={14} className={filterVip ? "fill-current" : ""} /> <span className="hidden sm:inline">VIP</span></button>
                   <div className="hidden sm:block w-px h-4 bg-slate-200 mx-1"></div>
                   <button onClick={() => setFilterGender('all')} className={`px-3 sm:px-4 py-1.5 rounded-md text-xs font-bold transition-all ${filterGender === 'all' ? 'bg-white shadow' : 'text-slate-400'}`}>全部</button>
                   <button onClick={() => setFilterGender('女')} className={`px-3 sm:px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1 ${filterGender === '女' ? 'bg-pink-500 text-white shadow-sm' : 'text-slate-400 hover:text-pink-500'}`}>女</button>
@@ -374,6 +397,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                             <div className="flex items-center gap-2 shrink-0">
                                 {!isMine && c.creatorEmail && (<div className="hidden sm:flex items-center gap-1 text-[10px] text-gray-400 bg-gray-50 px-2 py-1 rounded border border-gray-100 select-none mr-1"><User size={10} /><span>建立者:</span><span className="max-w-[120px] truncate" title={c.creatorEmail}>{c.creatorEmail}</span></div>)}
                                 <div className="flex gap-1">
+                                    {!isZ && <button onClick={(e) => handleToggleVip(e, c)} disabled={pendingVipIds.includes(c.id)} aria-pressed={c.type === 'VIP'} className={`px-2 py-2 rounded-full flex items-center gap-1 text-xs font-bold transition-colors disabled:opacity-50 ${c.type === 'VIP' ? 'text-purple-700 bg-purple-50' : 'text-slate-400 hover:text-purple-600 hover:bg-purple-50'}`} title={c.type === 'VIP' ? '取消 VIP（改為客戶）' : '設為 VIP'}><Crown size={18} className={c.type === 'VIP' ? 'fill-current' : ''} />VIP</button>}
                                     <button onClick={(e) => handleToggleFav(e, c.id, !!c.is_favorite)} className={`p-2 rounded-full transition-colors ${c.is_favorite ? 'text-yellow-500 hover:bg-yellow-50 hover:text-yellow-600' : 'text-slate-300 hover:text-yellow-500 hover:bg-yellow-50'}`} title={c.is_favorite ? "移除最愛" : "加入最愛"}>
                                         <Star size={18} className={c.is_favorite ? "fill-current" : ""} />
                                     </button>

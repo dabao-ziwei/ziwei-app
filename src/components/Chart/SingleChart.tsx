@@ -16,11 +16,12 @@ import {
   consumeDivinationV2,
   issueGuestToken,
   toggleFavorite,
+  toggleVip,
   checkIsSuperAdmin,
 } from '../../db';
 import { ZiWeiEngine } from '../../logic/engine';
 import { GAN, ZHI, PALACE_NAMES, SIHUA_TABLE } from '../../logic/constants';
-import { Loader2, UserPlus, X, ChevronLeft, Camera, Users, Compass, Sparkles, MessageCircle, Star, PenLine } from 'lucide-react';
+import { Loader2, UserPlus, X, ChevronLeft, Camera, Users, Compass, Sparkles, MessageCircle, Star, PenLine, Crown } from 'lucide-react';
 import { getFeaturePermission } from '../../logic/permissions';
 import { Lunar, LunarYear } from 'lunar-typescript';
 import { YearlyAnalysisBoard } from './YearlyAnalysisBoard';
@@ -76,6 +77,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const location = useLocation();
 
   const [client, setClient] = useState<Client | null>(propClient || location.state?.client || null);
+  const [vipSaving, setVipSaving] = useState(false);
 
   const [historyStack, setHistoryStack] = useState<Client[]>([]);
   const [relationships, setRelationships] = useState<Relationship[]>([]);
@@ -385,6 +387,24 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
           setClient(prev => prev ? { ...prev, is_favorite: currentFav } : prev);
           console.error("Toggle Favorite Error:", err);
       }
+  };
+
+  const handleToggleVip = async () => {
+    if (!client?.id || client.id.startsWith('temp-') || vipSaving) return;
+    const targetId = client.id;
+    const nextVip = client.type !== 'VIP';
+    setVipSaving(true);
+    try {
+      const success = await toggleVip(targetId, nextVip);
+      if (!success) throw new Error('VIP update failed');
+      const update = (person: Client) => person.id === targetId ? { ...person, type: nextVip ? 'VIP' : '客戶' } : person;
+      setClient(prev => prev ? update(prev) : prev);
+      setHistoryStack(prev => prev.map(update));
+    } catch {
+      alert('設定 VIP 失敗，請檢查網路連線');
+    } finally {
+      setVipSaving(false);
+    }
   };
 
   const benMingMajorStarsStr = useMemo(() => {
@@ -982,6 +1002,12 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
                 title={client?.is_favorite ? "移除最愛" : "加入最愛"}
               >
                 <Star size={16} className={client?.is_favorite ? "fill-current" : ""} />
+              </button>
+            )}
+
+            {client?.id && !client.id.startsWith('temp-') && mode !== 'divination' && (
+              <button onClick={handleToggleVip} disabled={vipSaving} aria-pressed={client.type === 'VIP'} aria-label="VIP" className={`px-3 py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition-all text-sm font-bold shadow-sm border disabled:opacity-50 ${client.type === 'VIP' ? 'bg-purple-50 text-purple-700 border-purple-300' : 'bg-white text-gray-400 border-gray-300 hover:text-purple-600 hover:bg-purple-50'}`}>
+                <Crown size={16} className={client.type === 'VIP' ? 'fill-current' : ''} /><span>VIP</span>
               </button>
             )}
 
