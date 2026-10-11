@@ -14,7 +14,8 @@ import {
 import { ZiWeiEngine } from '../logic/engine';
 import { calculateDailyFortune, type DailyFortune } from '../logic/fortune';
 import { FortuneWidget } from '../components/FortuneWidget';
-import { getFeaturePermission } from '../logic/permissions';
+import { getFeaturePermission, isOwner } from '../logic/permissions';
+import { usePermissionRefresh } from '../hooks/usePermissionRefresh';
 import { DivinationSetupModal } from '../components/DivinationSetupModal';
 
 const OFFICIAL_SITE_URL = 'https://www.dabao.life';
@@ -261,6 +262,7 @@ export const Dashboard: React.FC = () => {
 
   const canLuckyDivination = useMemo(() => getFeaturePermission(userProfile, 'lucky_divination'), [userProfile]);
   const canDivination = useMemo(() => getFeaturePermission(userProfile, 'divination'), [userProfile]);
+  usePermissionRefresh(setUserProfile);
 
   const initDashboard = async () => {
     setLoading(true);
@@ -350,7 +352,7 @@ export const Dashboard: React.FC = () => {
                     </button>
                     {isMenuOpen && (
                         <div className="absolute top-12 left-0 w-60 bg-slate-900/95 rounded-xl shadow-2xl border border-slate-700 overflow-hidden animate-in fade-in slide-in-from-top-2 z-50 backdrop-blur-xl">
-                            {(userProfile?.role === 'admin' || checkIsSuperAdmin(userProfile?.email)) && (
+                            {isOwner(userProfile) && (
                                 <button
                                     onClick={() => { navigate('/admin'); setIsMenuOpen(false); }}
                                     className="w-full text-left px-4 py-3 hover:bg-white/5 flex items-center gap-2 text-slate-300 font-medium"

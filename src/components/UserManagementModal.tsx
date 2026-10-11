@@ -1,22 +1,14 @@
 // FILE: src/components/UserManagementModal.tsx
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Search, ChevronLeft, ChevronRight, Loader2, Trash2, UserPlus, CalendarClock, Settings, Save, RotateCcw, ArrowUp, ArrowDown, Filter, ChevronDown, Coins, X, History, FileText, CreditCard, RefreshCcw, MoreHorizontal, Grid, ChevronUp, CheckCircle } from 'lucide-react';
-import { getAllProfilesWithStats, updateProfile, toggleUserBan, deleteUserProfile, inviteUserByEmail, adminAdjustPoints, getPointsLedger, getPointTransactions, bulkUpdateAccessExpiry, adminBulkUpdateMaxCharts, type UserProfile, type UserFeatures } from '../db';
-import { FEATURE_NAMES } from '../logic/permissions';
+import { getAllProfilesWithStats, updateProfile, toggleUserBan, deleteUserProfile, inviteUserByEmail, adminAdjustPoints, getPointsLedger, getPointTransactions, bulkUpdateAccessExpiry, adminBulkUpdateMaxCharts, type UserProfile } from '../db';
+import { FEATURE_NAMES, getFeaturePermission, getRoleQuotaDefaults, isOwner, type UserFeatures } from '../logic/permissions';
 
 const ITEMS_PER_PAGE = 10;
-const SUPER_ADMIN_EMAIL = 'stephenwu.0926@gmail.com';
 
 type SortConfig = {
     key: keyof UserProfile | 'activeCount';
     direction: 'asc' | 'desc';
-};
-
-const DEFAULT_FLAGS_BY_ROLE: Record<string, Partial<UserFeatures>> = {
-    general: { liu_month: false, liu_day: false, twin: false, inverted: false, xiao_limit: false, flying_star: false, dual_chart: false, screenshot: false, divination: false, lucky_divination: false },
-    student: { liu_month: true, liu_day: true, twin: true, inverted: true, xiao_limit: true, flying_star: true, dual_chart: true, screenshot: true, divination: false, lucky_divination: false },
-    admin: { liu_month: true, liu_day: true, twin: true, inverted: true, xiao_limit: true, flying_star: true, dual_chart: true, screenshot: true, divination: true, lucky_divination: true },
-    competitor: { liu_month: true, liu_day: true, twin: true, inverted: true, xiao_limit: true, flying_star: false, dual_chart: false, screenshot: false, divination: false, lucky_divination: false }
 };
 
 interface Props {
@@ -94,7 +86,6 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen = true, onClose })
       finally { setHistoryLoading(false); }
   };
 
-  const checkIsSuperAdmin = (email?: string | null) => (email || '').trim().toLowerCase() === SUPER_ADMIN_EMAIL;
 
   const processedProfiles = useMemo(() => {
     let result = profiles.filter(p => (p.email || '').toLowerCase().includes(searchTerm.toLowerCase()));
@@ -123,7 +114,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen = true, onClose })
 
   const handleSelectAllPage = () => {
       const newSet = new Set(selectedIds);
-      const validItems = paginatedData.filter(p => !checkIsSuperAdmin(p.email));
+      const validItems = paginatedData.filter(p => !isOwner(p));
       const allSelected = validItems.length > 0 && validItems.every(p => newSet.has(p.id));
       if (allSelected) validItems.forEach(p => newSet.delete(p.id));
       else validItems.forEach(p => newSet.add(p.id));
@@ -135,7 +126,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen = true, onClose })
   };
 
   const handleBanToggle = async (user: UserProfile) => {
-    if (checkIsSuperAdmin(user.email)) return;
+    if (isOwner(user)) return;
     await toggleUserBan(user.id, user.isBanned);
     loadData();
   };
@@ -143,9 +134,9 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen = true, onClose })
   const openEditModal = (user: UserProfile) => {
       setEditingUser(user);
       setEditForm({
-          role: user.role || 'general',
-          maxCharts: user.maxCharts ?? 5,
-          maxEditsPerChart: user.maxEditsPerChart ?? 3,
+          role: isOwner(user) ? user.role : user.role === 'student' ? 'student' : 'general',
+          maxCharts: user.maxCharts ?? getRoleQuotaDefaults(user.role).maxCharts,
+          maxEditsPerChart: user.maxEditsPerChart ?? getRoleQuotaDefaults(user.role).maxEditsPerChart,
           accessExpiry: user.accessExpiry ? user.accessExpiry.split('T')[0] : '',
           can_use_divination: user.can_use_divination,
           feature_flags: { ...user.feature_flags } || {}
@@ -156,15 +147,19 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen = true, onClose })
 
   const handleSaveProfile = async () => {
       if (!editingUser) return;
+      // 擁有者不可由一般角色設定降權，其他帳號不可提升為管理員。
+      if (isOwner(editingUser) && editForm.role !== editingUser.role) return;
+      if (!isOwner(editingUser) && editForm.role !== 'general' && editForm.role !== 'student') return;
       try {
-          await updateProfile(editingUser.id, editForm);
+          const saved = await updateProfile(editingUser.id, editForm);
+          if (!saved) throw new Error('Profile update denied or failed');
           setEditingUser(null);
           loadData();
       } catch(e) { alert('儲存失敗'); }
   };
 
   const handleDeleteUser = async () => {
-      if (!editingUser || checkIsSuperAdmin(editingUser.email)) return;
+      if (!editingUser || isOwner(editingUser)) return;
       if (confirm(`確定要刪除使用者 ${editingUser.email} 嗎？\n資料將移轉給您，此操作無法復原。`)) {
           const success = await deleteUserProfile(editingUser.id);
           if (success) { alert('刪除成功'); setEditingUser(null); loadData(); } else { alert('刪除失敗'); }
@@ -252,8 +247,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen = true, onClose })
                         <option value="all">所有角色</option>
                         <option value="general">一般</option>
                         <option value="student">學員</option>
-                        <option value="competitor">同業</option>
-                        <option value="admin">管理員</option>
+                        <option value="admin">擁有者</option>
                     </select>
                 </div>
                 <button onClick={() => setIsInviteOpen(true)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 font-bold text-sm shadow-md transition-all whitespace-nowrap"><UserPlus size={18} /> <span className="hidden sm:inline">新增</span></button>
@@ -265,7 +259,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen = true, onClose })
                 <table className="w-full text-left border-collapse">
                     <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm text-gray-500 text-sm">
                         <tr>
-                            <th className="py-3 px-4 w-10"><input type="checkbox" onChange={handleSelectAllPage} checked={paginatedData.length > 0 && paginatedData.filter(p=>!checkIsSuperAdmin(p.email)).every(p => selectedIds.has(p.id))} disabled={paginatedData.length===0}/></th>
+                            <th className="py-3 px-4 w-10"><input type="checkbox" onChange={handleSelectAllPage} checked={paginatedData.length > 0 && paginatedData.filter(p=>!isOwner(p)).every(p => selectedIds.has(p.id))} disabled={paginatedData.length===0}/></th>
                             <SortableHeader label="Email" sortKey="email" />
                             <SortableHeader label="VIP 到期日" sortKey="accessExpiry" className="text-center w-28" />
                             <SortableHeader label="盤數" sortKey="activeCount" className="text-center w-20 hidden sm:table-cell" />
@@ -276,7 +270,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen = true, onClose })
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                         {paginatedData.map(user => {
-                            const isSuper = checkIsSuperAdmin(user.email);
+                            const isSuper = isOwner(user);
                             const usage = user.activeCount || 0;
                             return (
                                 <tr key={user.id} className={`hover:bg-gray-50 group transition-colors ${selectedIds.has(user.id) ? 'bg-blue-50/50' : ''}`}>
@@ -415,7 +409,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen = true, onClose })
                             <div className="space-y-6">
                                 <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-4">
                                     <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">基本權限</h4>
-                                    <div><label className="block text-sm font-bold text-gray-700 mb-1">角色權限</label><select className="w-full p-2 border rounded-lg bg-gray-50" value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value as any})} disabled={checkIsSuperAdmin(editingUser.email)}><option value="general">一般會員</option><option value="student">學員</option><option value="competitor">同業</option><option value="admin">管理員</option></select></div>
+                                    <div><label className="block text-sm font-bold text-gray-700 mb-1">角色權限</label><select className="w-full p-2 border rounded-lg bg-gray-50" value={editForm.role} onChange={e => { const role = e.target.value as UserProfile['role']; setEditForm(p => ({...p, role, ...getRoleQuotaDefaults(role)})); }} disabled={isOwner(editingUser)}><option value="general">一般會員</option><option value="student">學員</option>{isOwner(editingUser) && <option value="admin">擁有者</option>}</select></div>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div><label className="block text-sm font-bold text-gray-700 mb-1">命盤上限</label><input type="number" className="w-full p-2 border rounded-lg" value={editForm.maxCharts} onChange={e => setEditForm({...editForm, maxCharts: parseInt(e.target.value)})} /></div>
                                         <div><label className="block text-sm font-bold text-gray-700 mb-1">每盤修改次數</label><input type="number" className="w-full p-2 border rounded-lg" value={editForm.maxEditsPerChart} onChange={e => setEditForm({...editForm, maxEditsPerChart: parseInt(e.target.value)})} /></div>
@@ -424,27 +418,28 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen = true, onClose })
                                 </div>
                                 <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
                                     <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">功能開關 (Feature Flags)</h4>
+                                    <p className="text-xs text-gray-500 mb-3">調整後需儲存才生效。</p>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                         {Object.entries(FEATURE_NAMES).map(([key, label]) => {
                                             const k = key as keyof UserFeatures;
-                                            const defaultVal = DEFAULT_FLAGS_BY_ROLE[editForm.role || 'general']?.[k] ?? false;
-                                            const currentVal = editForm.feature_flags?.[k];
-                                            const isOverridden = currentVal !== undefined;
-                                            const effectiveVal = isOverridden ? currentVal : defaultVal;
+                                            const draftProfile = { ...editingUser, ...editForm } as UserProfile;
+                                            const permission = getFeaturePermission(draftProfile, k);
+                                            const isOn = permission === 'enabled';
+                                            const isFixed = (k !== 'lucky_divination' && isOwner(draftProfile)) || (k === 'lucky_divination' && draftProfile.role !== 'student');
                                             return (
-                                                <div key={key} className="flex items-center justify-between p-2 rounded-lg bg-gray-50">
-                                                    <div className="flex items-center gap-2"><div className={`w-2 h-2 rounded-full ${effectiveVal ? 'bg-green-500' : 'bg-gray-300'}`} /><span className="text-sm">{label}</span></div>
-                                                    <div className="flex bg-white p-0.5 rounded-lg border">
-                                                        <button onClick={() => setEditForm(p => ({...p, feature_flags: {...p.feature_flags, [k]: true}}))} className={`px-2 py-0.5 text-xs rounded ${effectiveVal===true && isOverridden ? 'bg-green-100 text-green-700 font-bold' : 'text-gray-400'}`}>ON</button>
-                                                        <button onClick={() => setEditForm(p => { const f = {...p.feature_flags}; delete f[k]; return {...p, feature_flags: f}; })} className={`px-2 py-0.5 text-xs rounded ${!isOverridden ? 'bg-gray-100 text-gray-700 font-bold' : 'text-gray-400'}`}>預設</button>
-                                                        <button onClick={() => setEditForm(p => ({...p, feature_flags: {...p.feature_flags, [k]: false}}))} className={`px-2 py-0.5 text-xs rounded ${effectiveVal===false && isOverridden ? 'bg-red-100 text-red-700 font-bold' : 'text-gray-400'}`}>OFF</button>
-                                                    </div>
+                                                <div key={key} className="flex flex-wrap gap-2 items-center justify-between p-2 rounded-lg bg-gray-50">
+                                                    <span className="text-sm">{label}</span>
+                                                    <button type="button" role="switch" aria-label={label} aria-checked={isOn} disabled={isFixed}
+                                                        onClick={() => setEditForm(p => ({...p, feature_flags: {...p.feature_flags, [k]: !isOn}}))}
+                                                        className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed ${isOn ? 'bg-green-500' : 'bg-gray-300'}`}>
+                                                        <span className={`pointer-events-none inline-block h-6 w-6 rounded-full bg-white shadow transition-transform ${isOn ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+                                                    </button>
                                                 </div>
                                             );
                                         })}
                                     </div>
                                 </div>
-                                {!checkIsSuperAdmin(editingUser.email) && <div className="p-4 rounded-xl border border-red-200 bg-red-50"><button onClick={handleDeleteUser} className="w-full py-2 text-red-600 font-bold flex items-center justify-center gap-2"><Trash2 size={16}/> 刪除此使用者</button></div>}
+                                {!isOwner(editingUser) && <div className="p-4 rounded-xl border border-red-200 bg-red-50"><button onClick={handleDeleteUser} className="w-full py-2 text-red-600 font-bold flex items-center justify-center gap-2"><Trash2 size={16}/> 刪除此使用者</button></div>}
                             </div>
                         ) : (
                             <div className="space-y-6">

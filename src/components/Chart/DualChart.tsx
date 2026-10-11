@@ -7,11 +7,13 @@ import { ZiWeiEngine } from '../../logic/engine';
 import { GAN, SIHUA_TABLE, ZHI, PALACE_NAMES } from '../../logic/constants';
 import { Loader2, ChevronLeft, Lock, Unlock, ArrowRightLeft, PenLine } from 'lucide-react';
 import { Solar, Lunar, LunarYear } from 'lunar-typescript';
-import { checkIsSuperAdmin, getMyProfile, type Client, type UserProfile } from '../../db';
+import { getMyProfile, type Client, type UserProfile } from '../../db';
 import { WhiteboardOverlay } from '../Whiteboard/WhiteboardOverlay';
 import { shiftShichen } from '../../logic/shichen';
 import { exportAndShareWhiteboard } from '../../logic/whiteboardExport';
 import { useWhiteboardMode } from '../../hooks/useWhiteboardMode';
+import { getFeaturePermission } from '../../logic/permissions';
+import { usePermissionRefresh } from '../../hooks/usePermissionRefresh';
 
 interface DualChartProps {
   onBack?: () => void;
@@ -120,7 +122,29 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
       getMyProfile().then(setUserProfile);
   }, []);
 
-  const canUseWhiteboard = useMemo(() => checkIsSuperAdmin(userProfile?.email), [userProfile?.email]);
+  const canUseWhiteboard = useMemo(() => getFeaturePermission(userProfile, 'whiteboard') === 'enabled', [userProfile]);
+  useEffect(() => {
+    if (!canUseWhiteboard && isWhiteboardActive) finishWhiteboard();
+  }, [canUseWhiteboard, isWhiteboardActive, finishWhiteboard]);
+  usePermissionRefresh(setUserProfile);
+  const permissionFlags = useMemo(() => ({
+    twin: getFeaturePermission(userProfile, 'twin'),
+    inverted: getFeaturePermission(userProfile, 'inverted'),
+    xiao: getFeaturePermission(userProfile, 'xiao_limit'),
+    liu_month: getFeaturePermission(userProfile, 'liu_month'),
+    liu_day: getFeaturePermission(userProfile, 'liu_day'),
+    dual_chart: getFeaturePermission(userProfile, 'dual_chart'),
+  }), [userProfile]);
+
+  useEffect(() => {
+    if (permissionFlags.twin !== 'enabled') { setIsTwinA(false); setIsTwinB(false); }
+    if (permissionFlags.inverted !== 'enabled') { setReverseMapA({}); setReverseMapB({}); }
+    if (permissionFlags.xiao !== 'enabled') { setShowXiaoA(false); setShowXiaoB(false); }
+    if (permissionFlags.liu_month !== 'enabled') {
+      setLiuMonthA(null); setLiuMonthB(null); setLiuDayA(null); setLiuDayB(null);
+    }
+    if (permissionFlags.liu_day !== 'enabled') { setLiuDayA(null); setLiuDayB(null); }
+  }, [permissionFlags]);
 
   const engineA = useMemo(() => clientA ? new ZiWeiEngine(clientA.birthYear, clientA.birthMonth, clientA.birthDay, hourA, clientA.birthMinute, clientA.gender) : null, [clientA, hourA]);
   const engineB = useMemo(() => clientB ? new ZiWeiEngine(clientB.birthYear, clientB.birthMonth, clientB.birthDay, hourB, clientB.birthMinute, clientB.gender) : null, [clientB, hourB]);
@@ -370,6 +394,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   }, [chartB, engineB]);
 
   const handleToggleReverseA = () => {
+    if (permissionFlags.inverted !== 'enabled') return;
     let key = '';
     if (liuYearA !== null) key = `liu-${liuYearA}`;
     else if (daSeqA >= 0) key = `da-${daSeqA}`;
@@ -378,6 +403,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   };
 
   const handleToggleReverseB = () => {
+    if (permissionFlags.inverted !== 'enabled') return;
     let key = '';
     if (liuYearB !== null) key = `liu-${liuYearB}`;
     else if (daSeqB >= 0) key = `da-${daSeqB}`;
@@ -793,6 +819,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                     <PalaceGrid
                         presentationScale={canUseWhiteboard && isWhiteboardActive ? 1.1 : 1}
                         client={clientA}
+                        permissionFlags={permissionFlags}
                         chartData={chartA}
                         relationships={[]}
                         historyStack={[]}
@@ -829,8 +856,8 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         onCompatibility={dummyNav}
                         onChangeHour={handleChangeHourA}
                         onResetTime={() => setHourA(clientA.birthHour)}
-                        onToggleTwin={() => setIsTwinA(!isTwinA)}
-                        onToggleSmallLimit={() => setShowXiaoA(!showXiaoA)}
+                        onToggleTwin={() => permissionFlags.twin === 'enabled' && setIsTwinA(!isTwinA)}
+                        onToggleSmallLimit={() => permissionFlags.xiao === 'enabled' && setShowXiaoA(!showXiaoA)}
                         onPalaceClick={(idx) => handlePalaceClick('A', idx)}
                         onTriggerClick={(idx) => {
                             setSelfFlyingPalaceA(selfFlyingPalaceA === idx ? null : idx);
@@ -845,6 +872,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         liuDay={liuDayA}
                         onSetLiuYear={handleSetLiuYearA}
                         onSetLiuMonth={(m, isLeap) => {
+                            if (permissionFlags.liu_month !== 'enabled') return;
                             setLiuMonthA(m);
                             setIsLiuMonthLeapA(isLeap);
                             setLiuDayA(null);
@@ -855,6 +883,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                             }
                         }}
                         onSetLiuDay={(d) => {
+                            if (permissionFlags.liu_day !== 'enabled' || permissionFlags.liu_month !== 'enabled') return;
                             setLiuDayA(d);
                             if (isLocked) {
                                 setLiuDayB(d);
@@ -874,6 +903,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                     <PalaceGrid
                         presentationScale={canUseWhiteboard && isWhiteboardActive ? 1.1 : 1}
                         client={clientB}
+                        permissionFlags={permissionFlags}
                         chartData={chartB}
                         relationships={[]}
                         historyStack={[]}
@@ -910,8 +940,8 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         onCompatibility={dummyNav}
                         onChangeHour={handleChangeHourB}
                         onResetTime={() => setHourB(clientB.birthHour)}
-                        onToggleTwin={() => setIsTwinB(!isTwinB)}
-                        onToggleSmallLimit={() => setShowXiaoB(!showXiaoB)}
+                        onToggleTwin={() => permissionFlags.twin === 'enabled' && setIsTwinB(!isTwinB)}
+                        onToggleSmallLimit={() => permissionFlags.xiao === 'enabled' && setShowXiaoB(!showXiaoB)}
                         onPalaceClick={(idx) => handlePalaceClick('B', idx)}
                         onTriggerClick={(idx) => {
                             setSelfFlyingPalaceB(selfFlyingPalaceB === idx ? null : idx);
@@ -926,6 +956,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                         liuDay={liuDayB}
                         onSetLiuYear={handleSetLiuYearB}
                         onSetLiuMonth={(m, isLeap) => {
+                            if (permissionFlags.liu_month !== 'enabled') return;
                             setLiuMonthB(m);
                             setIsLiuMonthLeapB(isLeap);
                             setLiuDayB(null);
@@ -936,6 +967,7 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
                             }
                         }}
                         onSetLiuDay={(d) => {
+                            if (permissionFlags.liu_day !== 'enabled' || permissionFlags.liu_month !== 'enabled') return;
                             setLiuDayB(d);
                             if (isLocked) {
                                 setLiuDayA(d);

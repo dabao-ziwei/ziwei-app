@@ -10,7 +10,8 @@ import { DivinationSetupModal } from '../components/DivinationSetupModal';
 import { RelationshipModal } from '../components/RelationshipModal';
 import { AddChartModal } from '../components/AddChartModal'; 
 import { ZiWeiEngine } from '../logic/engine';
-import { getFeaturePermission } from '../logic/permissions';
+import { getFeaturePermission, isOwner } from '../logic/permissions';
+import { usePermissionRefresh } from '../hooks/usePermissionRefresh';
 
 const CATEGORIES = ["我", "家人", "朋友", "客戶", "VIP", "名人", "其他", "紫占"];
 const MAJOR_STARS = ['紫微', '天機', '太陽', '武曲', '天同', '廉貞', '天府', '太陰', '貪狼', '巨門', '天相', '天梁', '七殺', '破軍'];
@@ -94,6 +95,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   };
 
   const canDivination = useMemo(() => getFeaturePermission(userProfile, 'divination'), [userProfile]);
+  usePermissionRefresh(setUserProfile);
 
   const toggleCat = (cat: string) => {
     setExpandedCats(prev => 
@@ -344,7 +346,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                 <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="w-12 h-full bg-white border border-slate-200 hover:bg-slate-50 rounded-xl flex items-center justify-center text-slate-600 shadow-sm"><Menu size={20} /></button>
                 {isMenuOpen && <div className="absolute top-14 right-0 w-52 bg-white rounded-xl shadow-xl border border-gray-100 z-50 p-2">
                     {canDivination === 'enabled' && <button onClick={() => { setIsDivinationModalOpen(true); setIsMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-purple-50 flex items-center gap-2 text-purple-700 font-bold border-b border-gray-50"><Sparkles size={18} /> 紫微占卜</button>}
-                    {userProfile?.role === 'admin' && <button onClick={() => { setIsUserMgmtOpen(true); setIsMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-2 text-gray-700 font-medium"><UserCog size={16} /> 使用者管理</button>}
+                    {isOwner(userProfile) && <button onClick={() => { setIsUserMgmtOpen(true); setIsMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-2 text-gray-700 font-medium"><UserCog size={16} /> 使用者管理</button>}
                     <button onClick={() => supabase.auth.signOut()} className="w-full text-left px-4 py-3 hover:bg-red-50 text-red-600 font-bold flex gap-2"><LogOut size={16}/> 登出系統</button>
                 </div>}
                 {isMenuOpen && <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)}></div>}
@@ -415,7 +417,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
         <div className="h-10"></div>
       </div>
       
-      <UserManagementModal isOpen={isUserMgmtOpen} onClose={() => setIsUserMgmtOpen(false)} />
+      {isOwner(userProfile) && <UserManagementModal isOpen={isUserMgmtOpen} onClose={() => setIsUserMgmtOpen(false)} />}
       <DivinationSetupModal isOpen={isDivinationModalOpen} onClose={() => setIsDivinationModalOpen(false)} onConfirm={handleCreateDivination} />
       {relationClient && <RelationshipModal isOpen={!!relationClient} onClose={() => setRelationClient(null)} currentClient={relationClient} />}
       <AddChartModal isOpen={false} onClose={() => {}} onSave={async () => {}} />

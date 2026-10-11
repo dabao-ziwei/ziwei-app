@@ -2,7 +2,8 @@
 import { supabase } from './supabase'; 
 export { supabase };
 
-import type { UserFeatures } from './logic/permissions'; 
+import type { UserFeatures } from './logic/permissions';
+import { getRoleQuotaDefaults, isOwner } from './logic/permissions';
 import type { YearAdviceRule } from './logic/types';
 import type { PointPack, PointsLedger, PointTransaction, FeatureConfig } from './types/store';
 import type { ScheduleException, Reservation, ServiceType, BookingSettings, RecurringBlock } from './types/booking';
@@ -81,8 +82,8 @@ export const getMyProfile = async (): Promise<UserProfile | null> => {
   const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
   if (error || !data) return null;
   return {
-    id: data.id, email: data.email, role: data.role, maxCharts: data.max_charts,
-    maxEditsPerChart: data.max_edits_per_chart, isBanned: data.is_banned || false,
+    id: data.id, email: data.email, role: data.role, maxCharts: data.max_charts ?? getRoleQuotaDefaults(data.role).maxCharts,
+    maxEditsPerChart: data.max_edits_per_chart ?? getRoleQuotaDefaults(data.role).maxEditsPerChart, isBanned: data.is_banned || false,
     can_use_divination: data.can_use_divination ?? true, accessExpiry: data.access_expiry,
     feature_flags: data.feature_flags, activeCount: 0, points_balance: data.points_balance || 0,
     has_claimed_welcome_gift: data.has_claimed_welcome_gift
@@ -95,7 +96,7 @@ export const getAllProfilesWithStats = async (): Promise<UserProfile[]> => {
   const { data: clients, error: clientError } = await supabase.from('clients').select('user_id').eq('is_deleted', false);
   if (clientError) {
       return profiles.map((p: any) => ({
-        id: p.id, email: p.email, role: p.role, maxCharts: p.max_charts, maxEditsPerChart: p.max_edits_per_chart,
+        id: p.id, email: p.email, role: p.role, maxCharts: p.max_charts ?? getRoleQuotaDefaults(p.role).maxCharts, maxEditsPerChart: p.max_edits_per_chart ?? getRoleQuotaDefaults(p.role).maxEditsPerChart,
         isBanned: p.is_banned, can_use_divination: p.can_use_divination ?? true, accessExpiry: p.access_expiry,
         feature_flags: p.feature_flags, points_balance: p.points_balance || 0, activeCount: 0, 
         joinDate: p.created_at, has_claimed_welcome_gift: p.has_claimed_welcome_gift
@@ -104,7 +105,7 @@ export const getAllProfilesWithStats = async (): Promise<UserProfile[]> => {
   const counts: Record<string, number> = {};
   clients.forEach((c: any) => { if (c.user_id) counts[c.user_id] = (counts[c.user_id] || 0) + 1; });
   return profiles.map((p: any) => ({
-    id: p.id, email: p.email, role: p.role, maxCharts: p.max_charts, maxEditsPerChart: p.max_edits_per_chart,
+    id: p.id, email: p.email, role: p.role, maxCharts: p.max_charts ?? getRoleQuotaDefaults(p.role).maxCharts, maxEditsPerChart: p.max_edits_per_chart ?? getRoleQuotaDefaults(p.role).maxEditsPerChart,
     isBanned: p.is_banned, can_use_divination: p.can_use_divination ?? true, accessExpiry: p.access_expiry,
     feature_flags: p.feature_flags, points_balance: p.points_balance || 0, activeCount: counts[p.id] || 0, 
     joinDate: p.created_at, has_claimed_welcome_gift: p.has_claimed_welcome_gift
@@ -112,8 +113,13 @@ export const getAllProfilesWithStats = async (): Promise<UserProfile[]> => {
 };
 
 export const updateProfile = async (id: string, updates: Partial<UserProfile>): Promise<boolean> => {
+  const actor = await getMyProfile();
+  if (!isOwner(actor)) return false;
+  if (id === actor!.id && updates.role !== undefined && updates.role !== actor!.role) return false;
+  if (id !== actor!.id && updates.role !== undefined && !['general', 'student'].includes(updates.role)) return false;
   const dbUpdates: any = { role: updates.role, max_charts: updates.maxCharts, max_edits_per_chart: updates.maxEditsPerChart, can_use_divination: updates.can_use_divination, access_expiry: updates.accessExpiry, feature_flags: updates.feature_flags };
   const { error } = await supabase.from('profiles').update(dbUpdates).eq('id', id);
+  if (!error && typeof window !== 'undefined') window.dispatchEvent(new Event('permissions-updated'));
   return !error;
 };
 

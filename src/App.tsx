@@ -12,7 +12,8 @@ import { Dashboard } from './pages/Dashboard';
 import { saveClient, addRelationship, getInverseRelationType, type Client } from './db';
 import { supabase } from './supabase';
 import { Loader2 } from 'lucide-react';
-import { RequireMeChart } from './components/RequireMeChart'; 
+import { RequireMeChart } from './components/RequireMeChart';
+import { RequirePermission } from './components/RequirePermission';
 
 import { DualChart } from './components/Chart/DualChart';
 import { CompatibilitySetup } from './pages/CompatibilitySetup';
@@ -168,10 +169,10 @@ function App() {
           />
           
           <Route path="/chart/:id" element={<ChartBoard />} />
-          <Route path="/compatibility" element={<CompatibilitySetup />} />
-          <Route path="/dual-chart" element={<DualChart />} />
-          <Route path="/divination" element={<ChartBoard mode="divination" />} />
-          <Route path="/admin" element={<SystemAdmin />} />
+          <Route path="/compatibility" element={<RequirePermission feature="dual_chart"><CompatibilitySetup /></RequirePermission>} />
+          <Route path="/dual-chart" element={<RequirePermission feature="dual_chart"><DualChart /></RequirePermission>} />
+          <Route path="/divination" element={<RequirePermission feature="divination"><ChartBoard mode="divination" /></RequirePermission>} />
+          <Route path="/admin" element={<RequirePermission ownerOnly><SystemAdmin /></RequirePermission>} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
