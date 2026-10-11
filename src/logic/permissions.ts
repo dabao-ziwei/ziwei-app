@@ -10,6 +10,7 @@ export interface UserFeatures {
   divination?: boolean; // 紫微占卜
   liu_month?: boolean;  // 流月
   liu_day?: boolean;    // 流日
+  whiteboard?: boolean; // 白板
   lucky_divination?: boolean; // [新增] 吉凶占卜
 }
 
@@ -23,13 +24,44 @@ export const FEATURE_NAMES: Record<keyof UserFeatures, string> = {
   divination: '紫微占卜',
   liu_month: '流月顯示',
   liu_day: '流日顯示',
+  whiteboard: '白板功能',
   lucky_divination: '吉凶占卜' // [新增]
 };
 
 // 權限狀態：hidden(不可見), disabled(可見不可用-鎖頭), enabled(可用)
 export type PermissionState = 'hidden' | 'disabled' | 'enabled';
 
+export const OWNER_EMAIL = 'stephenwu.0926@gmail.com';
+export const matchesOwnerIdentity = (profile: UserProfile | null | undefined, ownerId?: string): boolean => {
+  if (!profile) return false;
+  return ownerId ? profile.id === ownerId : profile.email?.trim().toLowerCase() === OWNER_EMAIL;
+};
+// 設定 UID 後只以固定帳號 ID 判斷；未設定前保留既有帳號辨識，避免鎖住擁有者。
+export const isOwner = (profile: UserProfile | null | undefined): boolean => {
+  return matchesOwnerIdentity(profile, import.meta.env?.VITE_OWNER_USER_ID);
+};
+
+export const DEFAULT_FLAGS_BY_ROLE: Record<string, Partial<UserFeatures>> = {
+  general: { twin: false, inverted: false, xiao_limit: false, flying_star: false, dual_chart: false, screenshot: false, divination: false, liu_month: false, liu_day: false, whiteboard: false, lucky_divination: false },
+  student: { twin: true, inverted: true, xiao_limit: true, flying_star: true, dual_chart: true, screenshot: false, divination: false, liu_month: true, liu_day: true, whiteboard: false, lucky_divination: false },
+  admin: { twin: true, inverted: true, xiao_limit: true, flying_star: true, dual_chart: true, screenshot: true, divination: true, liu_month: true, liu_day: true, whiteboard: true, lucky_divination: true },
+};
+
+export const getRoleQuotaDefaults = (role: UserProfile['role'] | undefined) => (
+  role === 'student' ? { maxCharts: 200, maxEditsPerChart: 5 } : { maxCharts: 20, maxEditsPerChart: 3 }
+);
+
 export const getFeaturePermission = (profile: UserProfile | null, featureKey: keyof UserFeatures): PermissionState => {
+  // 吉凶占卜不在本次調整範圍，完整保留原有規則。
+  if (featureKey === 'lucky_divination') return getLegacyPermission(profile, featureKey);
+  if (!profile) return 'hidden';
+  if (isOwner(profile)) return 'enabled';
+  const role = profile.role === 'student' ? 'student' : 'general';
+  const enabled = profile.feature_flags?.[featureKey] ?? DEFAULT_FLAGS_BY_ROLE[role][featureKey] ?? false;
+  return enabled ? 'enabled' : 'hidden';
+};
+
+const getLegacyPermission = (profile: UserProfile | null, featureKey: keyof UserFeatures): PermissionState => {
   if (!profile) return 'hidden';
 
   // 1. 管理員與學員

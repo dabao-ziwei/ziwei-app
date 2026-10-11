@@ -17,12 +17,12 @@ import {
   issueGuestToken,
   toggleFavorite,
   toggleVip,
-  checkIsSuperAdmin,
 } from '../../db';
 import { ZiWeiEngine } from '../../logic/engine';
 import { GAN, ZHI, PALACE_NAMES, SIHUA_TABLE } from '../../logic/constants';
 import { Loader2, UserPlus, X, ChevronLeft, Camera, Users, Compass, Sparkles, MessageCircle, Star, PenLine, Crown } from 'lucide-react';
 import { getFeaturePermission } from '../../logic/permissions';
+import { usePermissionRefresh } from '../../hooks/usePermissionRefresh';
 import { Lunar, LunarYear } from 'lunar-typescript';
 import { YearlyAnalysisBoard } from './YearlyAnalysisBoard';
 import { YearlyAnalysisDrawer } from './YearlyAnalysisDrawer';
@@ -90,6 +90,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
 
   const [loading, setLoading] = useState(!client);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  usePermissionRefresh(setUserProfile);
 
   const [selectedPalace, setSelectedPalace] = useState<number | null>(null);
   const [flyingPalace, setFlyingPalace] = useState<number | null>(null);
@@ -179,7 +180,20 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   const canXiao = useMemo(() => getFeaturePermission(userProfile, 'xiao_limit'), [userProfile]);
   const canLiuMonth = useMemo(() => getFeaturePermission(userProfile, 'liu_month'), [userProfile]);
   const canLiuDay = useMemo(() => getFeaturePermission(userProfile, 'liu_day'), [userProfile]);
-  const canUseWhiteboard = useMemo(() => checkIsSuperAdmin(userProfile?.email), [userProfile?.email]);
+  const canUseWhiteboard = useMemo(() => getFeaturePermission(userProfile, 'whiteboard') === 'enabled', [userProfile]);
+
+  useEffect(() => {
+    if (!canUseWhiteboard && isWhiteboardActive) finishWhiteboard();
+  }, [canUseWhiteboard, isWhiteboardActive, finishWhiteboard]);
+
+  useEffect(() => {
+    if (canTwin !== 'enabled') setIsTwinMode(false);
+    if (canInvert !== 'enabled') setReverseMap({});
+    if (canXiao !== 'enabled') setShowXiaoXian(false);
+    if (canFlying !== 'enabled') { setExternalGan(null); setIsExternalInputOpen(false); }
+    if (canLiuMonth !== 'enabled') { setLiuMonth(null); setLiuDay(null); }
+    if (canLiuDay !== 'enabled') setLiuDay(null);
+  }, [canTwin, canInvert, canXiao, canFlying, canLiuMonth, canLiuDay]);
 
   const baseEngine = useMemo(() => {
     if (!client || currentHour === -1) return null;
@@ -329,6 +343,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   }, [externalGan, liuDayGan, liuMonthGan]);
 
   const handleExternalYearSubmit = () => {
+    if (canFlying !== 'enabled') return;
     if (!externalYearStr) return;
     const val = parseInt(externalYearStr);
     if (isNaN(val)) {
@@ -667,6 +682,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
   };
 
   const toggleXiaoXian = () => {
+    if (canXiao !== 'enabled') return;
     setShowXiaoXian(!showXiaoXian);
     setFlyingPalace(null);
     setSelectedPalace(null);
@@ -925,6 +941,7 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       };
 
   const handleDownload = async () => {
+    if (canScreenshot !== 'enabled') return;
     if (!chartRef.current) return;
     try {
       const dataUrl = await toPng(chartRef.current, {
@@ -1196,11 +1213,14 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
           liuDay={liuDay}
           onSetLiuYear={handleSetLiuNianYear}
           onSetLiuMonth={(m, isLeap) => {
+            if (canLiuMonth !== 'enabled') return;
             setLiuMonth(m);
             setIsLiuMonthLeap(isLeap);
             setLiuDay(null);
           }}
-          onSetLiuDay={setLiuDay}
+          onSetLiuDay={(d) => {
+            if (canLiuDay === 'enabled' && canLiuMonth === 'enabled') setLiuDay(d);
+          }}
           liuMonthGan={liuMonthGan}
           liuDayGan={liuDayGan}
           liuMonthIdx={liuMonthIdx}
