@@ -417,16 +417,8 @@ export const adminAdjustPoints = async (targetUserId: string, delta: number, rea
 export const claimWelcomeGift = async (): Promise<boolean> => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
-    const profile = await getMyProfile();
-    if (!profile) return false;
-    let newExpiry = new Date();
-    if (profile.accessExpiry) {
-        const currentExpiry = new Date(profile.accessExpiry);
-        if (currentExpiry > new Date()) newExpiry = currentExpiry;
-    }
-    newExpiry.setDate(newExpiry.getDate() + 7); 
-    const { error } = await supabase.from('profiles').update({ access_expiry: newExpiry.toISOString(), has_claimed_welcome_gift: true }).eq('id', user.id);
-    return !error;
+    const { data, error } = await supabase.rpc('claim_welcome_gift');
+    return !error && data === true;
 };
 
 export const consumeDivinationV2 = async (options?: any, guestToken?: string | null): Promise<{ success: boolean; message?: string; remainingTrials?: number; ok?: boolean; skipped?: boolean }> => {

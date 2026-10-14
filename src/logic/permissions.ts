@@ -32,13 +32,15 @@ export const FEATURE_NAMES: Record<keyof UserFeatures, string> = {
 export type PermissionState = 'hidden' | 'disabled' | 'enabled';
 
 export const OWNER_EMAIL = 'stephenwu.0926@gmail.com';
+// Verified against Supabase auth.users; profile.email is not an authorization source.
+export const OWNER_USER_ID = '198a5af8-ea33-42bd-b810-422216a935e0';
 export const matchesOwnerIdentity = (profile: UserProfile | null | undefined, ownerId?: string): boolean => {
   if (!profile) return false;
   return ownerId ? profile.id === ownerId : profile.email?.trim().toLowerCase() === OWNER_EMAIL;
 };
-// 設定 UID 後只以固定帳號 ID 判斷；未設定前保留既有帳號辨識，避免鎖住擁有者。
+// 固定 UID 與資料庫 RLS 一致，不依賴可修改的 profile.email。
 export const isOwner = (profile: UserProfile | null | undefined): boolean => {
-  return matchesOwnerIdentity(profile, import.meta.env?.VITE_OWNER_USER_ID);
+  return matchesOwnerIdentity(profile, OWNER_USER_ID);
 };
 
 export const DEFAULT_FLAGS_BY_ROLE: Record<string, Partial<UserFeatures>> = {

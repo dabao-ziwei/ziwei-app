@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { DEFAULT_FLAGS_BY_ROLE, FEATURE_NAMES, getFeaturePermission, getRoleQuotaDefaults, isOwner, matchesOwnerIdentity } from '../src/logic/permissions.ts';
+import { DEFAULT_FLAGS_BY_ROLE, FEATURE_NAMES, OWNER_USER_ID, getFeaturePermission, getRoleQuotaDefaults, isOwner, matchesOwnerIdentity } from '../src/logic/permissions.ts';
 
 const features = Object.keys(FEATURE_NAMES).filter(key => key !== 'lucky_divination');
 const profile = (role, flags = {}, extra = {}) => ({
@@ -33,7 +33,7 @@ test('no profile fails closed for every feature', () => {
 
 test('owner has all in-scope features even with OFF flags and expired access', () => {
   const owner = profile('admin', Object.fromEntries(features.map(key => [key, false])), {
-    email: 'StephenWu.0926@gmail.com', accessExpiry: '2000-01-01',
+    id: OWNER_USER_ID, email: 'StephenWu.0926@gmail.com', accessExpiry: '2000-01-01',
   });
   assert.equal(isOwner(owner), true);
   for (const key of features) assert.equal(getFeaturePermission(owner, key), 'enabled');
@@ -66,6 +66,8 @@ test('admin role alone does not grant owner status or full feature access', () =
 });
 
 test('configured owner UID takes precedence over email and role', () => {
+  assert.equal(isOwner(profile('admin', {}, { email: 'stephenwu.0926@gmail.com' })), false);
+  assert.equal(isOwner(profile('general', {}, { id: OWNER_USER_ID, email: 'changed@example.com' })), true);
   assert.equal(matchesOwnerIdentity(profile('general', {}, { id: 'fixed-owner', email: 'changed@example.com' }), 'fixed-owner'), true);
   assert.equal(matchesOwnerIdentity(profile('admin', {}, { email: 'stephenwu.0926@gmail.com' }), 'fixed-owner'), false);
   assert.equal(matchesOwnerIdentity(null, 'fixed-owner'), false);
