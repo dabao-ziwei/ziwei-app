@@ -4,7 +4,8 @@ import { X, Loader2, Link as LinkIcon, Search, Clock, Star } from 'lucide-react'
 import { loadClients, type Client } from '../db';
 import { ZiWeiEngine } from '../logic/engine';
 import { TagSelect } from './TagSelect'; 
-import { ZHI } from '../logic/constants'; 
+import { ZHI } from '../logic/constants';
+import { birthDatePreview, birthDateToSolar, birthYearToAd, GAN_ZHI_YEARS, getBirthGanZhi, getGanZhiYearCandidates, getLunarBirthMonths, getLunarBirthDayLabel, solarToBirthDate, type BirthCalendar, type BirthEra } from '../logic/birthDate';
 
 interface AddChartModalProps {
   isOpen: boolean;
@@ -75,6 +76,50 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
   const [day, setDay] = useState('');
   const [hour, setHour] = useState('');
   const [minute, setMinute] = useState('');
+  const [calendar, setCalendar] = useState<BirthCalendar>('solar');
+  const [era, setEra] = useState<BirthEra>('ad');
+  const [isLeapMonth, setIsLeapMonth] = useState(false);
+  const [switchError, setSwitchError] = useState('');
+  const [ganZhiText, setGanZhiText] = useState('');
+  const dateInput = { year, month, day, calendar, era, leap: isLeapMonth };
+  let lunarAdYear = 0;
+  try { if (year) lunarAdYear = birthYearToAd(year, era); } catch { /* validation below */ }
+  const ganZhiCandidates = getGanZhiYearCandidates(ganZhiText, Math.max(new Date().getFullYear(), lunarAdYear));
+  const lunarMonths = calendar === 'lunar' && lunarAdYear ? getLunarBirthMonths(lunarAdYear) : [];
+  const selectedLunarMonth = lunarMonths.find(item => item.value === (isLeapMonth ? -Number(month) : Number(month)));
+  const completeDate = Boolean(year && month && day);
+  let datePreview = '';
+  let dateError = '';
+  if (completeDate) {
+    try { datePreview = birthDatePreview(dateInput); }
+    catch (error) { dateError = (error as Error).message; }
+  }
+
+  const changeCalendar = (next: BirthCalendar) => {
+    if (next === calendar) return;
+    try {
+      if (year || month || day) {
+        if (!completeDate) throw new Error('請先填完年月日，再切換曆法');
+        const converted = solarToBirthDate(birthDateToSolar(dateInput), next, era);
+        setYear(converted.year); setMonth(converted.month); setDay(converted.day);
+        setIsLeapMonth(converted.leap);
+        if (next === 'lunar') setGanZhiText(getBirthGanZhi(birthYearToAd(converted.year, era)));
+      } else { setIsLeapMonth(false); setGanZhiText(''); }
+      setCalendar(next); setSwitchError('');
+    } catch (error) { setSwitchError((error as Error).message); }
+  };
+  const changeEra = (next: BirthEra) => {
+    if (next === era) return;
+    try {
+      if (year) {
+        const converted = birthYearToAd(year, era) - (next === 'roc' ? 1911 : 0);
+        if (converted < 1) throw new Error('此年份在民國元年之前，請使用西元年');
+        setYear(String(converted));
+      }
+      setEra(next); setSwitchError('');
+    } catch (error) { setSwitchError((error as Error).message); }
+  };
+  useEffect(() => { setSwitchError(''); }, [year, month, day, isLeapMonth]);
   
   const [category, setCategory] = useState('客戶');
   const [isFavorite, setIsFavorite] = useState(false); 
@@ -94,6 +139,8 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
 
   useEffect(() => {
     if (isOpen) {
+      setCalendar('solar'); setEra('ad'); setIsLeapMonth(false); setSwitchError('');
+      setGanZhiText('');
       loadClients().then(setAllClients);
       
       if (editData) {
@@ -166,11 +213,12 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
     setSubmittingAction(action);
 
     try {
-      const birthYear = parseInt(year);
-      const birthMonth = parseInt(month);
-      const birthDay = parseInt(day);
+      const { year: birthYear, month: birthMonth, day: birthDay } = birthDateToSolar(dateInput);
       const birthHour = parseInt(hour);
       const birthMinute = parseInt(minute);
+      if (!/^\d+$/.test(hour) || !/^\d+$/.test(minute) || birthHour < 0 || birthHour > 23 || birthMinute < 0 || birthMinute > 59) {
+        throw new Error('時間請輸入 00–23 時、00–59 分');
+      }
 
       const engine = new ZiWeiEngine(birthYear, birthMonth, birthDay, birthHour, birthMinute, gender);
       const chart = engine.getChartData();
@@ -244,15 +292,63 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
           </div>
 
           <div className="space-y-2 w-full">
-            <label className="text-xs font-bold text-gray-500 block">時間 (西元 / 24小時制)</label>
+            <label className="text-xs font-bold text-gray-500 block">出生日期與時間（24 小時制）</label>
+            <div className="flex flex-wrap gap-2">
+              <div className="inline-flex rounded-lg bg-slate-100 p-1" role="group" aria-label="出生日期曆法">
+                {([['solar', '國曆'], ['lunar', '農曆']] as const).map(([value, label]) => (
+                  <button key={value} type="button" aria-pressed={calendar === value} onClick={() => changeCalendar(value)} className={`px-3 py-1 text-sm rounded-md ${calendar === value ? 'bg-white text-blue-600 font-bold shadow-sm' : 'text-slate-500'}`}>{label}</button>
+                ))}
+              </div>
+              {calendar === 'solar' && <div className="inline-flex rounded-lg bg-slate-100 p-1" role="group" aria-label="出生日期年號">
+                {([['ad', '西元'], ['roc', '民國']] as const).map(([value, label]) => (
+                  <button key={value} type="button" aria-pressed={era === value} onClick={() => changeEra(value)} className={`px-3 py-1 text-sm rounded-md ${era === value ? 'bg-white text-blue-600 font-bold shadow-sm' : 'text-slate-500'}`}>{label}</button>
+                ))}
+              </div>}
+            </div>
+            {calendar === 'solar' && <p className="text-xs text-slate-500">國曆日期，年份請填{era === 'roc' ? '民國年（＋1911＝西元）' : '西元年'}</p>}
+            {calendar === 'lunar' && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="text-xs text-slate-500">干支年
+                    <input aria-label="農曆干支年" list="birth-gan-zhi-years" value={ganZhiText} placeholder="例如：丙午" onChange={e => { setGanZhiText(e.target.value); setYear(''); setMonth(''); setDay(''); setIsLeapMonth(false); }} className="mt-1 w-full px-2 py-2 border rounded text-sm text-gray-900" />
+                    <datalist id="birth-gan-zhi-years">{GAN_ZHI_YEARS.map(value => <option key={value} value={value} />)}</datalist>
+                  </label>
+                  <label className="text-xs text-slate-500">確認對應年份
+                    <select aria-label="干支對應年份" value={lunarAdYear || ''} disabled={!ganZhiCandidates.length} onChange={e => {
+                      const selectedYear = Number(e.target.value);
+                      const selectedEra = selectedYear && selectedYear <= 1911 ? 'ad' : era;
+                      setEra(selectedEra);
+                      setYear(selectedYear ? String(selectedYear - (selectedEra === 'roc' ? 1911 : 0)) : '');
+                      setMonth(''); setDay(''); setIsLeapMonth(false);
+                    }} className="mt-1 w-full px-2 py-2 border rounded bg-white text-sm text-gray-900">
+                      <option value="">請選年份</option>
+                      {ganZhiCandidates.map(value => <option key={value} value={value}>{value} 年（{value > 1911 ? `民國 ${value - 1911}` : `民國前 ${1912 - value}`}）</option>)}
+                    </select>
+                  </label>
+                </div>
+                <p className="text-xs text-slate-400">干支每 60 年重複，請確認對應年份，系統不會自行猜測。</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <select aria-label="農曆月份" disabled={!lunarAdYear} value={month ? String(isLeapMonth ? -Number(month) : Number(month)) : ''} onChange={e => {
+                    const value = Number(e.target.value); setMonth(value ? String(Math.abs(value)).padStart(2, '0') : ''); setIsLeapMonth(value < 0); setDay('');
+                  }} className="px-2 py-2 border rounded bg-white text-sm">
+                    <option value="">請選月份</option>{lunarMonths.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
+                  </select>
+                  <select aria-label="農曆日期" disabled={!selectedLunarMonth} value={day ? String(Number(day)) : ''} onChange={e => setDay(e.target.value ? e.target.value.padStart(2, '0') : '')} className="px-2 py-2 border rounded bg-white text-sm">
+                    <option value="">請選日期</option>{Array.from({ length: selectedLunarMonth?.days || 0 }, (_, i) => <option key={i + 1} value={i + 1}>{getLunarBirthDayLabel(i + 1)}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
             
             <div className="flex items-center gap-1 sm:gap-1.5 w-full">
-              <input ref={yearRef} type="text" inputMode="numeric" pattern="[0-9]*" value={year} onChange={(e) => handleDateInput(e, setYear, 4, monthRef)} onKeyDown={(e) => handleKeyDown(e, year, undefined)} placeholder="YYYY" className="flex-[1.5] min-w-0 px-1 sm:px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+              {calendar === 'solar' && <>
+              <input ref={yearRef} aria-label="出生年份" type="text" inputMode="numeric" pattern="[0-9]*" value={year} onChange={(e) => handleDateInput(e, setYear, 4, era === 'ad' ? monthRef : undefined)} onKeyDown={(e) => handleKeyDown(e, year, undefined)} placeholder={era === 'roc' ? '民國年' : 'YYYY'} className="flex-[1.5] min-w-0 px-1 sm:px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
               <span className="text-gray-400 shrink-0">-</span>
               <input ref={monthRef} type="text" inputMode="numeric" pattern="[0-9]*" value={month} onChange={(e) => handleDateInput(e, setMonth, 2, dayRef)} onKeyDown={(e) => handleKeyDown(e, month, yearRef)} placeholder="MM" className="flex-1 min-w-0 px-1 sm:px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
               <span className="text-gray-400 shrink-0">-</span>
               <input ref={dayRef} type="text" inputMode="numeric" pattern="[0-9]*" value={day} onChange={(e) => handleDateInput(e, setDay, 2, hourRef)} onKeyDown={(e) => handleKeyDown(e, day, monthRef)} placeholder="DD" className="flex-1 min-w-0 px-1 sm:px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
-              <span className="text-gray-300 shrink-0 mx-0.5">|</span>
+              <span className="text-gray-300 shrink-0 mx-0.5">|</span></>}
+              {calendar === 'lunar' && <span className="text-xs text-slate-500 shrink-0">時間</span>}
               <input ref={hourRef} type="text" inputMode="numeric" pattern="[0-9]*" value={hour} onChange={(e) => handleDateInput(e, setHour, 2, minuteRef)} onKeyDown={(e) => handleKeyDown(e, hour, dayRef)} placeholder="hh" className="flex-1 min-w-0 px-1 sm:px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
               <span className="text-gray-400 shrink-0">:</span>
               <input ref={minuteRef} type="text" inputMode="numeric" pattern="[0-9]*" value={minute} onChange={(e) => handleDateInput(e, setMinute, 2, undefined)} onKeyDown={(e) => handleKeyDown(e, minute, hourRef)} placeholder="mm" className="flex-1 min-w-0 px-1 sm:px-2 py-2 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
@@ -274,6 +370,9 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({ isOpen, onClose, o
                 </div>
               </div>
             </div>
+            {datePreview && <p className="text-xs leading-relaxed text-blue-700 bg-blue-50 rounded-lg p-2" aria-live="polite">{datePreview}</p>}
+            {(switchError || dateError) && <p className="text-xs text-red-600" role="alert">{switchError || dateError}</p>}
+            {calendar === 'lunar' && <p className="text-xs text-slate-400">請填出生當天的農曆日期；晚子換日由排盤處理。時辰選單使用代表時間，知道時分可直接輸入。</p>}
           </div>
 
           <div className="space-y-2">
