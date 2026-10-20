@@ -9,7 +9,7 @@ import type { PermissionState } from '../../logic/permissions';
 
 export interface SiHuaTrace {
   key: string;
-  sourcePalaceIdx: number;
+  sourcePalaceIndices: number[];
   targetPalaceIdx: number;
   sourceGan: string;
   starName: string;
@@ -354,7 +354,7 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
             const isFlyingSource = flyingPalace === palaceIdx;
 
             const isHighlight = palaceIdx === highlightIdx;
-            const isSiHuaSource = activeSiHuaTrace?.sourcePalaceIdx === palaceIdx;
+            const isSiHuaSource = (activeSiHuaTrace?.sourcePalaceIndices ?? []).includes(palaceIdx);
             const isSiHuaTarget = activeSiHuaTrace?.targetPalaceIdx === palaceIdx;
             const traceStyle = activeSiHuaTrace ? siHuaTraceStyles[activeSiHuaTrace.scope] : null;
 

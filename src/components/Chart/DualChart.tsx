@@ -3,6 +3,7 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PalaceGrid, type SiHuaTrace } from './PalaceGrid';
 import type { SiHuaClickPayload } from '../PalaceCard';
+import { resolveSiHuaSource } from '../../logic/siHuaSource';
 import { ZiWeiEngine } from '../../logic/engine';
 import { GAN, SIHUA_TABLE, ZHI, PALACE_NAMES } from '../../logic/constants';
 import { Loader2, ChevronLeft, Lock, Unlock, ArrowRightLeft, PenLine } from 'lucide-react';
@@ -513,28 +514,13 @@ export const DualChart: React.FC<DualChartProps> = ({ onBack }) => {
   ): SiHuaTrace | null => {
       if (!chart || !engine) return null;
 
-      let sourcePalaceIdx = -1;
-      let sourceGanIdx = -1;
-
-      if (payload.scope === 'ben') {
-          sourcePalaceIdx = engine.getMingPos();
-          sourceGanIdx = GAN.indexOf(chart.bazi[0]);
-      } else if (payload.scope === 'da') {
-          sourcePalaceIdx = daList[daSeq]?.palaceIdx ?? -1;
-          sourceGanIdx = sourcePalaceIdx >= 0 ? chart.palaces[sourcePalaceIdx]?.ganIndex ?? -1 : -1;
-      } else if (payload.scope === 'liu' && liuYear !== null) {
-          sourcePalaceIdx = chart.palaces.findIndex((p: any) => p.zhiIndex === ((liuYear - 4) % 12 + 12) % 12);
-          sourceGanIdx = ((liuYear - 4) % 10 + 10) % 10;
-      } else if (payload.scope === 'xiao') {
-          sourcePalaceIdx = xiaoXianMingIdx;
-          sourceGanIdx = sourcePalaceIdx >= 0 ? chart.palaces[sourcePalaceIdx]?.ganIndex ?? -1 : -1;
-      }
-
-      if (sourcePalaceIdx < 0 || sourceGanIdx < 0) return null;
+      const source = resolveSiHuaSource(chart, payload.scope, daList[daSeq]?.palaceIdx ?? -1, liuYear, xiaoXianMingIdx);
+      if (!source) return null;
+      const { sourcePalaceIndices, sourceGanIdx } = source;
 
       return {
           key: payload.key,
-          sourcePalaceIdx,
+          sourcePalaceIndices,
           targetPalaceIdx: payload.palaceIdx,
           sourceGan: GAN[sourceGanIdx],
           starName: payload.starName,
