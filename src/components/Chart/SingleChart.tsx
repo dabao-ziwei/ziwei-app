@@ -4,6 +4,7 @@ import { toPng } from 'html-to-image';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { PalaceGrid, type SiHuaTrace } from './PalaceGrid';
 import type { SiHuaClickPayload } from '../PalaceCard';
+import { resolveSiHuaSource } from '../../logic/siHuaSource';
 import {
   getClient,
   getRelationshipNetwork,
@@ -703,31 +704,23 @@ export const SingleChart: React.FC<SingleChartProps> = ({ client: propClient, on
       return;
     }
 
-    let sourcePalaceIdx = -1;
+    let sourcePalaceIndices: number[] = [];
     let sourceGanIdx = -1;
 
     if (mode === 'divination' && payload.scope === 'ben' && divSiHuaMap?.[payload.starName] === payload.type) {
-      sourcePalaceIdx = divMingIndex;
+      sourcePalaceIndices = divMingIndex >= 0 ? [divMingIndex] : [];
       sourceGanIdx = divSiHuaGanIdx;
-    } else if (payload.scope === 'ben') {
-      sourcePalaceIdx = benMingPos;
-      sourceGanIdx = GAN.indexOf(chartData.bazi[0]);
-    } else if (payload.scope === 'da') {
-      sourcePalaceIdx = daXianList[daXianSeq]?.palaceIdx ?? -1;
-      sourceGanIdx = sourcePalaceIdx >= 0 ? chartData.palaces[sourcePalaceIdx]?.ganIndex ?? -1 : -1;
-    } else if (payload.scope === 'liu' && liuNianYear !== null) {
-      sourcePalaceIdx = chartData.palaces.findIndex((p) => p.zhiIndex === ((liuNianYear - 4) % 12 + 12) % 12);
-      sourceGanIdx = ((liuNianYear - 4) % 10 + 10) % 10;
-    } else if (payload.scope === 'xiao') {
-      sourcePalaceIdx = xiaoXianMingIdx;
-      sourceGanIdx = sourcePalaceIdx >= 0 ? chartData.palaces[sourcePalaceIdx]?.ganIndex ?? -1 : -1;
+    } else {
+      const source = resolveSiHuaSource(chartData, payload.scope, daXianList[daXianSeq]?.palaceIdx ?? -1, liuNianYear, xiaoXianMingIdx);
+      if (!source) return;
+      ({ sourcePalaceIndices, sourceGanIdx } = source);
     }
 
-    if (sourcePalaceIdx < 0 || sourceGanIdx < 0) return;
+    if (!sourcePalaceIndices.length || sourceGanIdx < 0) return;
 
     setActiveSiHuaTrace({
       key: payload.key,
-      sourcePalaceIdx,
+      sourcePalaceIndices,
       targetPalaceIdx: payload.palaceIdx,
       sourceGan: GAN[sourceGanIdx],
       starName: payload.starName,
