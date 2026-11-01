@@ -58,6 +58,7 @@ export interface Client {
   majorStars?: string;
   editCount?: number;
   creatorEmail?: string;
+  creatorRole?: UserProfile['role'];
   is_deleted?: boolean;
   is_favorite?: boolean;
 }
@@ -210,13 +211,26 @@ export const loadClients = async (loadAllForAdmin = false): Promise<Client[]> =>
       from += pageSize;
   }
   
-  let userIdToEmailMap: Record<string, string> = {};
+  const userIdToEmailMap: Record<string, string> = { [user.id]: user.email || '' };
+  const userIdToRoleMap: Record<string, UserProfile['role']> = {};
   if (isSuperViewer && loadAllForAdmin) {
-      const { data: profiles } = await supabase.from('profiles').select('id, email');
-      if (profiles) profiles.forEach(p => userIdToEmailMap[p.id] = p.email);
+      // Fetch all creator metadata, not just the first API page. Student grouping
+      // is an owner-only view; never rewrite students' own chart categories.
+      let profileFrom = 0;
+      while (true) {
+          const { data: profiles, error } = await supabase.from('profiles')
+            .select('id, email, role').order('id').range(profileFrom, profileFrom + pageSize - 1);
+          if (error) throw error;
+          for (const profile of profiles || []) {
+              userIdToEmailMap[profile.id] = profile.email || userIdToEmailMap[profile.id] || '';
+              userIdToRoleMap[profile.id] = profile.role;
+          }
+          if (!profiles || profiles.length < pageSize) break;
+          profileFrom += pageSize;
+      }
   }
   
-  return clients.map((item: any) => ({ ...mapClientToEntity(item), creatorEmail: userIdToEmailMap[item.user_id] || '', is_deleted: item.is_deleted }));
+  return clients.map((item: any) => ({ ...mapClientToEntity(item), creatorEmail: userIdToEmailMap[item.user_id] || '', creatorRole: userIdToRoleMap[item.user_id], is_deleted: item.is_deleted }));
 };
 
 export const getClient = async (id: string): Promise<Client | null> => {
