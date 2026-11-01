@@ -12,8 +12,9 @@ import { AddChartModal } from '../components/AddChartModal';
 import { ZiWeiEngine } from '../logic/engine';
 import { getFeaturePermission, isOwner } from '../logic/permissions';
 import { usePermissionRefresh } from '../hooks/usePermissionRefresh';
+import { isClientEmailSearch, matchesClientSearch, matchesClientOwnership, getClientListCategory } from '../logic/clientSearch';
 
-const CATEGORIES = ["我", "家人", "朋友", "客戶", "VIP", "名人", "其他", "紫占"];
+const CATEGORIES = ["我", "家人", "朋友", "客戶", "學員", "VIP", "名人", "其他", "紫占"];
 const MAJOR_STARS = ['紫微', '天機', '太陽', '武曲', '天同', '廉貞', '天府', '太陰', '貪狼', '巨門', '天相', '天梁', '七殺', '破軍'];
 const SUPER_ADMIN_EMAIL = 'stephenwu.0926@gmail.com';
 
@@ -155,7 +156,9 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
     const channel = supabase.channel('client_list_changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => refreshData())
         .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    const onPermissionsUpdated = () => { refreshData(); };
+    window.addEventListener('permissions-updated', onPermissionsUpdated);
+    return () => { supabase.removeChannel(channel); window.removeEventListener('permissions-updated', onPermissionsUpdated); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
 
@@ -236,46 +239,24 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
   // --- [關鍵] 列表過濾邏輯 ---
   const filtered = useMemo(() => {
       return clients.filter(c => {
-        const rawTerm = inputValue.trim();
-        const term = rawTerm.toLowerCase();
-        const starsInTerm = MAJOR_STARS.filter(star => rawTerm.includes(star));
-        const textTerm = starsInTerm.reduce((value, star) => value.replaceAll(star, ' '), rawTerm).trim().toLowerCase();
-        const textMatch = !textTerm || (c.name || '').toLowerCase().includes(textTerm) || (c.birthYear || '').toString().includes(textTerm) || (c.creatorEmail || '').toLowerCase().includes(textTerm);
-        const typedStarMatch = starsInTerm.length === 0 || starsInTerm.every(star => (c.majorStars || '').includes(star));
-        const match = !term || (textMatch && typedStarMatch);
+        const match = matchesClientSearch(c, inputValue, MAJOR_STARS);
         const genderMatch = filterGender === 'all' || c.gender === filterGender;
         const starMatch = filterStars.length === 0 || filterStars.every(star => (c.majorStars || '').includes(star));
         const favMatch = !filterFavorite || c.is_favorite === true;
         const vipMatch = !filterVip || c.type === 'VIP';
         
-        let isOwnerMatch = true;
-        const isSpecificSuperUser = (currentUserEmail || '').trim().toLowerCase() === SUPER_ADMIN_EMAIL;
-
-        if (isSpecificSuperUser) {
-            if (showOnlyMine) {
-                if (currentUserId && c.user_id !== currentUserId) {
-                    isOwnerMatch = false;
-                }
-            } else {
-                isOwnerMatch = true;
-            }
-        } else {
-            if (currentUserId && c.user_id !== currentUserId) {
-                isOwnerMatch = false;
-            }
-        }
+        const isOwnerMatch = matchesClientOwnership(c, currentUserId, isOwner(userProfile), showOnlyMine, inputValue);
         
         return match && genderMatch && starMatch && favMatch && vipMatch && isOwnerMatch;
       });
-  }, [clients, inputValue, filterGender, filterStars, filterFavorite, filterVip, showOnlyMine, currentUserEmail, currentUserId]);
+  }, [clients, inputValue, filterGender, filterStars, filterFavorite, filterVip, showOnlyMine, userProfile, currentUserId]);
 
   // --- 列表分組 ---
   const groupedData = useMemo(() => {
       const groups: Record<string, Client[]> = {};
       
       filtered.forEach(c => {
-          const rawCat = c.type || "其他";
-          const cat = rawCat === '紫占' ? '紫占' : rawCat;
+          const cat = getClientListCategory(c, isOwner(userProfile));
           
           if (!groups[cat]) groups[cat] = [];
           groups[cat].push(c);
@@ -290,7 +271,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
       });
 
       return { groups, sortedKeys };
-  }, [filtered]);
+  }, [filtered, userProfile]);
 
   const isTargetSuperUser = (currentUserEmail || '').trim().toLowerCase() === SUPER_ADMIN_EMAIL;
   const quotaDisplay = userProfile ? `[${usedCount}/${userProfile.maxCharts}]` : '';
@@ -336,11 +317,12 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
                 </div>
                 <input
                     type="text"
-                    placeholder="輸入姓名、年份或主星組合即時搜尋..."
+                    placeholder="輸入姓名、Email、年份或主星組合即時搜尋..."
                     className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all text-slate-700 shadow-sm"
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                 />
+                {isOwner(userProfile) && isClientEmailSearch(inputValue) && <p className="mt-1 text-xs text-slate-500">Email 搜尋會包含所有可管理帳號的命盤，不受「只看我的」限制；其他篩選仍適用。</p>}
             </div>
              <div className="relative">
                 <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="w-12 h-full bg-white border border-slate-200 hover:bg-slate-50 rounded-xl flex items-center justify-center text-slate-600 shadow-sm"><Menu size={20} /></button>
@@ -375,7 +357,7 @@ export const ClientList: React.FC<ClientListProps> = ({ onAdd, onEdit }) => {
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {loading ? <div className="flex justify-center py-10 text-slate-400 animate-pulse">載入中...</div> : filtered.length === 0 ? <div className="text-center py-20 text-slate-400">查無資料</div> : groupedData.sortedKeys.map(cat => {
             const items = groupedData.groups[cat];
-            const isOpen = expandedCats.includes(cat);
+            const isOpen = expandedCats.includes(cat) || isClientEmailSearch(inputValue);
             const isDiv = cat === '紫占';
             return (
               <div key={cat} className={`bg-white rounded-2xl border ${isDiv?'border-purple-200':'border-slate-100'} shadow-sm overflow-hidden transition-all duration-300`}>
