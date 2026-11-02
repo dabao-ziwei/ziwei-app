@@ -6,6 +6,7 @@ import { ChartBoard } from './components/ChartBoard';
 import { AddChartModal, type AddChartSubmitAction } from './components/AddChartModal';
 import { Auth } from './components/Auth';
 import { UpdatePassword } from './components/UpdatePassword';
+import { PasswordResetGate } from './components/PasswordResetGate';
 import { ClientList } from './pages/ClientList'; 
 import { Dashboard } from './pages/Dashboard';
 // [新增引入] addRelationship 與 getInverseRelationType
@@ -65,12 +66,8 @@ function App() {
         }
       }
 
-      setSession((prevSession: any) => {
-          if (prevSession?.user?.id === newSession?.user?.id) {
-              return prevSession; 
-          }
-          return newSession;
-      });
+      setSession(newSession);
+      if (!newSession) setIsRecovery(false);
       setLoading(false);
     });
 
@@ -105,7 +102,7 @@ function App() {
   }
 
   if (isRecovery) {
-    return <UpdatePassword onComplete={() => setIsRecovery(false)} />;
+    return <PasswordResetGate session={session}><UpdatePassword onComplete={() => setIsRecovery(false)} /></PasswordResetGate>;
   }
 
   const ProtectedLayout = () => {
@@ -130,7 +127,7 @@ function App() {
   };
 
   return (
-    <>
+    <PasswordResetGate session={session}>
       <SpeedInsights />
       <Analytics />
       
@@ -177,7 +174,7 @@ function App() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </>
+    </PasswordResetGate>
   );
 }
 

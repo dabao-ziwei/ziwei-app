@@ -3,12 +3,15 @@ import { supabase } from '../supabase';
 import { Lock, Loader2, Cpu, CheckCircle } from 'lucide-react';
 import { APP_CONFIG } from '../config';
 import { getErrorMessage } from '../logic/errorMapping'; // 1. 引入
+import { passwordRequest } from '../logic/temporaryPassword';
 
 interface Props {
   onComplete: () => void;
+  forcedResetId?: string;
+  onLogout?: () => void;
 }
 
-export const UpdatePassword: React.FC<Props> = ({ onComplete }) => {
+export const UpdatePassword: React.FC<Props> = ({ onComplete, forcedResetId, onLogout }) => {
   const [loading, setLoading] = useState(false);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -25,19 +28,25 @@ export const UpdatePassword: React.FC<Props> = ({ onComplete }) => {
       setError('密碼長度至少需 6 個字元');
       return;
     }
+    if (forcedResetId && (password.length < 12 || password.length > 128 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password))) {
+      setError('新密碼需 12–128 個字元，並包含英文字母與數字');
+      return;
+    }
 
     setLoading(true);
     setError('');
     setMsg('');
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: password
-      });
-
-      if (error) throw error;
+      if (forcedResetId) {
+        await passwordRequest({ action: 'complete', resetId: forcedResetId, password });
+      } else {
+        const { error } = await supabase.auth.updateUser({ password });
+        if (error) throw error;
+      }
       
-      setMsg('密碼修改成功！正在進入系統...');
+      setMsg(forcedResetId ? '密碼修改成功！請使用新密碼重新登入。' : '密碼修改成功！正在進入系統...');
+      setPassword(''); setConfirmPassword('');
       
       setTimeout(() => {
         onComplete();
@@ -72,6 +81,7 @@ export const UpdatePassword: React.FC<Props> = ({ onComplete }) => {
         </div>
 
         <form onSubmit={handleUpdate} className="space-y-4">
+          {forcedResetId && <p className="text-sm text-slate-600">目前使用臨時密碼，請先設定您自己的密碼（至少 12 字，含英文與數字），不可沿用臨時密碼。完成後須重新登入。</p>}
           
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-500 ml-1">新密碼</label>
@@ -84,7 +94,9 @@ export const UpdatePassword: React.FC<Props> = ({ onComplete }) => {
                 onChange={e=>setPassword(e.target.value)} 
                 className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-100 focus:border-red-500 outline-none transition-all text-slate-700 font-medium" 
                 placeholder="輸入新密碼" 
-                minLength={6} 
+                minLength={forcedResetId ? 12 : 6}
+                maxLength={forcedResetId ? 128 : undefined}
+                autoComplete="new-password"
               />
             </div>
           </div>
@@ -100,7 +112,9 @@ export const UpdatePassword: React.FC<Props> = ({ onComplete }) => {
                 onChange={e=>setConfirmPassword(e.target.value)} 
                 className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-100 focus:border-red-500 outline-none transition-all text-slate-700 font-medium" 
                 placeholder="再次輸入新密碼" 
-                minLength={6} 
+                minLength={forcedResetId ? 12 : 6}
+                maxLength={forcedResetId ? 128 : undefined}
+                autoComplete="new-password"
               />
             </div>
           </div>
@@ -125,6 +139,7 @@ export const UpdatePassword: React.FC<Props> = ({ onComplete }) => {
             確認變更
           </button>
         </form>
+        {onLogout && <button type="button" disabled={loading} onClick={onLogout} className="w-full mt-4 text-sm text-slate-500">登出</button>}
       </div>
       
       <div className="absolute bottom-4 text-slate-400 text-xs font-mono">
