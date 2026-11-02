@@ -3,6 +3,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Search, ChevronLeft, ChevronRight, Loader2, Trash2, UserPlus, CalendarClock, Settings, Save, RotateCcw, ArrowUp, ArrowDown, Filter, ChevronDown, Coins, X, History, FileText, CreditCard, RefreshCcw, MoreHorizontal, Grid, ChevronUp, CheckCircle } from 'lucide-react';
 import { getAllProfilesWithStats, updateProfile, toggleUserBan, deleteUserProfile, inviteUserByEmail, adminAdjustPoints, getPointsLedger, getPointTransactions, bulkUpdateAccessExpiry, adminBulkUpdateMaxCharts, type UserProfile } from '../db';
 import { FEATURE_NAMES, getFeaturePermission, getRoleQuotaDefaults, isOwner, type UserFeatures } from '../logic/permissions';
+import { TemporaryPasswordPanel } from './TemporaryPasswordPanel';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -407,6 +408,7 @@ export const UserManagementModal: React.FC<Props> = ({ isOpen = true, onClose })
                     <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50">
                         {activeTab === 'profile' ? (
                             <div className="space-y-6">
+                                {!isOwner(editingUser) && <TemporaryPasswordPanel key={editingUser.id} userId={editingUser.id} email={editingUser.email} />}
                                 <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-4">
                                     <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">基本權限</h4>
                                     <div><label className="block text-sm font-bold text-gray-700 mb-1">角色權限</label><select className="w-full p-2 border rounded-lg bg-gray-50" value={editForm.role} onChange={e => { const role = e.target.value as UserProfile['role']; setEditForm(p => ({...p, role, ...getRoleQuotaDefaults(role)})); }} disabled={isOwner(editingUser)}><option value="general">一般會員</option><option value="student">學員</option>{isOwner(editingUser) && <option value="admin">擁有者</option>}</select></div>
