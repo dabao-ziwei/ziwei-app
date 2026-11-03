@@ -1,9 +1,9 @@
 // FILE: src/App.tsx
 import { LegalPage } from './pages/LegalPage';
 import { useState, useEffect } from 'react';
-import { Routes, Route, Navigate, Outlet, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { ChartBoard } from './components/ChartBoard';
-import { AddChartModal, type AddChartSubmitAction } from './components/AddChartModal';
+import { type AddChartSubmitAction } from './components/AddChartModal';
 import { Auth } from './components/Auth';
 import { UpdatePassword } from './components/UpdatePassword';
 import { PasswordResetGate } from './components/PasswordResetGate';
@@ -13,7 +13,7 @@ import { Dashboard } from './pages/Dashboard';
 import { saveClient, addRelationship, getInverseRelationType, type Client } from './db';
 import { supabase } from './supabase';
 import { Loader2 } from 'lucide-react';
-import { RequireMeChart } from './components/RequireMeChart';
+import { ProtectedLayout } from './components/ProtectedLayout';
 import { RequirePermission } from './components/RequirePermission';
 
 import { DualChart } from './components/Chart/DualChart';
@@ -105,27 +105,6 @@ function App() {
     return <PasswordResetGate session={session}><UpdatePassword onComplete={() => setIsRecovery(false)} /></PasswordResetGate>;
   }
 
-  const ProtectedLayout = () => {
-    if (!session) return <Navigate to="/login" replace />;
-    return (
-      <div className="w-full h-screen bg-[#f8f9fa]">
-        <RequireMeChart>
-            <Outlet />
-        </RequireMeChart>
-
-        <AddChartModal
-          isOpen={isModalOpen}
-          onClose={() => {
-            setIsModalOpen(false);
-            setEditingClient(null);
-          }}
-          onSave={handleSaveClient}
-          editData={editingClient}
-        />
-      </div>
-    );
-  };
-
   return (
     <PasswordResetGate session={session}>
       <SpeedInsights />
@@ -146,7 +125,17 @@ function App() {
         {/* ========================================== */}
         {/* 保護頁面區 (必須登入) */}
         {/* ========================================== */}
-        <Route element={<ProtectedLayout />}>
+        <Route element={<ProtectedLayout
+          key={session?.user?.id}
+          hasSession={Boolean(session)}
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false);
+            setEditingClient(null);
+          }}
+          onSave={handleSaveClient}
+          editData={editingClient}
+        />}>
           <Route path="/" element={<Dashboard />} />
           
           <Route 
