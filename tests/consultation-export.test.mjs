@@ -9,6 +9,13 @@ const bundle = buildSync({entryPoints:['src/consultation/natalRender.tsx'],bundl
 const mod={exports:{}};
 new Function('require','module','exports',bundle.outputFiles[0].text)(createRequire(import.meta.url),mod,mod.exports);
 const {buildNatalSnapshot,buildNatalHTML,canExportProfile}=mod.exports;
+test('cold Vite config bundling never imports not-yet-generated renderer assets',()=>{
+  const config = buildSync({entryPoints:['server/consultationExportDev.mjs'],bundle:true,write:false,
+    platform:'node',format:'esm',packages:'external',metafile:true});
+  const inputs=Object.keys(config.metafile.inputs);
+  assert.deepEqual(inputs,['server/consultationExportDev.mjs']);
+  assert.ok(!inputs.some(path=>path.includes('generated/') || path.endsWith('consultationCharts.mjs')));
+});
 const owner='198a5af8-ea33-42bd-b810-422216a935e0';
 const alice='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const bob='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
