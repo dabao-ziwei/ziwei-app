@@ -18,6 +18,8 @@ export interface SiHuaTrace {
 }
 
 interface PalaceGridProps {
+  /** Isolated consultation export only; normal interactive charts retain existing behavior. */
+  staticNatalExport?: boolean;
   client: Client;
   chartData: ChartData;
   relationships: Relationship[];
@@ -201,6 +203,7 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
       liuMonthIdx = -1,
       liuDayIdx = -1,
       presentationScale = 1,
+      staticNatalExport = false,
     },
     ref
   ) => {
@@ -208,6 +211,7 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
 
     const { highlightIdx, highlightClass } = React.useMemo(() => {
       const baseClass = 'absolute inset-0 z-0 pointer-events-none';
+      if (staticNatalExport) return { highlightIdx: -1, highlightClass: '' };
 
       if (liuDay !== null && liuDayIdx >= 0) {
         return { highlightIdx: liuDayIdx, highlightClass: `${baseClass} bg-purple-100/50 animate-pulse` };
@@ -250,6 +254,7 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
       daXianList,
       chartData,
       getIsBenMingMing,
+      staticNatalExport,
     ]);
 
     const safePresentationScale = Math.min(1.3, Math.max(1, presentationScale));
@@ -361,6 +366,7 @@ export const PalaceGrid = forwardRef<HTMLDivElement, PalaceGridProps>(
             return (
               <div
                 key={palaceIdx}
+                data-natal-palace={staticNatalExport ? palaceIdx : undefined}
                 onClick={() => onPalaceClick(palaceIdx)}
                 className={`relative cursor-pointer transition-all duration-200 border border-gray-300 box-border overflow-visible
                   ${isConnected ? 'bg-red-50' : 'hover:bg-gray-50'}

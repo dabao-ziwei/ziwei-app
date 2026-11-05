@@ -3,6 +3,10 @@
 本專案為全端（Frontend + BaaS）建構之紫微斗數命理、占卜、預約與會員訂閱系統。
 專為命理師營運所設計，結合專業排盤演算法、流年運勢分析、3D 互動占卜及全自動線上預約功能。
 
+## 諮詢流程／原生 App 串接
+
+外部 App 可用排盤帳號的 Supabase session 搜尋／綁定命盤 UUID，再取得純本命盤 PNG；不依賴當前白板或命盤畫面。完整驗證、端點、範例、錯誤與部署說明見 [consultation-chart-export-contract.md](docs/consultation-chart-export-contract.md)。此功能預設關閉，需部署及設定 `CONSULTATION_EXPORT_ENABLED=true`，不會因本機程式存在就自動上線。原手動截圖／白板匯出不變；Google Drive 授權與上傳由呼叫端處理。
+
 ## 🛠 技術棧 (Tech Stack)
 * **前端框架**: React 18 + TypeScript + Vite
 * **樣式與 UI**: Tailwind CSS + Framer Motion (動畫) + Recharts (圖表) + Lucide React (圖示)
