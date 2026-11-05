@@ -1,7 +1,11 @@
-import { productionHandler } from './consultationCharts.mjs';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 export function consultationExportDev(environment) {
-  return { name:'consultation-export-dev-api', apply:'serve', configureServer(server) {
+  return { name:'consultation-export-dev-api', apply:'serve', async configureServer(server) {
+    // Vite bundles its config before the first build. Import only while serving:
+    // the renderer does not exist until after that first frontend build.
+    const { productionHandler } = await import(pathToFileURL(resolve(process.cwd(), 'server/consultationCharts.mjs')).href);
     for (const [route, resource] of [['/api/consultation-charts','charts'],['/api/consultation-chart-export','export']]) {
       const handler = productionHandler(resource, environment);
       server.middlewares.use(route, async (req, res) => {
