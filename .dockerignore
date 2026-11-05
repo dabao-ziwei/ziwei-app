@@ -1,0 +1,13 @@
+# The Linux renderer check needs only these files. Never send local credentials,
+# customer backups, browser profiles, or the macOS node_modules to Docker.
+**
+!package.json
+!package-lock.json
+!scripts/
+!scripts/consultation-linux.Dockerfile
+!server/
+!server/*.mjs
+!server/generated/
+!server/generated/**
+!tests/
+!tests/consultation-png.integration.test.mjs

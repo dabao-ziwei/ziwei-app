@@ -1,4 +1,13 @@
 {
+    "functions": {
+      "api/consultation-chart-export.ts": {
+        "maxDuration": 60,
+        "includeFiles": "{server/generated/**,node_modules/@sparticuz/chromium/bin/**}"
+      },
+      "api/consultation-charts.ts": {
+        "includeFiles": "server/generated/natal-render.mjs"
+      }
+    },
     "rewrites": [
       {
         "source": "/(.*)",

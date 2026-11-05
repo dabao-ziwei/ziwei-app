@@ -603,7 +603,7 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
 
           <div className={`${historyStack.length > 0 ? 'mt-6' : 'mt-1'}`}></div>
 
-          <div className="flex justify-between items-center px-1 mt-1 shrink-0 relative z-[200]">
+          <div data-chart-time className="flex justify-between items-center px-1 mt-1 shrink-0 relative z-[200]">
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -667,7 +667,7 @@ export const CenterInfoBoard: React.FC<CenterInfoBoardProps> = ({
             )}
           </div>
 
-          <div className="mt-auto flex justify-center shrink-0 mb-1 w-full px-1">
+          <div data-chart-controls className="mt-auto flex justify-center shrink-0 mb-1 w-full px-1">
             <div className="flex flex-col gap-1 w-full bg-slate-100/80 rounded-lg p-1 border border-slate-200">
               <div className="flex justify-center gap-1 w-full">
                 {!isDaXian && !isLiuNian && (

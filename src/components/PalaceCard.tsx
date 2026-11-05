@@ -403,7 +403,7 @@ const SiHuaSlot = ({
     const isActive = activeSiHuaKey === key;
 
     return (
-      <button
+      <button data-sihua-badge={scope}
         type="button"
         className={`w-3.5 h-3.5 appearance-none border-0 p-0 flex items-center justify-center text-[11px] text-white rounded-[1px] leading-none shadow-sm ${bg} mb-[1px] cursor-pointer transition-all ${
           isActive ? 'ring-2 ring-offset-1 ring-slate-900 scale-110 z-20' : 'hover:ring-1 hover:ring-offset-1 hover:ring-slate-500'
