@@ -1,6 +1,6 @@
 # 諮詢命盤串接契約 v1
 
-狀態：本機實作與測試已完成，**尚未部署，正式網址目前不代表此 API 已上線**。
+狀態：v1 實作、本機／Linux 產圖與 Vercel 預覽驗證完成；正式是否啟用以 discovery 的實際 HTTP JSON 回應為準。**部署成功不等於正式帳號／Drive 端到端已驗收。**
 範圍僅「大寶紫微斗數」。錄影、諮詢綁定、Google Drive 上傳／共享／期限由原生 App 負責。
 
 ## 1. 決策與身分驗證
@@ -14,7 +14,7 @@
 - PNG 輸出另沿用既有 `screenshot` 功能權限：owner 可用，其他角色依後台開關。不新增獨立角色、不開放原本關閉的截圖功能。搜尋結果會標示 `can_export`。
 - 本契約不要求 Google Drive OAuth scope，排盤系統不接收 Drive token。
 
-正式基底網址預定 `https://ziweiapp.dabao.life`；本機 `http://127.0.0.1:5173`。正式環境必須 HTTPS，macOS App 僅為本機開發允許 loopback HTTP。
+正式基底網址固定 `https://ziweiapp.dabao.life`，Supabase 專案固定 `https://desfvqlxyxharknnjvzi.supabase.co`；本機 `http://127.0.0.1:5173`。正式環境必須 HTTPS，macOS App 僅為本機開發允許 loopback HTTP。
 
 ## 2. Discovery（不需登入）
 
@@ -200,14 +200,22 @@ docker run --rm --platform linux/amd64 --memory=1536m --cpus=2 ziwei-consultatio
 
 ### 本次驗證紀錄（2026-11-05）
 
-- 完整測試以獨立 Chrome Headless Shell 執行：78 項通過、0 失敗、0 skipped。包含 11 項新增契約／產圖資料測試、1 項真實 HTTP→PNG 整合、1 項實際 PostgreSQL RLS 串接測試，其餘為既有回歸測試。
+- 完整測試以獨立 Chrome Headless Shell 執行：79 項通過、0 失敗、0 skipped。包含 12 項新增契約／產圖資料／冷建置測試、1 項真實 HTTP→PNG 整合、1 項實際 PostgreSQL RLS 串接測試，其餘為既有回歸測試。
 - 實際 PNG 整合使用本機假 Auth／DB HTTP 服務與真實 headless Chromium，產圖前後均驗證 Auth／資料，不是只測 mock PNG；另在 PGlite 套用既有兩份正式 RLS migration，證明跨帳號、刪除與待改密碼狀態被拒絕。未以真實客戶帳號做寫入、改密碼或產圖測試。
 - 真實圖片 2560 × 1920，已人工檢查中文字型、完整十二宮與四個本命四化印章；無白板、操作列、連線或期間疊加。API 整合驗證 MIME、PNG signature／尺寸、revision 與 SHA-256。
 - `npm run build` 通過，產出約 9.4 MiB 的隔離 SSR／字型／CSS 資產；Sparticuz 壓縮瀏覽器約 67 MiB，已指定 Vercel includeFiles。這些本機大小不等於正式函式打包完成的驗證。
 - 本機 `http://127.0.0.1:5174` discovery 回 200；未帶登入憑證的搜尋與產圖回 401 `AUTH_REQUIRED`，不需／未使用 service_role key。
-- **尚未 PR、尚未部署，正式站目前不可呼叫新 API。**上線前仍須在 Vercel Linux 預覽驗證 Node 版本、函式 trace／大小、Chromium 啟動、時間／記憶體限制，並以專用測試帳號跑真實 Supabase Auth 端到端流程，再啟用 `CONSULTATION_EXPORT_ENABLED=true`。不需新增 SQL migration，不需 Google Drive 授權。
-- 修改範圍只有本排盤專案；沒有修改 Google Meet錄影管理專案、正式帳號、命盤資料或雲端設定。
-- 產圖相關 Puppeteer／Chromium BiDi／Zod 告警已透過 Puppeteer 25.16.0、Zod 4.6.7 升級消除（[原告警 GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5)）。升級後再次完整 78 項測試通過；Linux x86_64／Node 24、1536 MiB／2 CPU 容器另 1 項實際 HTTP→PNG 測試通過，0 skipped。
+- 已建立 [PR #122](https://github.com/dabao-ziwei/ziwei-app/pull/122)。Vercel 預覽 `8R7C7oLazAJqrKoSDY7raXxw5RoD` Ready：Node 24、兩函式各 78.3 MB、產圖上限 60 秒；discovery 為 v1 JSON、Supabase 專案正確，搜尋未登入回 `AUTH_REQUIRED`。外部未登入 Vercel 的預覽請求會先被 Deployment Protection 重新導向；本次沒有關閉保護或抽取保護 cookie。
+- 使用者已確認在 Production／Preview 設定 `CONSULTATION_EXPORT_ENABLED=true`，已儲存；既有正式部署不會因此自動改版，需合併上述 PR 至 main 並等正式建置 Ready。正式無登入 discovery 應為 HTTP 200 JSON，搜尋／產圖應為 HTTP 401 JSON，不能是 SPA HTML／Vercel 登入重新導向。
+- Vercel 首次冷建置曾發現開發 API 提早載入未生成 SSR 資產，已改為只在 Vite serve 時載入，並加入回歸測試；乾淨 Git 副本（無 `.env`／無既有 generated）建置通過。
+- 修改範圍只有本排盤專案與上述單一 Vercel 旗標；沒有修改 Google Meet錄影管理專案、正式帳號、命盤資料、RLS 或 Google Drive。
+- 產圖相關 Puppeteer／Chromium BiDi／Zod 告警已透過 Puppeteer 25.16.0、Zod 4.6.7 升級消除（[原告警 GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5)）。升級後 79 項完整測試通過；Linux x86_64／Node 24、1536 MiB／2 CPU 容器另 1 項實際 HTTP→PNG 測試通過，0 skipped。
 - `npm audit --omit=dev` 尚有既有 React Router／React Router DOM 的 2 項 moderate 告警，無 high／critical；完整開發相依仍有 29 項告警（3 low／11 moderate／15 high）。本次沒有對 UI／PWA 建置工具執行整批 `npm audit fix` 或跨主版升級；這些既有風險未宣稱已全部修復。
+
+### 正式驗收與回復
+
+使用者指定以自己的帳號在 Mac App 互動登入驗收；只使用自行建立、明確辨認的假資料命盤。不要向另一個對話框貼密碼或 token、不要複製網站瀏覽器 session。依序驗證登入 → 假資料名稱搜尋 → 核對 UUID／出生資料 → PNG 下載與內容／雜湊；再由錄影管理 App 一側以指定 Drive 測試資料夾驗收。**尚未實際登入完成前，不得把本機假 Auth／隔離資料庫測試當成正式 Supabase 成功。**
+
+需要停用時，先在 Vercel 將本旗標設為 false 並重新部署；緊急情況使用 Instant Rollback 回到先前正式部署 `526uj8rcca1zyHmfDUoSBAoG3JSM`（來源 `5b58f47`）。本次無 migration，不需要回復資料庫，也不刪除任何 Drive 檔案。不要透過取消 RLS／暴露 service_role 來排除登入問題。
 
 參考依據：[Supabase Swift 登入](https://supabase.com/docs/reference/swift/auth-signinwithpassword)、[Vercel Puppeteer 部署](https://vercel.com/kb/guide/deploying-puppeteer-with-nextjs-on-vercel)、[Puppeteer 瀏覽器配對](https://pptr.dev/supported-browsers)、[Sparticuz Chromium](https://github.com/Sparticuz/chromium)。
